@@ -1,4 +1,3 @@
-#![allow(unused)]
 use crate::lang::ssa::{Const, Expr, Instr, Kernel, VarId};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
@@ -12,7 +11,7 @@ pub enum Value {
 }
 
 impl Value {
-    fn as_i32(&self) -> Result<i32> {
+    pub fn as_i32(&self) -> Result<i32> {
         if let Self::I32(v) = self {
             Ok(*v)
         } else {
@@ -20,7 +19,7 @@ impl Value {
         }
     }
 
-    fn as_f32(&self) -> Result<f32> {
+    pub fn as_f32(&self) -> Result<f32> {
         if let Self::F32(v) = self {
             Ok(*v)
         } else {
@@ -29,6 +28,7 @@ impl Value {
     }
 }
 
+#[derive(Default)]
 struct Context {
     values: std::collections::HashMap<VarId, Value>,
 }
@@ -53,13 +53,13 @@ impl Context {
     }
 }
 
-pub fn eval_ssa(kernel: &Kernel, args: &[Value]) -> Result<()> {
+pub fn eval_ssa(kernel: &Kernel, _args: &[Value]) -> Result<()> {
     let mut context = Context::new();
     let mut current_idx = 0;
 
     while let Some(instr) = kernel.instrs.get(current_idx) {
         match instr {
-            Instr::Affect { var_id, expr, dtype } => {
+            Instr::Affect { var_id, expr, dtype: _ } => {
                 let (value, jump_idx) = match expr {
                     Expr::Const(Const::F32(v)) => (Value::F32(*v), None),
                     Expr::Const(Const::I32(v)) => (Value::I32(*v), None),
@@ -74,7 +74,7 @@ pub fn eval_ssa(kernel: &Kernel, args: &[Value]) -> Result<()> {
                     },
                     _ => todo!(),
                 };
-                context.set(*var_id, value);
+                context.set(*var_id, value)?;
                 current_idx = match jump_idx {
                     Some(jump_idx) => jump_idx,
                     None => current_idx + 1,
@@ -82,14 +82,14 @@ pub fn eval_ssa(kernel: &Kernel, args: &[Value]) -> Result<()> {
             }
             Instr::Assign { dst, src } => {
                 let value = context.get(*src).unwrap().clone();
-                context.set(*dst, value);
+                context.set(*dst, value)?;
                 current_idx += 1;
             }
             Instr::EndRange { start_idx } => {
                 current_idx = *start_idx;
             }
-            Instr::Store { dst, offset, value } => {
-                current_idx += 1;
+            Instr::Store { .. } => {
+                // current_idx += 1;
                 todo!();
             }
         }
