@@ -1,4 +1,4 @@
-use crate::lang::ssa::{Const, Expr, Instr, Kernel, VarId};
+use crate::lang::ssa::{Const, Instr, Kernel, VarId};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
@@ -8,9 +8,14 @@ pub enum Value {
     PtrF32(Vec<f32>),
     I32(i32),
     F32(f32),
+    None,
 }
 
 impl Value {
+    pub fn is_none(&self) -> bool {
+        matches!(self, Self::None)
+    }
+
     pub fn as_i32(&self) -> Result<i32> {
         if let Self::I32(v) = self {
             Ok(*v)
@@ -30,69 +35,70 @@ impl Value {
 
 #[derive(Default)]
 struct Context {
-    values: std::collections::HashMap<VarId, Value>,
+    values: Vec<Value>,
 }
 
 impl Context {
-    fn new() -> Self {
-        Self { values: std::collections::HashMap::new() }
+    fn new(n: usize) -> Self {
+        Self { values: vec![Value::None; n] }
     }
 
     fn set(&mut self, id: VarId, value: Value) -> Result<()> {
-        if self.values.insert(id, value).is_some() {
-            anyhow::bail!("already has value for {id:?}")
+        let id = id.0;
+        match self.values.get_mut(id) {
+            None => anyhow::bail!("set out of bound {id}"),
+            Some(dst) => *dst = value,
         }
         Ok(())
     }
 
     fn get(&mut self, id: VarId) -> Result<Value> {
-        match self.values.get(&id) {
-            None => anyhow::bail!("no value for {id:?}"),
-            Some(v) => Ok(v.clone()),
+        let id = id.0;
+        match self.values.get(id) {
+            None => anyhow::bail!("get out of bound {id:?}"),
+            Some(dst) => Ok(dst.clone()),
         }
     }
 }
 
 pub fn eval_ssa(kernel: &Kernel, _args: &[Value]) -> Result<()> {
-    let mut context = Context::new();
+    let mut context = Context::new(kernel.instrs.len());
     let mut current_idx = 0;
 
     while let Some(instr) = kernel.instrs.get(current_idx) {
+        let var_id = VarId(current_idx);
         match instr {
-            Instr::Affect { var_id, expr, dtype: _ } => {
-                let (value, jump_idx) = match expr {
-                    Expr::Const(Const::F32(v)) => (Value::F32(*v), None),
-                    Expr::Const(Const::I32(v)) => (Value::I32(*v), None),
-                    Expr::Range { lo, up, end_idx } => match context.values.get(var_id) {
-                        None => (context.get(*lo)?, None),
-                        Some(v) => {
-                            let v = v.as_i32()? + 1;
-                            let up = context.get(*up)?.as_i32()?;
-                            let jump_idx = if v < up { None } else { Some(*end_idx) };
-                            (Value::I32(v), jump_idx)
-                        }
-                    },
-                    _ => todo!(),
-                };
-                context.set(*var_id, value)?;
-                current_idx = match jump_idx {
-                    Some(jump_idx) => jump_idx,
-                    None => current_idx + 1,
-                };
+            Instr::Const(Const::F32(v)) => context.set(var_id, Value::F32(*v))?,
+            Instr::Const(Const::I32(v)) => context.set(var_id, Value::I32(*v))?,
+            Instr::Range { lo, up, end_idx } => {
+                if current_idx >= context.values.len() {
+                    anyhow::bail!("get out of bounds {current_idx}")
+                }
+                if context.values[current_idx].is_none() {
+                    context.values[current_idx] = context.get(*lo)?
+                } else {
+                    let v = context.values[current_idx].as_i32()? + 1;
+                    let up = context.get(*up)?.as_i32()?;
+                    context.values[current_idx] = Value::I32(v);
+                    if v >= up {
+                        current_idx = *end_idx;
+                        continue;
+                    }
+                }
             }
             Instr::Assign { dst, src } => {
                 let value = context.get(*src).unwrap().clone();
                 context.set(*dst, value)?;
-                current_idx += 1;
             }
             Instr::EndRange { start_idx } => {
                 current_idx = *start_idx;
+                continue;
             }
-            Instr::Store { .. } => {
-                // current_idx += 1;
+            _ => {
                 todo!();
             }
         }
+        current_idx += 1;
     }
     Ok(())
 }
