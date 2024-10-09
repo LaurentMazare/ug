@@ -1,8 +1,12 @@
+// Very untyped almost SSA language.
+// There are no phi symbols, instead Range is used.
 pub mod ssa {
     use serde::{Deserialize, Serialize};
 
     #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
     pub enum DType {
+        PtrF32,
+        PtrI32,
         F32,
         I32,
     }
@@ -34,7 +38,7 @@ pub mod ssa {
         Div,
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
     pub enum Const {
         I32(i32),
         F32(f32),

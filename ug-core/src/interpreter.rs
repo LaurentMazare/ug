@@ -2,13 +2,35 @@ use crate::lang::ssa::{Const, Instr, Kernel, VarId};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
+mod buffer {
+    use serde::{Deserialize, Serialize};
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+    pub struct Id(usize);
+
+    impl Id {
+        pub fn new(v: usize) -> Self {
+            Self(v)
+        }
+
+        pub fn as_usize(&self) -> usize {
+            self.0
+        }
+    }
+}
+
+use buffer::Id as BufId;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Value {
-    PtrI32(Vec<i32>),
-    PtrF32(Vec<f32>),
+    Ptr(BufId),
     I32(i32),
     F32(f32),
     None,
+}
+
+pub enum Buffer {
+    F32(Vec<f32>),
+    I32(Vec<i32>),
 }
 
 impl Value {
@@ -34,13 +56,14 @@ impl Value {
 }
 
 #[derive(Default)]
-struct Context {
+struct Context<'a> {
+    buffers: Vec<&'a mut Buffer>,
     values: Vec<Value>,
 }
 
-impl Context {
-    fn new(n: usize) -> Self {
-        Self { values: vec![Value::None; n] }
+impl<'a> Context<'a> {
+    fn new(buffers: Vec<&'a mut Buffer>, n: usize) -> Self {
+        Self { buffers, values: vec![Value::None; n] }
     }
 
     fn set(&mut self, id: VarId, value: Value) -> Result<()> {
@@ -61,8 +84,8 @@ impl Context {
     }
 }
 
-pub fn eval_ssa(kernel: &Kernel, _args: &[Value]) -> Result<()> {
-    let mut context = Context::new(kernel.instrs.len());
+pub fn eval_ssa(kernel: &Kernel, buffers: Vec<&mut Buffer>, _args: &[Value]) -> Result<()> {
+    let mut context = Context::new(buffers, kernel.instrs.len());
     let mut current_idx = 0;
 
     while let Some(instr) = kernel.instrs.get(current_idx) {
@@ -93,6 +116,28 @@ pub fn eval_ssa(kernel: &Kernel, _args: &[Value]) -> Result<()> {
             Instr::EndRange { start_idx } => {
                 current_idx = *start_idx;
                 continue;
+            }
+            Instr::Load { src, offset } => {
+                let offset = context.get(*offset)?.as_i32()? as usize;
+                match context.get(*src)? {
+                    Value::Ptr(idx) => match &context.buffers[idx.as_usize()] {
+                        Buffer::F32(v) => context.set(var_id, Value::F32(v[offset]))?,
+                        Buffer::I32(v) => context.set(var_id, Value::I32(v[offset]))?,
+                    },
+                    _ => anyhow::bail!("unexpected dtype for src in load {src:?}"),
+                }
+            }
+            Instr::Store { dst, offset, value } => {
+                let offset = context.get(*offset)?.as_i32()? as usize;
+                let value = context.get(*value)?;
+                match context.get(*dst)? {
+                    Value::Ptr(idx) => match (context.buffers.get_mut(idx.as_usize()), value) {
+                        (Some(Buffer::F32(vs)), Value::F32(v)) => vs[offset] = v,
+                        (Some(Buffer::I32(vs)), Value::I32(v)) => vs[offset] = v,
+                        (_, v) => anyhow::bail!("unexpected dtype for value in store {v:?}"),
+                    },
+                    _ => anyhow::bail!("unexpected dtype for src in store {dst:?}"),
+                }
             }
             _ => {
                 todo!();

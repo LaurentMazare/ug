@@ -12,6 +12,6 @@ fn main() -> Result<()> {
     ];
     let kernel = Kernel { args: vec![], instrs };
     println!("{kernel:?}");
-    ug::interpreter::eval_ssa(&kernel, &[])?;
+    ug::interpreter::eval_ssa(&kernel, vec![], &[])?;
     Ok(())
 }
