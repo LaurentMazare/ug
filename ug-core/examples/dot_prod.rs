@@ -3,7 +3,7 @@ use anyhow::Result;
 use ug::lang::ssa::{Const, Instr as I, Kernel, VarId};
 
 fn main() -> Result<()> {
-    let v = VarId;
+    let v = VarId::new;
     let instrs = vec![
         I::Const(Const::I32(0)),
         I::Const(Const::I32(1024)),

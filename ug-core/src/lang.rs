@@ -8,7 +8,7 @@ pub mod ssa {
     }
 
     #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-    pub struct VarId(pub usize);
+    pub struct VarId(usize);
 
     impl VarId {
         pub fn new(v: usize) -> Self {

@@ -44,7 +44,7 @@ impl Context {
     }
 
     fn set(&mut self, id: VarId, value: Value) -> Result<()> {
-        let id = id.0;
+        let id = id.as_usize();
         match self.values.get_mut(id) {
             None => anyhow::bail!("set out of bound {id}"),
             Some(dst) => *dst = value,
@@ -53,7 +53,7 @@ impl Context {
     }
 
     fn get(&mut self, id: VarId) -> Result<Value> {
-        let id = id.0;
+        let id = id.as_usize();
         match self.values.get(id) {
             None => anyhow::bail!("get out of bound {id:?}"),
             Some(dst) => Ok(dst.clone()),
@@ -66,7 +66,7 @@ pub fn eval_ssa(kernel: &Kernel, _args: &[Value]) -> Result<()> {
     let mut current_idx = 0;
 
     while let Some(instr) = kernel.instrs.get(current_idx) {
-        let var_id = VarId(current_idx);
+        let var_id = VarId::new(current_idx);
         match instr {
             Instr::Const(Const::F32(v)) => context.set(var_id, Value::F32(*v))?,
             Instr::Const(Const::I32(v)) => context.set(var_id, Value::I32(*v))?,
