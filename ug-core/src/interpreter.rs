@@ -148,9 +148,16 @@ pub fn eval_ssa(kernel: &Kernel, buffers: Vec<&mut Buffer>, _args: &[Value]) -> 
                 let v = match (op, &lhs, &rhs) {
                     (B::Add, Value::F32(v1), Value::F32(v2)) => Value::F32(v1 + v2),
                     (B::Add, Value::I32(v1), Value::I32(v2)) => Value::I32(v1 + v2),
+                    (B::Add, _, _) => anyhow::bail!("dtype mismatch for {op:?}"),
                     (B::Mul, Value::F32(v1), Value::F32(v2)) => Value::F32(v1 * v2),
                     (B::Mul, Value::I32(v1), Value::I32(v2)) => Value::I32(v1 * v2),
-                    _ => todo!("unexpected types for {op:?} {lhs:?} {rhs:?}"),
+                    (B::Mul, _, _) => anyhow::bail!("dtype mismatch for {op:?}"),
+                    (B::Sub, Value::F32(v1), Value::F32(v2)) => Value::F32(v1 - v2),
+                    (B::Sub, Value::I32(v1), Value::I32(v2)) => Value::I32(v1 - v2),
+                    (B::Sub, _, _) => anyhow::bail!("dtype mismatch for {op:?}"),
+                    (B::Div, Value::F32(v1), Value::F32(v2)) => Value::F32(v1 / v2),
+                    (B::Div, Value::I32(v1), Value::I32(v2)) => Value::I32(v1 / v2),
+                    (B::Div, _, _) => anyhow::bail!("dtype mismatch for {op:?}"),
                 };
                 context.set(var_id, v)?
             }
@@ -159,13 +166,14 @@ pub fn eval_ssa(kernel: &Kernel, buffers: Vec<&mut Buffer>, _args: &[Value]) -> 
                 let arg = context.get(*arg)?;
                 let v = match (op, &arg) {
                     (U::Neg, Value::F32(v)) => Value::F32(-v),
-                    _ => todo!("unexpected types for {op:?} {arg:?}"),
+                    (U::Neg, Value::I32(v)) => Value::I32(-v),
+                    (U::Neg, _) => anyhow::bail!("dtype mismatch for {op:?} {arg:?}"),
+                    (U::Exp, Value::F32(v)) => Value::F32(v.exp()),
+                    (U::Exp, _) => anyhow::bail!("dtype mismatch for {op:?} {arg:?}"),
                 };
                 context.set(var_id, v)?
             }
-            s => {
-                todo!("{s:?}");
-            }
+            Instr::DefineAcc => anyhow::bail!("not implemented yet {instr:?}"),
         }
         current_idx += 1;
     }
