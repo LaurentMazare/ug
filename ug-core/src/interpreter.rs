@@ -91,6 +91,7 @@ pub fn eval_ssa(kernel: &Kernel, buffers: Vec<&mut Buffer>, _args: &[Value]) -> 
     while let Some(instr) = kernel.instrs.get(current_idx) {
         let var_id = VarId::new(current_idx);
         match instr {
+            Instr::DefineGlobal(idx) => context.set(var_id, Value::Ptr(BufId::new(*idx)))?,
             Instr::Const(Const::F32(v)) => context.set(var_id, Value::F32(*v))?,
             Instr::Const(Const::I32(v)) => context.set(var_id, Value::I32(*v))?,
             Instr::Range { lo, up, end_idx } => {
@@ -139,8 +140,8 @@ pub fn eval_ssa(kernel: &Kernel, buffers: Vec<&mut Buffer>, _args: &[Value]) -> 
                     _ => anyhow::bail!("unexpected dtype for src in store {dst:?}"),
                 }
             }
-            _ => {
-                todo!();
+            s => {
+                todo!("{s:?}");
             }
         }
         current_idx += 1;
