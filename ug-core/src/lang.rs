@@ -46,7 +46,7 @@ pub mod ssa {
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
     pub enum Instr {
-        DefineAcc,
+        DefineAcc(Const),
         DefineGlobal(usize),
         Const(Const),
         Unary { op: UnaryOp, arg: VarId },

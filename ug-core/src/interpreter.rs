@@ -170,7 +170,8 @@ pub fn eval_ssa(kernel: &Kernel, buffers: Vec<&mut Buffer>, _args: &[Value]) -> 
                 };
                 (v, None)
             }
-            Instr::DefineAcc => anyhow::bail!("not implemented yet {instr:?}"),
+            Instr::DefineAcc(Const::F32(v)) => (Value::F32(*v), None),
+            Instr::DefineAcc(Const::I32(v)) => (Value::I32(*v), None),
         };
         if !value.is_none() {
             context.set(var_id, value)?;
