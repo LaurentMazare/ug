@@ -28,6 +28,7 @@ pub enum Value {
     None,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Buffer {
     F32(Vec<f32>),
     I32(Vec<i32>),
@@ -139,6 +140,28 @@ pub fn eval_ssa(kernel: &Kernel, buffers: Vec<&mut Buffer>, _args: &[Value]) -> 
                     },
                     _ => anyhow::bail!("unexpected dtype for src in store {dst:?}"),
                 }
+            }
+            Instr::Binary { op, lhs, rhs } => {
+                use crate::lang::ssa::BinaryOp as B;
+                let lhs = context.get(*lhs)?;
+                let rhs = context.get(*rhs)?;
+                let v = match (op, &lhs, &rhs) {
+                    (B::Add, Value::F32(v1), Value::F32(v2)) => Value::F32(v1 + v2),
+                    (B::Add, Value::I32(v1), Value::I32(v2)) => Value::I32(v1 + v2),
+                    (B::Mul, Value::F32(v1), Value::F32(v2)) => Value::F32(v1 * v2),
+                    (B::Mul, Value::I32(v1), Value::I32(v2)) => Value::I32(v1 * v2),
+                    _ => todo!("unexpected types for {op:?} {lhs:?} {rhs:?}"),
+                };
+                context.set(var_id, v)?
+            }
+            Instr::Unary { op, arg } => {
+                use crate::lang::ssa::UnaryOp as U;
+                let arg = context.get(*arg)?;
+                let v = match (op, &arg) {
+                    (U::Neg, Value::F32(v)) => Value::F32(-v),
+                    _ => todo!("unexpected types for {op:?} {arg:?}"),
+                };
+                context.set(var_id, v)?
             }
             s => {
                 todo!("{s:?}");
