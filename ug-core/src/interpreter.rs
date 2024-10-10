@@ -20,7 +20,7 @@ mod buffer {
 
 use buffer::Id as BufId;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum Value {
     Ptr(BufId),
     I32(i32),
@@ -80,7 +80,7 @@ impl<'a> Context<'a> {
         let id = id.as_usize();
         match self.values.get(id) {
             None => anyhow::bail!("get out of bound {id:?}"),
-            Some(dst) => Ok(dst.clone()),
+            Some(dst) => Ok(*dst),
         }
     }
 }
@@ -91,43 +91,39 @@ pub fn eval_ssa(kernel: &Kernel, buffers: Vec<&mut Buffer>, _args: &[Value]) -> 
 
     while let Some(instr) = kernel.instrs.get(current_idx) {
         let var_id = VarId::new(current_idx);
-        match instr {
-            Instr::DefineGlobal(idx) => context.set(var_id, Value::Ptr(BufId::new(*idx)))?,
-            Instr::Const(Const::F32(v)) => context.set(var_id, Value::F32(*v))?,
-            Instr::Const(Const::I32(v)) => context.set(var_id, Value::I32(*v))?,
+        let (value, jump_idx) = match instr {
+            Instr::DefineGlobal(idx) => (Value::Ptr(BufId::new(*idx)), None),
+            Instr::Const(Const::F32(v)) => (Value::F32(*v), None),
+            Instr::Const(Const::I32(v)) => (Value::I32(*v), None),
             Instr::Range { lo, up, end_idx } => {
                 if current_idx >= context.values.len() {
                     anyhow::bail!("get out of bounds {current_idx}")
                 }
                 if context.values[current_idx].is_none() {
-                    context.values[current_idx] = context.get(*lo)?
+                    (context.get(*lo)?, None)
                 } else {
                     let v = context.values[current_idx].as_i32()? + 1;
                     let up = context.get(*up)?.as_i32()?;
-                    context.values[current_idx] = Value::I32(v);
-                    if v >= up {
-                        current_idx = *end_idx;
-                        continue;
-                    }
+                    let jump_idx = if v >= up { Some(*end_idx) } else { None };
+                    (Value::I32(v), jump_idx)
                 }
             }
             Instr::Assign { dst, src } => {
-                let value = context.get(*src).unwrap().clone();
+                let value = context.get(*src).unwrap();
                 context.set(*dst, value)?;
+                (value, None)
             }
-            Instr::EndRange { start_idx } => {
-                current_idx = *start_idx;
-                continue;
-            }
+            Instr::EndRange { start_idx } => (Value::None, Some(*start_idx)),
             Instr::Load { src, offset } => {
                 let offset = context.get(*offset)?.as_i32()? as usize;
-                match context.get(*src)? {
+                let value = match context.get(*src)? {
                     Value::Ptr(idx) => match &context.buffers[idx.as_usize()] {
-                        Buffer::F32(v) => context.set(var_id, Value::F32(v[offset]))?,
-                        Buffer::I32(v) => context.set(var_id, Value::I32(v[offset]))?,
+                        Buffer::F32(v) => Value::F32(v[offset]),
+                        Buffer::I32(v) => Value::I32(v[offset]),
                     },
                     _ => anyhow::bail!("unexpected dtype for src in load {src:?}"),
-                }
+                };
+                (value, None)
             }
             Instr::Store { dst, offset, value } => {
                 let offset = context.get(*offset)?.as_i32()? as usize;
@@ -140,6 +136,7 @@ pub fn eval_ssa(kernel: &Kernel, buffers: Vec<&mut Buffer>, _args: &[Value]) -> 
                     },
                     _ => anyhow::bail!("unexpected dtype for src in store {dst:?}"),
                 }
+                (value, None)
             }
             Instr::Binary { op, lhs, rhs } => {
                 use crate::lang::ssa::BinaryOp as B;
@@ -159,7 +156,7 @@ pub fn eval_ssa(kernel: &Kernel, buffers: Vec<&mut Buffer>, _args: &[Value]) -> 
                     (B::Div, Value::I32(v1), Value::I32(v2)) => Value::I32(v1 / v2),
                     (B::Div, _, _) => anyhow::bail!("dtype mismatch for {op:?}"),
                 };
-                context.set(var_id, v)?
+                (v, None)
             }
             Instr::Unary { op, arg } => {
                 use crate::lang::ssa::UnaryOp as U;
@@ -171,11 +168,14 @@ pub fn eval_ssa(kernel: &Kernel, buffers: Vec<&mut Buffer>, _args: &[Value]) -> 
                     (U::Exp, Value::F32(v)) => Value::F32(v.exp()),
                     (U::Exp, _) => anyhow::bail!("dtype mismatch for {op:?} {arg:?}"),
                 };
-                context.set(var_id, v)?
+                (v, None)
             }
             Instr::DefineAcc => anyhow::bail!("not implemented yet {instr:?}"),
+        };
+        if !value.is_none() {
+            context.set(var_id, value)?;
         }
-        current_idx += 1;
+        current_idx = jump_idx.unwrap_or(current_idx + 1);
     }
     Ok(())
 }
