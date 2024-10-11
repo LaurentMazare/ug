@@ -1,9 +1,12 @@
 use anyhow::Result;
 use ug::lang::ssa;
 
-pub fn write_var<W: std::io::Write>(w: &mut W, id: usize) -> Result<()> {
-    write!(w, "__var{id}")?;
-    Ok(())
+struct Var(usize);
+
+impl std::fmt::Display for Var {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "__var{}", self.0)
+    }
 }
 
 pub fn gen<W: std::io::Write>(w: &mut W, func_name: &str, kernel: &ssa::Kernel) -> Result<()> {
@@ -16,7 +19,7 @@ pub fn gen<W: std::io::Write>(w: &mut W, func_name: &str, kernel: &ssa::Kernel) 
     let mut args = args.into_iter().collect::<Vec<_>>();
     args.sort_by_key(|v| v.0);
     writeln!(w, "extern \"C\" __global__ void {func_name}(")?;
-    for (arg_idx2, &(var_idx, (arg_idx, dtype))) in args.iter().enumerate() {
+    for (arg_idx2, &(var_id, (arg_idx, dtype))) in args.iter().enumerate() {
         if arg_idx != arg_idx2 {
             anyhow::bail!("unexpected arguments in kernel {args:?}")
         }
@@ -28,16 +31,25 @@ pub fn gen<W: std::io::Write>(w: &mut W, func_name: &str, kernel: &ssa::Kernel) 
             ssa::DType::PtrF32 => "float*",
             ssa::DType::PtrI32 => "int*",
         };
-        write!(w, "  {dtype} ")?;
-        write_var(w, var_idx)?;
-        writeln!(w, "{delim}")?;
+        writeln!(w, "  {dtype} {}{delim}", Var(var_id))?;
     }
     writeln!(w, ") {{")?;
     writeln!(w, "  int __pid0 = blockIdx.x * blockDim.x + threadIdx.x;")?;
     writeln!(w, "  int __pid1 = blockIdx.y * blockDim.y + threadIdx.y;")?;
     writeln!(w, "  int __pid2 = blockIdx.z * blockDim.z + threadIdx.z;")?;
 
-    // TODO: generate the kernel.instrs code.
+    for (var_id, instr) in kernel.instrs.iter().enumerate() {
+        use ssa::Instr as I;
+        let var_id = Var(var_id);
+        match instr {
+            I::DefineGlobal { index: _, dtype: _ } => {}
+            I::Const(cst) => match cst {
+                ssa::Const::I32(v) => writeln!(w, "  int {var_id} = {v};")?,
+                ssa::Const::F32(v) => writeln!(w, "  float {var_id} = {v};")?,
+            },
+            _ => anyhow::bail!("not implemented yet for cuda {instr:?}"),
+        }
+    }
 
     writeln!(w, "}}")?;
     Ok(())
