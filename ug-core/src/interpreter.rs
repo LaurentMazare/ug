@@ -114,7 +114,7 @@ pub fn eval_ssa(kernel: &Kernel, buffers: Vec<&mut Buffer>, _args: &[Value]) -> 
                 (value, None)
             }
             Instr::EndRange { start_idx } => (Value::None, Some(*start_idx)),
-            Instr::Load { src, offset } => {
+            Instr::Load { src, offset, dtype: _ } => {
                 let offset = context.get(*offset)?.as_i32()? as usize;
                 let value = match context.get(*src)? {
                     Value::Ptr(idx) => match &context.buffers[idx.as_usize()] {
@@ -138,7 +138,7 @@ pub fn eval_ssa(kernel: &Kernel, buffers: Vec<&mut Buffer>, _args: &[Value]) -> 
                 }
                 (value, None)
             }
-            Instr::Binary { op, lhs, rhs } => {
+            Instr::Binary { op, lhs, rhs, dtype: _ } => {
                 use crate::lang::ssa::BinaryOp as B;
                 let lhs = context.get(*lhs)?;
                 let rhs = context.get(*rhs)?;
@@ -158,7 +158,7 @@ pub fn eval_ssa(kernel: &Kernel, buffers: Vec<&mut Buffer>, _args: &[Value]) -> 
                 };
                 (v, None)
             }
-            Instr::Unary { op, arg } => {
+            Instr::Unary { op, arg, dtype: _ } => {
                 use crate::lang::ssa::UnaryOp as U;
                 let arg = context.get(*arg)?;
                 let v = match (op, &arg) {
