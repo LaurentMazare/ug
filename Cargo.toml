@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "ug-core",
+    "ug-cuda",
     "ug-pyo3",
 ]
 resolver = "2"

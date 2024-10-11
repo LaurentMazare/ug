@@ -170,6 +170,9 @@ pub fn eval_ssa(kernel: &Kernel, buffers: Vec<&mut Buffer>, _args: &[Value]) -> 
                 };
                 (v, None)
             }
+            // DefineAcc is handled in the same way as Const, the only difference is that Assign
+            // can modify it. This isn't even checked for in this interpreter, all the vars can be
+            // assigned but optimizations/code generation might rely on it.
             Instr::DefineAcc(Const::F32(v)) => (Value::F32(*v), None),
             Instr::DefineAcc(Const::I32(v)) => (Value::I32(*v), None),
         };
