@@ -53,7 +53,7 @@ pub fn gen<W: std::io::Write>(w: &mut W, func_name: &str, kernel: &ssa::Kernel) 
         let indent = " ".repeat(2 * depth + 2);
         match instr {
             I::DefineGlobal { index: _, dtype: _ } => {}
-            I::Const(cst) => match cst {
+            I::DefineAcc(cst) | I::Const(cst) => match cst {
                 ssa::Const::I32(v) => writeln!(w, "{indent}int {var_id} = {v};")?,
                 ssa::Const::F32(v) => writeln!(w, "{indent}float {var_id} = {v};")?,
             },
@@ -82,6 +82,9 @@ pub fn gen<W: std::io::Write>(w: &mut W, func_name: &str, kernel: &ssa::Kernel) 
                     V(src.as_usize()),
                     V(offset.as_usize())
                 )?;
+            }
+            I::Assign { dst, src } => {
+                writeln!(w, "{indent}{} = {};", V(dst.as_usize()), V(src.as_usize()))?;
             }
             I::Store { dst, offset, value } => {
                 writeln!(
