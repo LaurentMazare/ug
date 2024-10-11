@@ -1,2 +1,2 @@
-mod code_gen;
-mod runtime;
+pub mod code_gen;
+pub mod runtime;

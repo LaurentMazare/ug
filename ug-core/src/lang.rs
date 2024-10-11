@@ -47,7 +47,7 @@ pub mod ssa {
     #[derive(Debug, Clone, Serialize, Deserialize)]
     pub enum Instr {
         DefineAcc(Const),
-        DefineGlobal(usize),
+        DefineGlobal { index: usize, dtype: DType },
         Const(Const),
         Unary { op: UnaryOp, arg: VarId },
         Binary { op: BinaryOp, lhs: VarId, rhs: VarId },
@@ -60,7 +60,6 @@ pub mod ssa {
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct Kernel {
-        pub args: Vec<VarId>,
         pub instrs: Vec<Instr>,
     }
 }

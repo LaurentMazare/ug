@@ -92,7 +92,7 @@ pub fn eval_ssa(kernel: &Kernel, buffers: Vec<&mut Buffer>, _args: &[Value]) -> 
     while let Some(instr) = kernel.instrs.get(current_idx) {
         let var_id = VarId::new(current_idx);
         let (value, jump_idx) = match instr {
-            Instr::DefineGlobal(idx) => (Value::Ptr(BufId::new(*idx)), None),
+            Instr::DefineGlobal { index, dtype: _ } => (Value::Ptr(BufId::new(*index)), None),
             Instr::Const(Const::F32(v)) => (Value::F32(*v), None),
             Instr::Const(Const::I32(v)) => (Value::I32(*v), None),
             Instr::Range { lo, up, end_idx } => {

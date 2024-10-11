@@ -1,13 +1,13 @@
 use anyhow::Result;
 
-use ug::lang::ssa::{BinaryOp, Const, Instr as I, Kernel, VarId};
+use ug::lang::ssa::{BinaryOp, Const, DType, Instr as I, Kernel, VarId};
 
 fn eval_add() -> Result<()> {
     let v = VarId::new;
     let instrs = vec![
-        /* 0 */ I::DefineGlobal(0),
-        /* 1 */ I::DefineGlobal(1),
-        /* 2 */ I::DefineGlobal(2),
+        /* 0 */ I::DefineGlobal { index: 0, dtype: DType::PtrI32 },
+        /* 1 */ I::DefineGlobal { index: 1, dtype: DType::PtrI32 },
+        /* 2 */ I::DefineGlobal { index: 2, dtype: DType::PtrI32 },
         /* 3 */ I::Const(Const::I32(0)),
         /* 4 */ I::Const(Const::I32(2)),
         /* 5 */ I::Range { lo: v(3), up: v(4), end_idx: 11 },
@@ -17,7 +17,7 @@ fn eval_add() -> Result<()> {
         /* 9 */ I::Store { dst: v(0), offset: v(5), value: v(8) },
         /* 10 */ I::EndRange { start_idx: 5 },
     ];
-    let kernel = Kernel { args: vec![], instrs };
+    let kernel = Kernel { instrs };
     println!("{kernel:?}");
     let mut a = ug::interpreter::Buffer::I32(vec![0i32, 0]);
     let mut b = ug::interpreter::Buffer::I32(vec![3i32, 4]);
@@ -30,9 +30,9 @@ fn eval_add() -> Result<()> {
 fn eval_dotprod() -> Result<()> {
     let v = VarId::new;
     let instrs = vec![
-        /* 0 */ I::DefineGlobal(0),
-        /* 1 */ I::DefineGlobal(1),
-        /* 2 */ I::DefineGlobal(2),
+        /* 0 */ I::DefineGlobal { index: 0, dtype: DType::PtrI32 },
+        /* 1 */ I::DefineGlobal { index: 1, dtype: DType::PtrI32 },
+        /* 2 */ I::DefineGlobal { index: 2, dtype: DType::PtrI32 },
         /* 3 */ I::Const(Const::I32(0)),
         /* 4 */ I::Const(Const::I32(2)),
         /* 5 */ I::DefineAcc(Const::I32(0)),
@@ -45,7 +45,7 @@ fn eval_dotprod() -> Result<()> {
         /* 12*/ I::EndRange { start_idx: 6 },
         /* 13*/ I::Store { dst: v(0), offset: v(3), value: v(5) },
     ];
-    let kernel = Kernel { args: vec![], instrs };
+    let kernel = Kernel { instrs };
     println!("{kernel:?}");
     let mut a = ug::interpreter::Buffer::I32(vec![0i32]);
     let mut b = ug::interpreter::Buffer::I32(vec![3i32, 4]);
