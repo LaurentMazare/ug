@@ -110,7 +110,13 @@ pub fn gen<W: std::io::Write>(w: &mut W, func_name: &str, kernel: &ssa::Kernel) 
                     V(rhs.as_usize())
                 )?;
             }
-            _ => anyhow::bail!("not implemented yet for cuda {instr:?}"),
+            I::Unary { op, arg, dtype } => {
+                let op = match op {
+                    ssa::UnaryOp::Exp => "exp",
+                    ssa::UnaryOp::Neg => "neg",
+                };
+                writeln!(w, "{indent}{} {var_id} = {op}({});", D(*dtype), V(arg.as_usize()),)?;
+            }
         }
     }
     writeln!(w, "}}")?;
