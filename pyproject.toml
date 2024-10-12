@@ -1,0 +1,22 @@
+[build-system]
+requires = [
+    "maturin>=1.4,<2.0",
+    "cmake>=3.12",
+]
+build-backend = "maturin"
+
+[project]
+name = "ug"
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Python :: Implementation :: PyPy",
+]
+dynamic = ["version"]
+
+[tool.maturin]
+python-source = "py_src"
+module-name = "ug.ug"
+bindings = 'pyo3'
+features = ["pyo3/extension-module"]
