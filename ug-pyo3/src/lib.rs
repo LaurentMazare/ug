@@ -1,5 +1,6 @@
 use pyo3::prelude::*;
 use std::sync::Arc;
+use ug::lang::ssa;
 use ug_cuda::runtime as cuda;
 
 const MODULE_NAME: &str = "ug-pyo3-mod";
@@ -58,6 +59,51 @@ impl Slice {
 }
 
 #[pyclass]
+#[derive(Clone)]
+struct Instr(ssa::Instr);
+
+#[pymethods]
+impl Instr {
+    fn __str__(&self) -> String {
+        format!("{:?}", self.0)
+    }
+
+    #[staticmethod]
+    fn const_i32(v: i32) -> Self {
+        Instr(ssa::Instr::Const(ssa::Const::I32(v)))
+    }
+
+    #[staticmethod]
+    fn const_f32(v: f32) -> Self {
+        Instr(ssa::Instr::Const(ssa::Const::F32(v)))
+    }
+}
+
+#[pyclass]
+#[derive(Clone)]
+struct Kernel(ssa::Kernel);
+
+#[pymethods]
+impl Kernel {
+    #[new]
+    fn new(instrs: Vec<Instr>) -> Self {
+        let instrs = instrs.into_iter().map(|v| v.0).collect();
+        Self(ssa::Kernel { instrs })
+    }
+
+    fn __str__(&self) -> String {
+        format!("{:?}", self.0)
+    }
+
+    fn cuda_code(&self) -> PyResult<String> {
+        let mut buf = vec![];
+        ug_cuda::code_gen::gen(&mut buf, "dotprod", &self.0).map_err(w)?;
+        let cuda_code = String::from_utf8(buf)?;
+        Ok(cuda_code)
+    }
+}
+
+#[pyclass]
 struct Device(cuda::Device);
 
 #[pymethods]
@@ -99,7 +145,9 @@ impl Device {
 #[pyo3(name = "ug")]
 fn mod_(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     m.add_class::<Func>()?;
+    m.add_class::<Kernel>()?;
     m.add_class::<Device>()?;
+    m.add_class::<Instr>()?;
     m.add_class::<Slice>()?;
     Ok(())
 }
