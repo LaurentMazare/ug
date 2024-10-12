@@ -236,6 +236,7 @@ fn mod_(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     m.add_class::<Func>()?;
     m.add_class::<Kernel>()?;
     m.add_class::<Device>()?;
+    m.add_class::<DType>()?;
     m.add_class::<Instr>()?;
     m.add_class::<Slice>()?;
     Ok(())
