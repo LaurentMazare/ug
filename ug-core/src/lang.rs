@@ -79,6 +79,7 @@ pub mod ssa {
         Assign { dst: VarId, src: VarId },
         EndRange { start_idx: usize },
         Store { dst: VarId, offset: VarId, value: VarId, dtype: DType },
+        Barrier,
     }
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -119,7 +120,8 @@ pub mod ssa {
                     | Instr::DefineAcc(_)
                     | Instr::Special(_)
                     | Instr::Assign { .. }
-                    | Instr::Const(_) => {}
+                    | Instr::Const(_)
+                    | Instr::Barrier => {}
                 }
             }
             Ok(super::FlopsMem { flops, mem_in_bytes: mem })

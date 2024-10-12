@@ -238,6 +238,7 @@ pub fn eval_ssa<const N: usize>(
                 todo!()
             }
             Instr::Special(ssa::Special::GridIdx) => (Value::I32(W::splat(0i32)), None),
+            Instr::Barrier => (Value::None, None),
         };
         if !value.is_none() {
             context.set(var_id, value)?;
