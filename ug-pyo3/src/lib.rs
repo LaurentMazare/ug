@@ -9,6 +9,10 @@ fn w<E: ToString>(err: E) -> PyErr {
     pyo3::exceptions::PyValueError::new_err(err.to_string())
 }
 
+fn v(id: usize) -> ssa::VarId {
+    ssa::VarId::new(id)
+}
+
 #[macro_export]
 macro_rules! py_bail {
     ($msg:literal $(,)?) => {
@@ -60,6 +64,30 @@ impl Slice {
 
 #[pyclass]
 #[derive(Clone)]
+struct DType(ssa::DType);
+
+#[pymethods]
+impl DType {
+    #[classattr]
+    fn f32() -> Self {
+        Self(ssa::DType::F32)
+    }
+    #[classattr]
+    fn i32() -> Self {
+        Self(ssa::DType::I32)
+    }
+    #[classattr]
+    fn ptr_f32() -> Self {
+        Self(ssa::DType::PtrF32)
+    }
+    #[classattr]
+    fn ptr_i32() -> Self {
+        Self(ssa::DType::PtrI32)
+    }
+}
+
+#[pyclass]
+#[derive(Clone)]
 struct Instr(ssa::Instr);
 
 #[pymethods]
@@ -77,6 +105,63 @@ impl Instr {
     fn const_f32(v: f32) -> Self {
         Instr(ssa::Instr::Const(ssa::Const::F32(v)))
     }
+
+    #[staticmethod]
+    fn define_acc_i32(v: i32) -> Self {
+        Instr(ssa::Instr::DefineAcc(ssa::Const::I32(v)))
+    }
+
+    #[staticmethod]
+    fn define_acc_f32(v: f32) -> Self {
+        Instr(ssa::Instr::DefineAcc(ssa::Const::F32(v)))
+    }
+
+    #[staticmethod]
+    fn end_range(start_idx: usize) -> Self {
+        Instr(ssa::Instr::EndRange { start_idx })
+    }
+
+    #[staticmethod]
+    fn range(lo: usize, up: usize, end_idx: usize) -> Self {
+        Instr(ssa::Instr::Range { lo: v(lo), up: v(up), end_idx })
+    }
+
+    #[staticmethod]
+    fn load(src: usize, offset: usize, dtype: DType) -> Self {
+        Instr(ssa::Instr::Load { src: v(src), offset: v(offset), dtype: dtype.0 })
+    }
+
+    #[staticmethod]
+    fn store(dst: usize, offset: usize, value: usize, dtype: DType) -> Self {
+        Instr(ssa::Instr::Store { dst: v(dst), offset: v(offset), value: v(value), dtype: dtype.0 })
+    }
+
+    #[staticmethod]
+    fn define_global(index: usize, dtype: DType) -> Self {
+        Instr(ssa::Instr::DefineGlobal { index, dtype: dtype.0 })
+    }
+
+    #[staticmethod]
+    fn unary(op: &str, arg: usize, dtype: DType) -> PyResult<Self> {
+        let op = match op {
+            "neg" => ssa::UnaryOp::Neg,
+            "exp" => ssa::UnaryOp::Exp,
+            _ => py_bail!("unknown unary op '{op}'"),
+        };
+        Ok(Instr(ssa::Instr::Unary { op, arg: v(arg), dtype: dtype.0 }))
+    }
+
+    #[staticmethod]
+    fn binary(op: &str, lhs: usize, rhs: usize, dtype: DType) -> PyResult<Self> {
+        let op = match op {
+            "add" => ssa::BinaryOp::Add,
+            "mul" => ssa::BinaryOp::Mul,
+            "sub" => ssa::BinaryOp::Sub,
+            "div" => ssa::BinaryOp::Div,
+            _ => py_bail!("unknown binary op '{op}'"),
+        };
+        Ok(Instr(ssa::Instr::Binary { op, lhs: v(lhs), rhs: v(rhs), dtype: dtype.0 }))
+    }
 }
 
 #[pyclass]
@@ -93,6 +178,10 @@ impl Kernel {
 
     fn __str__(&self) -> String {
         format!("{:?}", self.0)
+    }
+
+    fn to_list(&self) -> Vec<Instr> {
+        self.0.instrs.iter().map(|v| Instr(v.clone())).collect()
     }
 
     fn cuda_code(&self) -> PyResult<String> {
