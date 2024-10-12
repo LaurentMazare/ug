@@ -31,7 +31,8 @@ struct Func(cuda::Func);
 
 #[pymethods]
 impl Func {
-    fn launch3(&self, s1: &Slice, s2: &Slice, s3: &mut Slice) -> PyResult<()> {
+    #[pyo3(signature = (s1, s2, s3, grid_size=1))]
+    fn launch3(&self, s1: &Slice, s2: &Slice, s3: &mut Slice, grid_size: usize) -> PyResult<()> {
         let len = s3.0.len();
         let len1 = s1.0.len();
         let len2 = s2.0.len();
@@ -41,7 +42,7 @@ impl Func {
         if len2 != len {
             py_bail!("length mismatch {len2} <> {len}")
         }
-        unsafe { self.0.launch3(s1.0.slice(), s2.0.slice(), s3.0.slice(), 1).map_err(w)? };
+        unsafe { self.0.launch3(s1.0.slice(), s2.0.slice(), s3.0.slice(), grid_size).map_err(w)? };
         Ok(())
     }
 }
@@ -142,6 +143,16 @@ impl Instr {
     }
 
     #[staticmethod]
+    fn special_l() -> Self {
+        Instr(ssa::Instr::Special(ssa::Special::LocalIdx))
+    }
+
+    #[staticmethod]
+    fn special_g() -> Self {
+        Instr(ssa::Instr::Special(ssa::Special::GridIdx))
+    }
+
+    #[staticmethod]
     fn unary(op: &str, arg: usize, dtype: DType) -> PyResult<Self> {
         let op = match op {
             "neg" => ssa::UnaryOp::Neg,
@@ -178,6 +189,11 @@ impl Kernel {
 
     fn __str__(&self) -> String {
         format!("{:?}", self.0)
+    }
+
+    fn flops_and_mem(&self) -> PyResult<(usize, usize)> {
+        let fm = self.0.flops_mem_per_thread().map_err(w)?;
+        Ok((fm.flops, fm.mem_in_bytes))
     }
 
     fn to_list(&self) -> Vec<Instr> {

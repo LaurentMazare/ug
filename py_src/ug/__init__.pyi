@@ -30,7 +30,7 @@ class Device:
         pass
 
 class Func:
-    def launch3(self, s1, s2, s3):
+    def launch3(self, s1, s2, s3, grid_size=1):
         """ """
         pass
 
@@ -81,6 +81,16 @@ class Instr:
         pass
 
     @staticmethod
+    def special_g():
+        """ """
+        pass
+
+    @staticmethod
+    def special_l():
+        """ """
+        pass
+
+    @staticmethod
     def store(dst, offset, value, dtype):
         """ """
         pass
@@ -94,7 +104,7 @@ class Kernel:
     def __init__(instrs):
         pass
 
-    def cuda_code(self):
+    def cuda_code(self, name):
         """ """
         pass
 

@@ -16,6 +16,7 @@ instrs = [
     ug.Instr.end_range(5),
 ]
 kernel = ug.Kernel(instrs)
+print(str(kernel))
 cuda_code = kernel.cuda_code("sum")
 print(cuda_code)
 
