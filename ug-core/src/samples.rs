@@ -21,14 +21,14 @@ pub fn simple_add(vec_len: usize) -> Kernel {
 
 pub fn simple_dotprod(vec_len: usize) -> Kernel {
     let v = VarId::new;
-    let dtype = DType::I32;
+    let dtype = DType::F32;
     let instrs = vec![
-        /* 0 */ I::DefineGlobal { index: 0, dtype: DType::PtrI32 },
-        /* 1 */ I::DefineGlobal { index: 1, dtype: DType::PtrI32 },
-        /* 2 */ I::DefineGlobal { index: 2, dtype: DType::PtrI32 },
+        /* 0 */ I::DefineGlobal { index: 0, dtype: DType::PtrF32 },
+        /* 1 */ I::DefineGlobal { index: 1, dtype: DType::PtrF32 },
+        /* 2 */ I::DefineGlobal { index: 2, dtype: DType::PtrF32 },
         /* 3 */ I::Const(Const::I32(0)),
         /* 4 */ I::Const(Const::I32(vec_len as i32)),
-        /* 5 */ I::DefineAcc(Const::I32(0)),
+        /* 5 */ I::DefineAcc(Const::F32(0.)),
         /* 6 */ I::Range { lo: v(3), up: v(4), end_idx: 13 },
         /* 7 */ I::Load { src: v(1), offset: v(6), dtype },
         /* 8 */ I::Load { src: v(2), offset: v(6), dtype },

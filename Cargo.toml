@@ -1,7 +1,7 @@
 [workspace]
 members = [
-    "ug-core",
-    "ug-cuda",
+  "ug-core",
+  "ug-cuda",
     "ug-pyo3",
 ]
 resolver = "2"
@@ -17,7 +17,7 @@ license = "MIT OR Apache-2.0"
 
 [workspace.dependencies]
 anyhow = { version = "1", features = ["backtrace"] }
-cudarc = { version = "0.12.1", features = ["f16", "cuda-version-from-build-system"] }
+cudarc = { version = "0.12.1", features = ["std", "cublas", "cublaslt", "curand", "driver", "nvrtc", "f16", "cuda-version-from-build-system", "dynamic-linking"], default-features=false }
 half = { version = "2.3.1", features = ["num-traits", "use-intrinsics", "rand_distr"] }
 num = "0.4.3"
 ug = { path = "./ug-core", version = "0.0.1" }
