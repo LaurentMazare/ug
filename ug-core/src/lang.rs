@@ -82,7 +82,7 @@ pub mod ssa {
         Barrier,
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Clone, Serialize, Deserialize)]
     pub struct Kernel {
         pub instrs: Vec<Instr>,
     }
@@ -125,6 +125,15 @@ pub mod ssa {
                 }
             }
             Ok(super::FlopsMem { flops, mem_in_bytes: mem })
+        }
+    }
+
+    impl std::fmt::Debug for Kernel {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            for (var_id, instr) in self.instrs.iter().enumerate() {
+                writeln!(f, "{var_id:03} {instr:?}")?
+            }
+            Ok(())
         }
     }
 }
