@@ -44,10 +44,17 @@ pub mod ssa {
         F32(f32),
     }
 
+    #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+    pub enum Special {
+        LocalIdx,
+        GridIdx,
+    }
+
     #[derive(Debug, Clone, Serialize, Deserialize)]
     pub enum Instr {
         DefineAcc(Const),
         DefineGlobal { index: usize, dtype: DType },
+        Special(Special),
         Const(Const),
         Unary { op: UnaryOp, arg: VarId, dtype: DType },
         Binary { op: BinaryOp, lhs: VarId, rhs: VarId, dtype: DType },

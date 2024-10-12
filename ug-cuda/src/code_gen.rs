@@ -117,6 +117,8 @@ pub fn gen<W: std::io::Write>(w: &mut W, func_name: &str, kernel: &ssa::Kernel) 
                 };
                 writeln!(w, "{indent}{} {var_id} = {op}({});", D(*dtype), V(arg.as_usize()),)?;
             }
+            I::Special(ssa::Special::LocalIdx) => anyhow::bail!("todo"),
+            I::Special(ssa::Special::GridIdx) => anyhow::bail!("todo"),
         }
     }
     writeln!(w, "}}")?;

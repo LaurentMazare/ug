@@ -1,4 +1,4 @@
-use crate::lang::ssa::{Const, Instr, Kernel, VarId};
+use crate::lang::ssa::{self, Const, Instr, Kernel, VarId};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
@@ -175,6 +175,10 @@ pub fn eval_ssa(kernel: &Kernel, buffers: Vec<&mut Buffer>, _args: &[Value]) -> 
             // assigned but optimizations/code generation might rely on it.
             Instr::DefineAcc(Const::F32(v)) => (Value::F32(*v), None),
             Instr::DefineAcc(Const::I32(v)) => (Value::I32(*v), None),
+            Instr::Special(ssa::Special::LocalIdx) => {
+                todo!()
+            }
+            Instr::Special(ssa::Special::GridIdx) => (Value::I32(0), None),
         };
         if !value.is_none() {
             context.set(var_id, value)?;
