@@ -179,7 +179,7 @@ pub fn eval_ssa<const N: usize>(
                 };
                 (value, None)
             }
-            Instr::Store { dst, offset, value } => {
+            Instr::Store { dst, offset, value, dtype: _ } => {
                 let offset = context.get(*offset)?;
                 let offset = offset.as_i32()?;
                 let value = context.get(*value)?;

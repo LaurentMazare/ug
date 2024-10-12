@@ -83,7 +83,7 @@ pub fn gen<W: std::io::Write>(w: &mut W, func_name: &str, kernel: &ssa::Kernel) 
             I::Assign { dst, src } => {
                 writeln!(w, "{indent}{} = {};", V(dst.as_usize()), V(src.as_usize()))?;
             }
-            I::Store { dst, offset, value } => {
+            I::Store { dst, offset, value, dtype: _ } => {
                 writeln!(
                     w,
                     "{indent}{}[{}] = {};",
