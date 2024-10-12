@@ -1,3 +1,9 @@
+#[derive(Debug, Clone, Copy)]
+pub struct FlopsMem {
+    pub flops: usize,
+    pub mem_in_bytes: usize,
+}
+
 // Very untyped almost SSA language.
 // There are no phi symbols, instead Range is used.
 pub mod ssa {
@@ -81,7 +87,7 @@ pub mod ssa {
     }
 
     impl Kernel {
-        pub fn flops_mem_per_thread(&self) -> Result<(usize, usize)> {
+        pub fn flops_mem_per_thread(&self) -> Result<super::FlopsMem> {
             let mut flops = 0usize;
             let mut mem = 0usize;
             let mut mults = vec![];
@@ -116,7 +122,7 @@ pub mod ssa {
                     | Instr::Const(_) => {}
                 }
             }
-            Ok((flops, mem))
+            Ok(super::FlopsMem { flops, mem_in_bytes: mem })
         }
     }
 }

@@ -14,7 +14,7 @@ fn eval_dotprod() -> Result<()> {
     let mut buf = vec![];
     ug_cuda::code_gen::gen(&mut buf, "dotprod", &kernel)?;
     let cuda_code = String::from_utf8(buf)?;
-    println!("<<<< CUDA CODE >>>>\n{cuda_code}");
+    println!("<<<< CUDA CODE >>>>\n{cuda_code}\nflops-mem: {:?}", kernel.flops_mem_per_thread()?);
     let device = ug_cuda::runtime::Device::new(0)?;
     let func = device.compile_cu(&cuda_code, "foo", "dotprod")?;
     let res = device.zeros(1)?;
