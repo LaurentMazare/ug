@@ -235,7 +235,7 @@ pub fn eval_ssa<const N: usize>(
             Instr::DefineAcc(Const::F32(v)) => (Value::F32(W::splat(*v)), None),
             Instr::DefineAcc(Const::I32(v)) => (Value::I32(W::splat(*v)), None),
             Instr::Special(ssa::Special::LocalIdx) => {
-                todo!()
+                (Value::I32(W(std::array::from_fn(|i| i as i32))), None)
             }
             Instr::Special(ssa::Special::GridIdx) => (Value::I32(W::splat(0i32)), None),
             Instr::Barrier => (Value::None, None),
