@@ -42,9 +42,6 @@ pub fn gen<W: std::io::Write>(w: &mut W, func_name: &str, kernel: &ssa::Kernel) 
         writeln!(w, "  {} {}{delim}", D(dtype), V(var_id))?;
     }
     writeln!(w, ") {{")?;
-    writeln!(w, "  int __pid0 = blockIdx.x * blockDim.x + threadIdx.x;")?;
-    writeln!(w, "  int __pid1 = blockIdx.y * blockDim.y + threadIdx.y;")?;
-    writeln!(w, "  int __pid2 = blockIdx.z * blockDim.z + threadIdx.z;")?;
 
     let mut depth = 0;
     for (var_id, instr) in kernel.instrs.iter().enumerate() {
@@ -117,8 +114,10 @@ pub fn gen<W: std::io::Write>(w: &mut W, func_name: &str, kernel: &ssa::Kernel) 
                 };
                 writeln!(w, "{indent}{} {var_id} = {op}({});", D(*dtype), V(arg.as_usize()),)?;
             }
-            I::Special(ssa::Special::LocalIdx) => anyhow::bail!("todo"),
-            I::Special(ssa::Special::GridIdx) => anyhow::bail!("todo"),
+            I::Special(ssa::Special::LocalIdx) => {
+                writeln!(w, "{indent}int {var_id} = threadIdx.x;")?
+            }
+            I::Special(ssa::Special::GridIdx) => writeln!(w, "{indent}int {var_id} = blockIdx.x;")?,
         }
     }
     writeln!(w, "}}")?;
