@@ -41,7 +41,7 @@ impl Func {
         if len2 != len {
             py_bail!("length mismatch {len2} <> {len}")
         }
-        unsafe { self.0.launch3(s1.0.slice(), s2.0.slice(), s3.0.slice(), len).map_err(w)? };
+        unsafe { self.0.launch3(s1.0.slice(), s2.0.slice(), s3.0.slice(), 1).map_err(w)? };
         Ok(())
     }
 }
@@ -184,9 +184,9 @@ impl Kernel {
         self.0.instrs.iter().map(|v| Instr(v.clone())).collect()
     }
 
-    fn cuda_code(&self) -> PyResult<String> {
+    fn cuda_code(&self, name: &str) -> PyResult<String> {
         let mut buf = vec![];
-        ug_cuda::code_gen::gen(&mut buf, "dotprod", &self.0).map_err(w)?;
+        ug_cuda::code_gen::gen(&mut buf, name, &self.0).map_err(w)?;
         let cuda_code = String::from_utf8(buf)?;
         Ok(cuda_code)
     }
@@ -198,33 +198,39 @@ struct Device(cuda::Device);
 #[pymethods]
 impl Device {
     #[new]
+    #[pyo3(signature = (device_id))]
     fn new(device_id: usize) -> PyResult<Self> {
         let device = cuda::Device::new(device_id).map_err(w)?;
         Ok(Self(device))
     }
 
+    #[pyo3(signature = (ptx_code, func_name))]
     fn compile_ptx(&self, ptx_code: &str, func_name: &str) -> PyResult<Func> {
         let func_name = Box::leak(func_name.to_string().into_boxed_str());
         let func = self.0.compile_ptx(ptx_code, MODULE_NAME, func_name).map_err(w)?;
         Ok(Func(func))
     }
 
+    #[pyo3(signature = (cu_code, func_name))]
     fn compile_cu(&self, cu_code: &str, func_name: &str) -> PyResult<Func> {
         let func_name = Box::leak(func_name.to_string().into_boxed_str());
         let func = self.0.compile_cu(cu_code, MODULE_NAME, func_name).map_err(w)?;
         Ok(Func(func))
     }
 
+    #[pyo3(signature = (len,))]
     fn zeros(&self, len: usize) -> PyResult<Slice> {
         let slice = self.0.zeros(len).map_err(w)?;
         Ok(Slice(Arc::new(slice)))
     }
 
+    #[pyo3(signature = (vs,))]
     fn slice(&self, vs: Vec<f32>) -> PyResult<Slice> {
         let slice = self.0.slice_from_values(&vs).map_err(w)?;
         Ok(Slice(Arc::new(slice)))
     }
 
+    #[pyo3(signature = ())]
     fn synchronize(&self) -> PyResult<()> {
         self.0.synchronize().map_err(w)
     }

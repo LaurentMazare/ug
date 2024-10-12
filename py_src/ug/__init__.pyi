@@ -2,6 +2,9 @@
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union, Sequence
 from os import PathLike
 
+class DType:
+    pass
+
 class Device:
     def __init__(device_id):
         pass
