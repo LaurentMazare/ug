@@ -22,8 +22,16 @@ fn eval_dotprod() -> Result<()> {
     Ok(())
 }
 
+fn lower_add() -> Result<()> {
+    let kernel = ug::samples::simple_add(32);
+    let ssa_kernel = ug::lower::lower(&kernel)?;
+    println!("{ssa_kernel:?}");
+    Ok(())
+}
+
 fn main() -> Result<()> {
     eval_add()?;
     eval_dotprod()?;
+    lower_add()?;
     Ok(())
 }

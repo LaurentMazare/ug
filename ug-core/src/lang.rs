@@ -118,6 +118,10 @@ impl Arg {
     pub fn id(&self) -> ArgId {
         self.id
     }
+
+    pub fn type_(&self) -> ArgType {
+        self.type_
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -318,9 +322,9 @@ impl Ops {
 #[allow(unused)]
 #[derive(Debug, Clone)]
 pub struct Kernel {
-    name: String,
-    args: Vec<Arg>,
-    ops: Vec<Ops>,
+    pub(crate) name: String,
+    pub(crate) args: Vec<Arg>,
+    pub(crate) ops: Vec<Ops>,
 }
 
 impl Kernel {
