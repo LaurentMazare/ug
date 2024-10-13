@@ -3,7 +3,15 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union, Sequence
 from os import PathLike
 
 class Arg:
-    pass
+    @staticmethod
+    def i32():
+        """ """
+        pass
+
+    @staticmethod
+    def ptr():
+        """ """
+        pass
 
 class DType:
     pass
@@ -33,7 +41,10 @@ class Device:
         pass
 
 class Expr:
-    pass
+    @staticmethod
+    def load(ptr, offset, len, stride):
+        """ """
+        pass
 
 class Func:
     def launch3(self, s1, s2, s3, block_dim=1, grid_dim=1, shared_mem_bytes=0):
@@ -46,12 +57,20 @@ class IndexExpr:
         """ """
         pass
 
+    @staticmethod
+    def program_id():
+        """ """
+        pass
+
 class Kernel:
     def __init__(name, args, ops):
         pass
 
 class Ops:
-    pass
+    @staticmethod
+    def store(dst, offset, len, stride, value):
+        """ """
+        pass
 
 class Slice:
     def len(self):

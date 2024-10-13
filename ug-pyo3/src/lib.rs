@@ -271,12 +271,12 @@ struct Arg(ug::lang::Arg);
 
 #[pymethods]
 impl Arg {
-    #[classattr]
+    #[staticmethod]
     fn ptr() -> Self {
         Self(ug::lang::Arg::new(ug::lang::ArgType::Ptr))
     }
 
-    #[classattr]
+    #[staticmethod]
     fn i32() -> Self {
         Self(ug::lang::Arg::new(ug::lang::ArgType::I32))
     }
@@ -303,6 +303,11 @@ impl Expr {
     fn __mul__(&self, rhs: &Self) -> Self {
         Self(ug::lang::ExprNode::mul(&self.0, &rhs.0))
     }
+
+    #[staticmethod]
+    fn load(ptr: &Arg, offset: &IndexExpr, len: &IndexExpr, stride: &IndexExpr) -> Self {
+        Self(ug::lang::ExprNode::load(&ptr.0, &offset.0, &len.0, &stride.0))
+    }
 }
 
 #[pyclass]
@@ -311,7 +316,7 @@ struct IndexExpr(ug::lang::IndexExprNode);
 
 #[pymethods]
 impl IndexExpr {
-    #[classattr]
+    #[staticmethod]
     fn program_id() -> Self {
         Self(ug::lang::IndexExprNode::program_id())
     }
@@ -342,6 +347,17 @@ struct Ops(ug::lang::Ops);
 impl Ops {
     fn __str__(&self) -> String {
         format!("{:?}", self.0)
+    }
+
+    #[staticmethod]
+    fn store(
+        dst: &Arg,
+        offset: &IndexExpr,
+        len: &IndexExpr,
+        stride: &IndexExpr,
+        value: &Expr,
+    ) -> Self {
+        Self(ug::lang::Ops::store(&dst.0, &offset.0, &len.0, &stride.0, &value.0))
     }
 }
 
