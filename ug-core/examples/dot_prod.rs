@@ -1,7 +1,7 @@
 use anyhow::Result;
 
 fn eval_add() -> Result<()> {
-    let kernel = ug::samples::simple_add(2);
+    let kernel = ug::samples::ssa::simple_add(2);
     println!("{kernel:?}");
     let mut a = ug::interpreter::Buffer::I32(vec![0i32, 0]);
     let mut b = ug::interpreter::Buffer::I32(vec![3i32, 4]);
@@ -12,7 +12,7 @@ fn eval_add() -> Result<()> {
 }
 
 fn eval_dotprod() -> Result<()> {
-    let kernel = ug::samples::simple_dotprod(2);
+    let kernel = ug::samples::ssa::simple_dotprod(2);
     println!("{kernel:?}");
     let mut a = ug::interpreter::Buffer::F32(vec![0f32]);
     let mut b = ug::interpreter::Buffer::F32(vec![3f32, 4.5]);

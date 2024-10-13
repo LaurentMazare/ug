@@ -122,9 +122,8 @@ impl Arg {
 
 #[derive(Debug, Clone)]
 pub enum IndexExpr {
-    LocalId,
-    GridId,
-    Const(i32),
+    ProgramId,
+    Const(usize),
     Add(IndexExprNode, IndexExprNode),
     Mul(IndexExprNode, IndexExprNode),
 }
@@ -155,16 +154,12 @@ impl IndexExprNode {
         Self { inner: std::rc::Rc::new(inner) }
     }
 
-    pub fn cst(v: i32) -> Self {
+    pub fn cst(v: usize) -> Self {
         Self::from_expr(IndexExpr::Const(v))
     }
 
-    pub fn local_id() -> Self {
-        Self::from_expr(IndexExpr::LocalId)
-    }
-
-    pub fn grid_id() -> Self {
-        Self::from_expr(IndexExpr::GridId)
+    pub fn program_id() -> Self {
+        Self::from_expr(IndexExpr::ProgramId)
     }
 
     pub fn add(&self, rhs: &Self) -> Self {
@@ -175,10 +170,10 @@ impl IndexExprNode {
         Self::from_expr(IndexExpr::Mul(self.clone(), rhs.clone()))
     }
 
-    pub fn as_const(&self) -> Option<i32> {
+    pub fn as_const(&self) -> Option<usize> {
         match &self.inner.as_ref().expr {
             IndexExpr::Const(c) => Some(*c),
-            IndexExpr::LocalId | IndexExpr::GridId => None,
+            IndexExpr::ProgramId => None,
             IndexExpr::Add(lhs, rhs) => lhs.as_const().zip(rhs.as_const()).map(|(u, v)| u + v),
             IndexExpr::Mul(lhs, rhs) => lhs.as_const().zip(rhs.as_const()).map(|(u, v)| u * v),
         }
@@ -317,6 +312,20 @@ impl Ops {
     pub fn all_args(&self, args: &mut HashSet<Arg>) {
         args.insert(*self.dst().ptr());
         self.src().all_args(args);
+    }
+}
+
+#[allow(unused)]
+#[derive(Debug, Clone)]
+pub struct Kernel {
+    name: String,
+    args: Vec<Arg>,
+    ops: Vec<Ops>,
+}
+
+impl Kernel {
+    pub fn new(name: String, args: Vec<Arg>, ops: Vec<Ops>) -> Self {
+        Self { name, args, ops }
     }
 }
 
