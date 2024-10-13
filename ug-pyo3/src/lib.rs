@@ -100,69 +100,69 @@ impl DType {
     }
 }
 
-#[pyclass]
+#[pyclass(name = "Instr")]
 #[derive(Clone)]
-struct Instr(ssa::Instr);
+struct SsaInstr(ssa::Instr);
 
 #[pymethods]
-impl Instr {
+impl SsaInstr {
     fn __str__(&self) -> String {
         format!("{:?}", self.0)
     }
 
     #[staticmethod]
     fn const_i32(v: i32) -> Self {
-        Instr(ssa::Instr::Const(ssa::Const::I32(v)))
+        Self(ssa::Instr::Const(ssa::Const::I32(v)))
     }
 
     #[staticmethod]
     fn const_f32(v: f32) -> Self {
-        Instr(ssa::Instr::Const(ssa::Const::F32(v)))
+        Self(ssa::Instr::Const(ssa::Const::F32(v)))
     }
 
     #[staticmethod]
     fn define_acc_i32(v: i32) -> Self {
-        Instr(ssa::Instr::DefineAcc(ssa::Const::I32(v)))
+        Self(ssa::Instr::DefineAcc(ssa::Const::I32(v)))
     }
 
     #[staticmethod]
     fn define_acc_f32(v: f32) -> Self {
-        Instr(ssa::Instr::DefineAcc(ssa::Const::F32(v)))
+        Self(ssa::Instr::DefineAcc(ssa::Const::F32(v)))
     }
 
     #[staticmethod]
     fn end_range(start_idx: usize) -> Self {
-        Instr(ssa::Instr::EndRange { start_idx })
+        Self(ssa::Instr::EndRange { start_idx })
     }
 
     #[staticmethod]
     fn range(lo: usize, up: usize, end_idx: usize) -> Self {
-        Instr(ssa::Instr::Range { lo: v(lo), up: v(up), end_idx })
+        Self(ssa::Instr::Range { lo: v(lo), up: v(up), end_idx })
     }
 
     #[staticmethod]
     fn load(src: usize, offset: usize, dtype: DType) -> Self {
-        Instr(ssa::Instr::Load { src: v(src), offset: v(offset), dtype: dtype.0 })
+        Self(ssa::Instr::Load { src: v(src), offset: v(offset), dtype: dtype.0 })
     }
 
     #[staticmethod]
     fn store(dst: usize, offset: usize, value: usize, dtype: DType) -> Self {
-        Instr(ssa::Instr::Store { dst: v(dst), offset: v(offset), value: v(value), dtype: dtype.0 })
+        Self(ssa::Instr::Store { dst: v(dst), offset: v(offset), value: v(value), dtype: dtype.0 })
     }
 
     #[staticmethod]
     fn define_global(index: usize, dtype: DType) -> Self {
-        Instr(ssa::Instr::DefineGlobal { index, dtype: dtype.0 })
+        Self(ssa::Instr::DefineGlobal { index, dtype: dtype.0 })
     }
 
     #[staticmethod]
     fn special_l() -> Self {
-        Instr(ssa::Instr::Special(ssa::Special::LocalIdx))
+        Self(ssa::Instr::Special(ssa::Special::LocalIdx))
     }
 
     #[staticmethod]
     fn special_g() -> Self {
-        Instr(ssa::Instr::Special(ssa::Special::GridIdx))
+        Self(ssa::Instr::Special(ssa::Special::GridIdx))
     }
 
     #[staticmethod]
@@ -172,7 +172,7 @@ impl Instr {
             "exp" => ssa::UnaryOp::Exp,
             _ => py_bail!("unknown unary op '{op}'"),
         };
-        Ok(Instr(ssa::Instr::Unary { op, arg: v(arg), dtype: dtype.0 }))
+        Ok(Self(ssa::Instr::Unary { op, arg: v(arg), dtype: dtype.0 }))
     }
 
     #[staticmethod]
@@ -184,18 +184,18 @@ impl Instr {
             "div" => ssa::BinaryOp::Div,
             _ => py_bail!("unknown binary op '{op}'"),
         };
-        Ok(Instr(ssa::Instr::Binary { op, lhs: v(lhs), rhs: v(rhs), dtype: dtype.0 }))
+        Ok(Self(ssa::Instr::Binary { op, lhs: v(lhs), rhs: v(rhs), dtype: dtype.0 }))
     }
 }
 
-#[pyclass]
+#[pyclass(name = "Kernel")]
 #[derive(Clone)]
-struct Kernel(ssa::Kernel);
+struct SsaKernel(ssa::Kernel);
 
 #[pymethods]
-impl Kernel {
+impl SsaKernel {
     #[new]
-    fn new(instrs: Vec<Instr>) -> Self {
+    fn new(instrs: Vec<SsaInstr>) -> Self {
         let instrs = instrs.into_iter().map(|v| v.0).collect();
         Self(ssa::Kernel { instrs })
     }
@@ -209,8 +209,8 @@ impl Kernel {
         Ok((fm.flops, fm.mem_in_bytes))
     }
 
-    fn to_list(&self) -> Vec<Instr> {
-        self.0.instrs.iter().map(|v| Instr(v.clone())).collect()
+    fn to_list(&self) -> Vec<SsaInstr> {
+        self.0.instrs.iter().map(|v| SsaInstr(v.clone())).collect()
     }
 
     fn cuda_code(&self, name: &str) -> PyResult<String> {
@@ -267,12 +267,15 @@ impl Device {
 
 #[pymodule]
 #[pyo3(name = "ug")]
-fn mod_(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
-    m.add_class::<Func>()?;
-    m.add_class::<Kernel>()?;
+fn mod_(py: Python, m: &Bound<PyModule>) -> PyResult<()> {
+    let ssa = PyModule::new_bound(py, "ssa")?;
+    ssa.add_class::<SsaKernel>()?;
+    ssa.add_class::<SsaInstr>()?;
+
     m.add_class::<Device>()?;
     m.add_class::<DType>()?;
-    m.add_class::<Instr>()?;
+    m.add_class::<Func>()?;
     m.add_class::<Slice>()?;
+    m.add_submodule(&ssa)?;
     Ok(())
 }

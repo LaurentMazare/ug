@@ -14,5 +14,5 @@ Cargo.lock
 *.pdb
 gen.cu
 gen*.json
-py_src/ug/__pycache__
+__pycache__
 py_src/ug/*.so
