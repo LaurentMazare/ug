@@ -1,3 +1,325 @@
+use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub enum UnaryOp {
+    Exp,
+    Neg,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub enum BinaryOp {
+    Add,
+    Sub,
+    Mul,
+    Div,
+}
+
+/// Unique identifier for arguments.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct ArgId(usize);
+
+impl ArgId {
+    fn new() -> Self {
+        // https://users.rust-lang.org/t/idiomatic-rust-way-to-generate-unique-id/33805
+        use std::sync::atomic;
+        static COUNTER: atomic::AtomicUsize = atomic::AtomicUsize::new(1);
+        Self(COUNTER.fetch_add(1, atomic::Ordering::Relaxed))
+    }
+
+    pub fn as_usize(&self) -> usize {
+        self.0
+    }
+}
+
+/// Unique identifier for nodes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct NodeId(usize);
+
+impl NodeId {
+    fn new() -> Self {
+        // https://users.rust-lang.org/t/idiomatic-rust-way-to-generate-unique-id/33805
+        use std::sync::atomic;
+        static COUNTER: atomic::AtomicUsize = atomic::AtomicUsize::new(1);
+        Self(COUNTER.fetch_add(1, atomic::Ordering::Relaxed))
+    }
+
+    pub fn as_usize(&self) -> usize {
+        self.0
+    }
+}
+
+/// Unique identifier for index nodes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct IndexNodeId(usize);
+
+impl IndexNodeId {
+    fn new() -> Self {
+        // https://users.rust-lang.org/t/idiomatic-rust-way-to-generate-unique-id/33805
+        use std::sync::atomic;
+        static COUNTER: atomic::AtomicUsize = atomic::AtomicUsize::new(1);
+        Self(COUNTER.fetch_add(1, atomic::Ordering::Relaxed))
+    }
+
+    pub fn as_usize(&self) -> usize {
+        self.0
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub enum ScalarConst {
+    Ptr(u64),
+    I32(i32),
+    F32(f32),
+}
+
+impl From<f32> for ScalarConst {
+    fn from(value: f32) -> Self {
+        Self::F32(value)
+    }
+}
+
+impl From<i32> for ScalarConst {
+    fn from(value: i32) -> Self {
+        Self::I32(value)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum ArgType {
+    Ptr,
+    I32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct Arg {
+    id: ArgId,
+    type_: ArgType,
+}
+
+impl PartialOrd for Arg {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Arg {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.id.cmp(&other.id)
+    }
+}
+
+impl Arg {
+    pub fn new(type_: ArgType) -> Self {
+        let id = ArgId::new();
+        Self { id, type_ }
+    }
+
+    pub fn id(&self) -> ArgId {
+        self.id
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum IndexExpr {
+    LocalId,
+    GridId,
+    Const(i32),
+    Add(IndexExprNode, IndexExprNode),
+    Mul(IndexExprNode, IndexExprNode),
+}
+
+#[allow(unused)]
+#[derive(Debug, Clone)]
+pub(crate) struct IndexExprNodeInner {
+    pub(crate) id: IndexNodeId,
+    pub(crate) expr: IndexExpr,
+}
+
+#[derive(Debug, Clone)]
+pub struct IndexExprNode {
+    pub(crate) inner: std::rc::Rc<IndexExprNodeInner>,
+}
+
+#[allow(unused)]
+#[derive(Debug, Clone)]
+pub(crate) struct ExprNodeInner {
+    pub(crate) id: NodeId,
+    pub(crate) expr: Expr,
+}
+
+impl IndexExprNode {
+    fn from_expr(expr: IndexExpr) -> Self {
+        let id = IndexNodeId::new();
+        let inner = IndexExprNodeInner { id, expr };
+        Self { inner: std::rc::Rc::new(inner) }
+    }
+
+    pub fn cst(v: i32) -> Self {
+        Self::from_expr(IndexExpr::Const(v))
+    }
+
+    pub fn local_id() -> Self {
+        Self::from_expr(IndexExpr::LocalId)
+    }
+
+    pub fn grid_id() -> Self {
+        Self::from_expr(IndexExpr::GridId)
+    }
+
+    pub fn add(&self, rhs: &Self) -> Self {
+        Self::from_expr(IndexExpr::Add(self.clone(), rhs.clone()))
+    }
+
+    pub fn mul(&self, rhs: &Self) -> Self {
+        Self::from_expr(IndexExpr::Mul(self.clone(), rhs.clone()))
+    }
+
+    pub fn as_const(&self) -> Option<i32> {
+        match &self.inner.as_ref().expr {
+            IndexExpr::Const(c) => Some(*c),
+            IndexExpr::LocalId | IndexExpr::GridId => None,
+            IndexExpr::Add(lhs, rhs) => lhs.as_const().zip(rhs.as_const()).map(|(u, v)| u + v),
+            IndexExpr::Mul(lhs, rhs) => lhs.as_const().zip(rhs.as_const()).map(|(u, v)| u * v),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ExprNode {
+    pub(crate) inner: std::rc::Rc<ExprNodeInner>,
+}
+
+#[derive(Debug, Clone)]
+pub struct StridedSlice {
+    ptr: Arg,
+    offset: IndexExprNode,
+    len: IndexExprNode,
+    stride: IndexExprNode,
+}
+
+impl StridedSlice {
+    pub fn ptr(&self) -> &Arg {
+        &self.ptr
+    }
+    pub fn offset(&self) -> &IndexExprNode {
+        &self.offset
+    }
+    pub fn len(&self) -> &IndexExprNode {
+        &self.len
+    }
+    pub fn stride(&self) -> &IndexExprNode {
+        &self.stride
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum Expr {
+    ScalarConst(ScalarConst),
+    Range(usize, usize),
+    Load(StridedSlice),
+    Unary(UnaryOp, ExprNode),
+    Binary(BinaryOp, ExprNode, ExprNode),
+}
+
+// Language in the style of triton.
+#[derive(Debug, Clone)]
+pub enum Ops {
+    Store { dst: StridedSlice, src: ExprNode },
+}
+
+impl ExprNode {
+    fn from_expr(expr: Expr) -> Self {
+        let id = NodeId::new();
+        let inner = ExprNodeInner { id, expr };
+        Self { inner: std::rc::Rc::new(inner) }
+    }
+
+    pub fn cst<C: Into<ScalarConst>>(c: C) -> Self {
+        Self::from_expr(Expr::ScalarConst(c.into()))
+    }
+
+    pub fn load(
+        ptr: &Arg,
+        offset: &IndexExprNode,
+        len: &IndexExprNode,
+        stride: &IndexExprNode,
+    ) -> Self {
+        let ss = StridedSlice {
+            ptr: *ptr,
+            offset: offset.clone(),
+            len: len.clone(),
+            stride: stride.clone(),
+        };
+        Self::from_expr(Expr::Load(ss))
+    }
+
+    pub fn unary(&self, op: UnaryOp) -> Self {
+        Self::from_expr(Expr::Unary(op, self.clone()))
+    }
+
+    pub fn binary(&self, rhs: &Self, op: BinaryOp) -> Self {
+        Self::from_expr(Expr::Binary(op, self.clone(), rhs.clone()))
+    }
+
+    pub fn add(&self, rhs: &Self) -> Self {
+        Self::from_expr(Expr::Binary(BinaryOp::Add, self.clone(), rhs.clone()))
+    }
+
+    pub fn mul(&self, rhs: &Self) -> Self {
+        Self::from_expr(Expr::Binary(BinaryOp::Mul, self.clone(), rhs.clone()))
+    }
+
+    pub fn all_args(&self, args: &mut HashSet<Arg>) {
+        match &self.inner.expr {
+            Expr::Load(ss) => {
+                args.insert(*ss.ptr());
+            }
+            Expr::Binary(_, lhs, rhs) => {
+                lhs.all_args(args);
+                rhs.all_args(args);
+            }
+            Expr::Unary(_, e) => e.all_args(args),
+            Expr::Range(..) | Expr::ScalarConst(_) => {}
+        }
+    }
+}
+
+impl Ops {
+    pub fn store(
+        dst_ptr: &Arg,
+        dst_offset: &IndexExprNode,
+        dst_len: &IndexExprNode,
+        dst_stride: &IndexExprNode,
+        src: &ExprNode,
+    ) -> Self {
+        let dst = StridedSlice {
+            ptr: *dst_ptr,
+            offset: dst_offset.clone(),
+            len: dst_len.clone(),
+            stride: dst_stride.clone(),
+        };
+        Self::Store { dst, src: src.clone() }
+    }
+
+    pub fn src(&self) -> &ExprNode {
+        match self {
+            Self::Store { dst: _, src } => src,
+        }
+    }
+
+    pub fn dst(&self) -> &StridedSlice {
+        match self {
+            Self::Store { dst, src: _ } => dst,
+        }
+    }
+
+    pub fn all_args(&self, args: &mut HashSet<Arg>) {
+        args.insert(*self.dst().ptr());
+        self.src().all_args(args);
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct FlopsMem {
     pub flops: usize,
@@ -11,6 +333,8 @@ pub struct FlopsMem {
 pub mod ssa {
     use anyhow::Result;
     use serde::{Deserialize, Serialize};
+
+    pub use super::{BinaryOp, UnaryOp};
 
     #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
     pub enum DType {
@@ -40,20 +364,6 @@ pub mod ssa {
         pub fn as_usize(&self) -> usize {
             self.0
         }
-    }
-
-    #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-    pub enum UnaryOp {
-        Exp,
-        Neg,
-    }
-
-    #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-    pub enum BinaryOp {
-        Add,
-        Sub,
-        Mul,
-        Div,
     }
 
     #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
