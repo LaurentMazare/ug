@@ -50,7 +50,14 @@ pub fn gen<W: std::io::Write>(w: &mut W, func_name: &str, kernel: &ssa::Kernel) 
         let indent = " ".repeat(2 * depth + 2);
         match instr {
             I::DefineGlobal { index: _, dtype: _ } => {}
-            I::DefineLocal { .. } => anyhow::bail!("DefineLocal is not implemented yet"),
+            I::DefineLocal { dtype, size } => match dtype {
+                // TODO(laurent): should we enforce the alignment in some cases?
+                ssa::DType::PtrI32 => writeln!(w, "{indent}__shared__ int {var_id}[{size}];")?,
+                ssa::DType::PtrF32 => writeln!(w, "{indent}__shared__ float {var_id}[{size}];")?,
+                ssa::DType::F32 | ssa::DType::I32 => {
+                    anyhow::bail!("unsupported dtype for DefineLocal {dtype:?}")
+                }
+            },
             I::DefineAcc(cst) | I::Const(cst) => match cst {
                 ssa::Const::I32(v) => writeln!(w, "{indent}int {var_id} = {v};")?,
                 ssa::Const::F32(v) => writeln!(w, "{indent}float {var_id} = {v};")?,

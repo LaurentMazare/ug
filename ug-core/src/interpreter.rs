@@ -249,6 +249,8 @@ pub fn eval_ssa<const N: usize>(
             Instr::Special(ssa::Special::GridIdx) => (Value::I32(W::splat(grid_idx as i32)), None),
             Instr::Barrier => (Value::None, None),
             Instr::DefineLocal { size, dtype } => {
+                // We allocate a new buffer on each DefineLocal, this assumes that such calls are
+                // never made inside a loop otherwise the previous value should be used.
                 let buf_id = context.local_buffers.len();
                 let buf = match dtype {
                     ssa::DType::PtrI32 => Buffer::I32(vec![0i32; *size]),
