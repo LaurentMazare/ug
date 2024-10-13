@@ -125,6 +125,7 @@ pub fn eval_ssa<const N: usize>(
     kernel: &Kernel,
     buffers: Vec<&mut Buffer>,
     _args: &[Value<N>],
+    grid_idx: usize,
 ) -> Result<()> {
     let mut context: Context<'_, N> = Context::new(buffers, kernel.instrs.len());
     let mut current_idx = 0;
@@ -237,7 +238,7 @@ pub fn eval_ssa<const N: usize>(
             Instr::Special(ssa::Special::LocalIdx) => {
                 (Value::I32(W(std::array::from_fn(|i| i as i32))), None)
             }
-            Instr::Special(ssa::Special::GridIdx) => (Value::I32(W::splat(0i32)), None),
+            Instr::Special(ssa::Special::GridIdx) => (Value::I32(W::splat(grid_idx as i32)), None),
             Instr::Barrier => (Value::None, None),
         };
         if !value.is_none() {

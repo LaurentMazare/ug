@@ -1,6 +1,8 @@
 use anyhow::Result;
 use std::sync::Arc;
 
+pub use cudarc::driver::LaunchConfig;
+
 #[derive(Clone)]
 pub struct Func {
     func: cudarc::driver::CudaFunction,
@@ -14,11 +16,9 @@ impl Func {
     pub unsafe fn launch1<Params: cudarc::driver::DeviceRepr>(
         &self,
         p: Params,
-        el_count: usize,
+        cfg: LaunchConfig,
     ) -> Result<()> {
         use cudarc::driver::LaunchAsync;
-
-        let cfg = cudarc::driver::LaunchConfig::for_num_elems(el_count as u32);
         let func = self.func.clone();
         unsafe { func.launch(cfg, (p,))? };
         Ok(())
@@ -32,11 +32,9 @@ impl Func {
         &self,
         p1: Params,
         p2: Params,
-        el_count: usize,
+        cfg: LaunchConfig,
     ) -> Result<()> {
         use cudarc::driver::LaunchAsync;
-
-        let cfg = cudarc::driver::LaunchConfig::for_num_elems(el_count as u32);
         let func = self.func.clone();
         unsafe { func.launch(cfg, (p1, p2))? };
         Ok(())
@@ -51,16 +49,9 @@ impl Func {
         p1: Params,
         p2: Params,
         p3: Params,
-        el_count: usize,
+        cfg: LaunchConfig,
     ) -> Result<()> {
         use cudarc::driver::LaunchAsync;
-
-        let cfg = cudarc::driver::LaunchConfig {
-            grid_dim: (el_count as u32, 1, 1),
-            block_dim: (1, 1, 1),
-            shared_mem_bytes: 0,
-        };
-
         let func = self.func.clone();
         unsafe { func.launch(cfg, (p1, p2, p3))? };
         Ok(())

@@ -22,7 +22,14 @@ fn eval_dotprod() -> Result<()> {
     let rhs = (0..1024).map(|v| v as f32).collect::<Vec<_>>();
     let lhs = device.slice_from_values(&lhs)?;
     let rhs = device.slice_from_values(&rhs)?;
-    unsafe { func.launch3(res.slice(), lhs.slice(), rhs.slice(), 1)? };
+    unsafe {
+        func.launch3(
+            res.slice(),
+            lhs.slice(),
+            rhs.slice(),
+            cudarc::driver::LaunchConfig::for_num_elems(1),
+        )?
+    };
     let res = res.to_vec()?;
     println!("res: {res:?}");
     Ok(())
