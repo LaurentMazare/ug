@@ -137,7 +137,7 @@ pub(crate) struct IndexExprNodeInner {
 
 #[derive(Debug, Clone)]
 pub struct IndexExprNode {
-    pub(crate) inner: std::rc::Rc<IndexExprNodeInner>,
+    pub(crate) inner: std::sync::Arc<IndexExprNodeInner>,
 }
 
 #[allow(unused)]
@@ -151,7 +151,7 @@ impl IndexExprNode {
     fn from_expr(expr: IndexExpr) -> Self {
         let id = IndexNodeId::new();
         let inner = IndexExprNodeInner { id, expr };
-        Self { inner: std::rc::Rc::new(inner) }
+        Self { inner: std::sync::Arc::new(inner) }
     }
 
     pub fn cst(v: usize) -> Self {
@@ -182,7 +182,7 @@ impl IndexExprNode {
 
 #[derive(Debug, Clone)]
 pub struct ExprNode {
-    pub(crate) inner: std::rc::Rc<ExprNodeInner>,
+    pub(crate) inner: std::sync::Arc<ExprNodeInner>,
 }
 
 #[derive(Debug, Clone)]
@@ -227,7 +227,7 @@ impl ExprNode {
     fn from_expr(expr: Expr) -> Self {
         let id = NodeId::new();
         let inner = ExprNodeInner { id, expr };
-        Self { inner: std::rc::Rc::new(inner) }
+        Self { inner: std::sync::Arc::new(inner) }
     }
 
     pub fn cst<C: Into<ScalarConst>>(c: C) -> Self {

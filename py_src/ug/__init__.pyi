@@ -2,6 +2,9 @@
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union, Sequence
 from os import PathLike
 
+class Arg:
+    pass
+
 class DType:
     pass
 
@@ -33,6 +36,13 @@ class Func:
     def launch3(self, s1, s2, s3, block_dim=1, grid_dim=1, shared_mem_bytes=0):
         """ """
         pass
+
+class Kernel:
+    def __init__(name, args, ops):
+        pass
+
+class Ops:
+    pass
 
 class Slice:
     def len(self):

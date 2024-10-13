@@ -265,6 +265,32 @@ impl Device {
     }
 }
 
+#[pyclass]
+#[derive(Clone)]
+struct Arg(ug::lang::Arg);
+
+#[pyclass]
+#[derive(Clone)]
+struct Ops(ug::lang::Ops);
+
+#[pyclass]
+#[derive(Clone)]
+struct Kernel(ug::lang::Kernel);
+
+#[pymethods]
+impl Kernel {
+    #[new]
+    fn new(name: String, args: Vec<Arg>, ops: Vec<Ops>) -> Self {
+        let args = args.into_iter().map(|v| v.0).collect();
+        let ops = ops.into_iter().map(|v| v.0).collect();
+        Self(ug::lang::Kernel::new(name, args, ops))
+    }
+
+    fn __str__(&self) -> String {
+        format!("{:?}", self.0)
+    }
+}
+
 #[pymodule]
 #[pyo3(name = "ug")]
 fn mod_(py: Python, m: &Bound<PyModule>) -> PyResult<()> {
@@ -276,6 +302,9 @@ fn mod_(py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     m.add_class::<DType>()?;
     m.add_class::<Func>()?;
     m.add_class::<Slice>()?;
+    m.add_class::<Kernel>()?;
+    m.add_class::<Ops>()?;
+    m.add_class::<Arg>()?;
     m.add_submodule(&ssa)?;
     Ok(())
 }

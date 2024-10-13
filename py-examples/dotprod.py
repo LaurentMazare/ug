@@ -1,5 +1,5 @@
 import ug
-from ug.ssa import Instr
+from ug.ssa import Kernel, Instr
 
 device = ug.Device(0)
 vec_len = 128
@@ -16,7 +16,7 @@ instrs = [
     Instr.store(0, 5, 8, ug.DType.f32),
     Instr.end_range(5),
 ]
-kernel = ug.ssa.Kernel(instrs)
+kernel = Kernel(instrs)
 print(str(kernel))
 cuda_code = kernel.cuda_code("sum")
 print(cuda_code)
