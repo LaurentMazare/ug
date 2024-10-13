@@ -30,7 +30,7 @@ class Device:
         pass
 
 class Func:
-    def launch3(self, s1, s2, s3, grid_size=1):
+    def launch3(self, s1, s2, s3, block_dim=1, grid_dim=1, shared_mem_bytes=0):
         """ """
         pass
 
@@ -105,6 +105,10 @@ class Kernel:
         pass
 
     def cuda_code(self, name):
+        """ """
+        pass
+
+    def flops_and_mem(self):
         """ """
         pass
 
