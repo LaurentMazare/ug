@@ -269,9 +269,81 @@ impl Device {
 #[derive(Clone)]
 struct Arg(ug::lang::Arg);
 
+#[pymethods]
+impl Arg {
+    #[classattr]
+    fn ptr() -> Self {
+        Self(ug::lang::Arg::new(ug::lang::ArgType::Ptr))
+    }
+
+    #[classattr]
+    fn i32() -> Self {
+        Self(ug::lang::Arg::new(ug::lang::ArgType::I32))
+    }
+
+    fn __str__(&self) -> String {
+        format!("{:?}", self.0)
+    }
+}
+
+#[pyclass]
+#[derive(Clone)]
+struct Expr(ug::lang::ExprNode);
+
+#[pymethods]
+impl Expr {
+    fn __str__(&self) -> String {
+        format!("{:?}", self.0)
+    }
+
+    fn __add__(&self, rhs: &Self) -> Self {
+        Self(ug::lang::ExprNode::add(&self.0, &rhs.0))
+    }
+
+    fn __mul__(&self, rhs: &Self) -> Self {
+        Self(ug::lang::ExprNode::mul(&self.0, &rhs.0))
+    }
+}
+
+#[pyclass]
+#[derive(Clone)]
+struct IndexExpr(ug::lang::IndexExprNode);
+
+#[pymethods]
+impl IndexExpr {
+    #[classattr]
+    fn program_id() -> Self {
+        Self(ug::lang::IndexExprNode::program_id())
+    }
+
+    #[staticmethod]
+    fn cst(v: usize) -> Self {
+        Self(ug::lang::IndexExprNode::cst(v))
+    }
+
+    fn __str__(&self) -> String {
+        format!("{:?}", self.0)
+    }
+
+    fn __add__(&self, rhs: &Self) -> Self {
+        Self(ug::lang::IndexExprNode::add(&self.0, &rhs.0))
+    }
+
+    fn __mul__(&self, rhs: &Self) -> Self {
+        Self(ug::lang::IndexExprNode::mul(&self.0, &rhs.0))
+    }
+}
+
 #[pyclass]
 #[derive(Clone)]
 struct Ops(ug::lang::Ops);
+
+#[pymethods]
+impl Ops {
+    fn __str__(&self) -> String {
+        format!("{:?}", self.0)
+    }
+}
 
 #[pyclass]
 #[derive(Clone)]
@@ -305,6 +377,8 @@ fn mod_(py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     m.add_class::<Kernel>()?;
     m.add_class::<Ops>()?;
     m.add_class::<Arg>()?;
+    m.add_class::<Expr>()?;
+    m.add_class::<IndexExpr>()?;
     m.add_submodule(&ssa)?;
     Ok(())
 }

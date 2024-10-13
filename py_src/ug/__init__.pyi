@@ -32,8 +32,17 @@ class Device:
         """ """
         pass
 
+class Expr:
+    pass
+
 class Func:
     def launch3(self, s1, s2, s3, block_dim=1, grid_dim=1, shared_mem_bytes=0):
+        """ """
+        pass
+
+class IndexExpr:
+    @staticmethod
+    def cst(v):
         """ """
         pass
 
