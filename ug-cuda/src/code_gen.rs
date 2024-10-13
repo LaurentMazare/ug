@@ -50,6 +50,7 @@ pub fn gen<W: std::io::Write>(w: &mut W, func_name: &str, kernel: &ssa::Kernel) 
         let indent = " ".repeat(2 * depth + 2);
         match instr {
             I::DefineGlobal { index: _, dtype: _ } => {}
+            I::DefineLocal { .. } => anyhow::bail!("DefineLocal is not implemented yet"),
             I::DefineAcc(cst) | I::Const(cst) => match cst {
                 ssa::Const::I32(v) => writeln!(w, "{indent}int {var_id} = {v};")?,
                 ssa::Const::F32(v) => writeln!(w, "{indent}float {var_id} = {v};")?,

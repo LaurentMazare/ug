@@ -6,6 +6,8 @@ pub struct FlopsMem {
 
 // Very untyped almost SSA language.
 // There are no phi symbols, instead Range is used.
+// This is currently close to the UOps setup from tinygrad:
+// https://github.com/tinygrad/tinygrad/blob/13846930cd43b1cfd8f7bb2967529f08c08cb6d6/tinygrad/ops.py#L98
 pub mod ssa {
     use anyhow::Result;
     use serde::{Deserialize, Serialize};
@@ -70,6 +72,7 @@ pub mod ssa {
     pub enum Instr {
         DefineAcc(Const),
         DefineGlobal { index: usize, dtype: DType },
+        DefineLocal { size: usize, dtype: DType },
         Special(Special),
         Const(Const),
         Unary { op: UnaryOp, arg: VarId, dtype: DType },
@@ -117,6 +120,7 @@ pub mod ssa {
                     },
                     Instr::Unary { .. } | Instr::Binary { .. } => flops += mult,
                     Instr::DefineGlobal { .. }
+                    | Instr::DefineLocal { .. }
                     | Instr::DefineAcc(_)
                     | Instr::Special(_)
                     | Instr::Assign { .. }

@@ -59,6 +59,7 @@ use buffer::Id as BufId;
 #[derive(Debug, Clone, Copy)]
 pub enum Value<const N: usize> {
     Ptr(BufId),
+    LocalPtr(BufId),
     I32(W<i32, N>),
     F32(W<f32, N>),
     None,
@@ -96,11 +97,12 @@ impl<const N: usize> Value<N> {
 struct Context<'a, const N: usize> {
     buffers: Vec<&'a mut Buffer>,
     values: Vec<Value<N>>,
+    local_buffers: Vec<Buffer>,
 }
 
 impl<'a, const N: usize> Context<'a, N> {
     fn new(buffers: Vec<&'a mut Buffer>, n: usize) -> Self {
-        Self { buffers, values: vec![Value::None; n] }
+        Self { buffers, values: vec![Value::None; n], local_buffers: vec![] }
     }
 
     fn set(&mut self, id: VarId, value: Value<N>) -> Result<()> {
@@ -171,12 +173,14 @@ pub fn eval_ssa<const N: usize>(
             Instr::Load { src, offset, dtype: _ } => {
                 let offset = context.get(*offset)?;
                 let offset = offset.as_i32()?;
-                let value = match context.get(*src)? {
-                    Value::Ptr(idx) => match &context.buffers[idx.as_usize()] {
-                        Buffer::F32(v) => Value::F32(W(offset.0.map(|o| v[o as usize]))),
-                        Buffer::I32(v) => Value::I32(W(offset.0.map(|o| v[o as usize]))),
-                    },
+                let buffer = match context.get(*src)? {
+                    Value::Ptr(idx) => context.buffers[idx.as_usize()],
+                    Value::LocalPtr(idx) => &context.local_buffers[idx.as_usize()],
                     _ => anyhow::bail!("unexpected dtype for src in load {src:?}"),
+                };
+                let value = match buffer {
+                    Buffer::F32(v) => Value::F32(W(offset.0.map(|o| v[o as usize]))),
+                    Buffer::I32(v) => Value::I32(W(offset.0.map(|o| v[o as usize]))),
                 };
                 (value, None)
             }
@@ -184,18 +188,22 @@ pub fn eval_ssa<const N: usize>(
                 let offset = context.get(*offset)?;
                 let offset = offset.as_i32()?;
                 let value = context.get(*value)?;
-                match context.get(*dst)? {
-                    Value::Ptr(idx) => match (context.buffers.get_mut(idx.as_usize()), value) {
-                        (Some(Buffer::F32(vs)), Value::F32(v)) => {
-                            offset.0.iter().zip(v.0.iter()).for_each(|(o, v)| vs[*o as usize] = *v)
-                        }
-                        (Some(Buffer::I32(vs)), Value::I32(v)) => {
-                            offset.0.iter().zip(v.0.iter()).for_each(|(o, v)| vs[*o as usize] = *v)
-                        }
-                        (_, v) => anyhow::bail!("unexpected dtype for value in store {v:?}"),
-                    },
+                let buffer = match context.get(*dst)? {
+                    Value::Ptr(idx) => {
+                        context.buffers.get_mut(idx.as_usize()).map(|v| v as &mut Buffer)
+                    }
+                    Value::LocalPtr(idx) => context.local_buffers.get_mut(idx.as_usize()),
                     _ => anyhow::bail!("unexpected dtype for src in store {dst:?}"),
-                }
+                };
+                match (buffer, value) {
+                    (Some(Buffer::F32(vs)), Value::F32(v)) => {
+                        offset.0.iter().zip(v.0.iter()).for_each(|(o, v)| vs[*o as usize] = *v)
+                    }
+                    (Some(Buffer::I32(vs)), Value::I32(v)) => {
+                        offset.0.iter().zip(v.0.iter()).for_each(|(o, v)| vs[*o as usize] = *v)
+                    }
+                    (_, v) => anyhow::bail!("unexpected dtype for value in store {v:?}"),
+                };
                 (value, None)
             }
             Instr::Binary { op, lhs, rhs, dtype: _ } => {
@@ -240,6 +248,18 @@ pub fn eval_ssa<const N: usize>(
             }
             Instr::Special(ssa::Special::GridIdx) => (Value::I32(W::splat(grid_idx as i32)), None),
             Instr::Barrier => (Value::None, None),
+            Instr::DefineLocal { size, dtype } => {
+                let buf_id = context.local_buffers.len();
+                let buf = match dtype {
+                    ssa::DType::PtrI32 => Buffer::I32(vec![0i32; *size]),
+                    ssa::DType::PtrF32 => Buffer::F32(vec![0f32; *size]),
+                    ssa::DType::I32 | ssa::DType::F32 => {
+                        anyhow::bail!("unsupported dtype for DefineLocal {dtype:?}")
+                    }
+                };
+                context.local_buffers.push(buf);
+                (Value::LocalPtr(BufId::new(buf_id)), None)
+            }
         };
         if !value.is_none() {
             context.set(var_id, value)?;
