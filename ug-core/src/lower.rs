@@ -33,7 +33,12 @@ impl Block {
         let mut instrs = vec![];
         for (line_idx, (id, instr)) in self.0.iter().enumerate() {
             let line_idx = ssa::VarId::new(line_idx);
-            let get_id = |&id| per_id.get(&Id::from_varid(id)).copied().context("id not found");
+            let get_id = |&id| {
+                per_id
+                    .get(&Id::from_varid(id))
+                    .copied()
+                    .with_context(|| format!("id not found {id:?}"))
+            };
             let instr = match instr {
                 SsaI::Store { dst, offset, value, dtype } => {
                     let dst = get_id(dst)?;
@@ -84,7 +89,11 @@ impl Block {
     }
 }
 
-fn lower_expr(node: &lang::ExprNode) -> Result<(Id, Block)> {
+fn lower_expr(
+    node: &lang::ExprNode,
+    range_id: Id,
+    per_arg: &std::collections::HashMap<lang::ArgId, ssa::VarId>,
+) -> Result<(Id, Block)> {
     use lang::Expr as E;
     let dst_id = Id::new();
     let block = match &node.inner.expr {
@@ -93,7 +102,17 @@ fn lower_expr(node: &lang::ExprNode) -> Result<(Id, Block)> {
             let _offset = src.offset();
             let _len = src.len();
             let _stride = src.stride();
-            anyhow::bail!("TODO: load is not supported")
+            let src = match per_arg.get(&src.ptr().id()) {
+                None => anyhow::bail!("unknown arg {:?}", src.ptr().id()),
+                Some(id) => *id,
+            };
+
+            let instr = SsaI::Load {
+                src,
+                offset: range_id.to_varid(),
+                dtype: ssa::DType::F32, // TODO(laurent): support other dtypes
+            };
+            vec![(dst_id, instr)]
         }
         E::ScalarConst(c) => {
             let instr = match c {
@@ -105,7 +124,7 @@ fn lower_expr(node: &lang::ExprNode) -> Result<(Id, Block)> {
         }
         E::Range(_, _) => anyhow::bail!("TODO range is not supported yet"),
         E::Unary(op, arg) => {
-            let (arg_id, arg_b) = lower_expr(arg)?;
+            let (arg_id, arg_b) = lower_expr(arg, range_id, per_arg)?;
             let instr = SsaI::Unary {
                 op: *op,
                 arg: arg_id.to_varid(),
@@ -115,8 +134,8 @@ fn lower_expr(node: &lang::ExprNode) -> Result<(Id, Block)> {
             [arg_b.0.as_slice(), last.as_slice()].concat()
         }
         E::Binary(op, lhs, rhs) => {
-            let (lhs_id, lhs_b) = lower_expr(lhs)?;
-            let (rhs_id, rhs_b) = lower_expr(rhs)?;
+            let (lhs_id, lhs_b) = lower_expr(lhs, range_id, per_arg)?;
+            let (rhs_id, rhs_b) = lower_expr(rhs, range_id, per_arg)?;
             let instr = SsaI::Binary {
                 op: *op,
                 lhs: lhs_id.to_varid(),
@@ -198,13 +217,15 @@ fn lower_b(kernel: &lang::Kernel) -> Result<Block> {
         instrs.extend_from_slice(len_b.0.as_slice());
         let (_stride_i, stride_b) = lower_index(stride)?;
         instrs.extend_from_slice(stride_b.0.as_slice());
+        let lo_id = Id::new();
+        instrs.push((lo_id, SsaI::Const(ssa::Const::I32(0))));
 
         let range_id = Id::new();
-        let range = SsaI::Range { lo: ssa::VarId::new(0), up: len_i.to_varid(), end_idx: 42 };
+        let range = SsaI::Range { lo: lo_id.to_varid(), up: len_i.to_varid(), end_idx: 42 };
         instrs.push((range_id, range));
 
         // TODO(laurent): this should take as input the loop index
-        let (src_i, src_b) = lower_expr(src)?;
+        let (src_i, src_b) = lower_expr(src, range_id, &per_arg)?;
         instrs.extend_from_slice(src_b.0.as_slice());
         let store = SsaI::Store {
             dst,
@@ -215,6 +236,7 @@ fn lower_b(kernel: &lang::Kernel) -> Result<Block> {
         };
         instrs.push((Id::new(), store));
 
+        // TODO: fix the start_idx below
         let erange = ssa::Instr::EndRange { start_idx: 42 };
         instrs.push((Id::new(), erange));
     }
