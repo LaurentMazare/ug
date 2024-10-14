@@ -148,36 +148,55 @@ fn lower_ss(
     range_id: Id,
     per_arg: &std::collections::HashMap<lang::ArgId, ssa::VarId>,
 ) -> Result<(ssa::VarId, ssa::VarId, Block)> {
+    println!("{ss:?}");
     let (off_i, off_b) = lower_index(ss.offset())?;
     let (stride_i, stride_b) = lower_index(ss.stride())?;
     let ptr_i = match per_arg.get(&ss.ptr().id()) {
         None => anyhow::bail!("unknown arg {:?}", ss.ptr().id()),
         Some(id) => *id,
     };
-    let mul_i = Id::new();
-    let index_i = Id::new();
-    let index_b = vec![
-        (
-            mul_i,
-            SsaI::Binary {
-                op: ssa::BinaryOp::Mul,
-                lhs: range_id.to_varid(),
-                rhs: stride_i.to_varid(),
-                dtype: ssa::DType::I32,
-            },
-        ),
-        (
+    // TODO(laurent): remove this when we have some proper optimization pass.
+    if ss.offset().as_const() == Some(0) && ss.stride().as_const() == Some(1) {
+        Ok((ptr_i, range_id.to_varid(), Block(vec![])))
+    } else if ss.stride().as_const() == Some(1) {
+        let index_i = Id::new();
+        let index_b = vec![(
             index_i,
             SsaI::Binary {
                 op: ssa::BinaryOp::Add,
-                lhs: mul_i.to_varid(),
+                lhs: range_id.to_varid(),
                 rhs: off_i.to_varid(),
                 dtype: ssa::DType::I32,
             },
-        ),
-    ];
-    let instrs = [off_b.0.as_slice(), stride_b.0.as_slice(), index_b.as_slice()].concat();
-    Ok((ptr_i, index_i.to_varid(), Block(instrs)))
+        )];
+        let instrs = [off_b.0.as_slice(), stride_b.0.as_slice(), index_b.as_slice()].concat();
+        Ok((ptr_i, index_i.to_varid(), Block(instrs)))
+    } else {
+        let mul_i = Id::new();
+        let index_i = Id::new();
+        let index_b = vec![
+            (
+                mul_i,
+                SsaI::Binary {
+                    op: ssa::BinaryOp::Mul,
+                    lhs: range_id.to_varid(),
+                    rhs: stride_i.to_varid(),
+                    dtype: ssa::DType::I32,
+                },
+            ),
+            (
+                index_i,
+                SsaI::Binary {
+                    op: ssa::BinaryOp::Add,
+                    lhs: mul_i.to_varid(),
+                    rhs: off_i.to_varid(),
+                    dtype: ssa::DType::I32,
+                },
+            ),
+        ];
+        let instrs = [off_b.0.as_slice(), stride_b.0.as_slice(), index_b.as_slice()].concat();
+        Ok((ptr_i, index_i.to_varid(), Block(instrs)))
+    }
 }
 
 fn lower_index(index: &lang::IndexExprNode) -> Result<(Id, Block)> {
