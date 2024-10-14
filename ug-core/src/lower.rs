@@ -262,7 +262,7 @@ fn lower_b(kernel: &lang::Kernel) -> Result<Block> {
         let end_line_idx = instrs.len();
         instrs.push((Id::new(), erange));
         if let SsaI::Range { end_idx, .. } = &mut instrs[start_line_idx].1 {
-            *end_idx = end_line_idx
+            *end_idx = end_line_idx + 1
         }
     }
     Ok(Block(instrs))
