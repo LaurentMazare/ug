@@ -222,9 +222,9 @@ fn lower_b(kernel: &lang::Kernel) -> Result<Block> {
 
         let range_id = Id::new();
         let range = SsaI::Range { lo: lo_id.to_varid(), up: len_i.to_varid(), end_idx: 42 };
+        let start_line_idx = instrs.len();
         instrs.push((range_id, range));
 
-        // TODO(laurent): this should take as input the loop index
         let (src_i, src_b) = lower_expr(src, range_id, &per_arg)?;
         instrs.extend_from_slice(src_b.0.as_slice());
         let store = SsaI::Store {
@@ -236,9 +236,12 @@ fn lower_b(kernel: &lang::Kernel) -> Result<Block> {
         };
         instrs.push((Id::new(), store));
 
-        // TODO: fix the start_idx below
-        let erange = ssa::Instr::EndRange { start_idx: 42 };
+        let erange = ssa::Instr::EndRange { start_idx: start_line_idx };
+        let end_line_idx = instrs.len();
         instrs.push((Id::new(), erange));
+        if let SsaI::Range { end_idx, .. } = &mut instrs[start_line_idx].1 {
+            *end_idx = end_line_idx
+        }
     }
     Ok(Block(instrs))
 }

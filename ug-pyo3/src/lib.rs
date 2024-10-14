@@ -377,6 +377,11 @@ impl Kernel {
     fn __str__(&self) -> String {
         format!("{:?}", self.0)
     }
+
+    fn lower(&self) -> PyResult<SsaKernel> {
+        let ssa = ug::lower::lower(&self.0).map_err(w)?;
+        Ok(SsaKernel(ssa))
+    }
 }
 
 #[pymodule]
