@@ -2,6 +2,12 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub enum ReduceOp {
+    Add,
+    Max,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum UnaryOp {
     Exp,
     Neg,
@@ -13,6 +19,23 @@ pub enum BinaryOp {
     Sub,
     Mul,
     Div,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub enum DType {
+    PtrF32,
+    PtrI32,
+    F32,
+    I32,
+}
+
+impl DType {
+    pub fn bytes(&self) -> usize {
+        match self {
+            Self::PtrF32 | Self::PtrI32 => 8,
+            Self::F32 | Self::I32 => 4,
+        }
+    }
 }
 
 /// Unique identifier for arguments.
@@ -339,6 +362,51 @@ pub struct FlopsMem {
     pub mem_in_bytes: usize,
 }
 
+// AST version of the SSA ops
+pub mod op {
+    pub use super::{BinaryOp, DType, ReduceOp, UnaryOp};
+
+    /// Unique identifier for arguments.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    pub struct ArgId(usize);
+
+    impl ArgId {
+        #[allow(unused)]
+        fn new() -> Self {
+            // https://users.rust-lang.org/t/idiomatic-rust-way-to-generate-unique-id/33805
+            use std::sync::atomic;
+            static COUNTER: atomic::AtomicUsize = atomic::AtomicUsize::new(1);
+            Self(COUNTER.fetch_add(1, atomic::Ordering::Relaxed))
+        }
+
+        pub fn as_usize(&self) -> usize {
+            self.0
+        }
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct Layout {
+        pub shape: Vec<usize>,
+        pub strides: Vec<usize>,
+        pub offset: usize,
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct Ast {
+        pub inner: std::sync::Arc<AstInner>,
+    }
+
+    #[derive(Debug, Clone)]
+    pub enum AstInner {
+        Load { src: ArgId, layout: Layout },
+        Store { dst: ArgId, layout: Layout },
+        Reduce(ReduceOp, Ast),
+        Unary(UnaryOp, Ast),
+        Binary(BinaryOp, Ast, Ast),
+        DefineGlobal { index: usize, dtype: DType },
+    }
+}
+
 // Very untyped almost SSA language.
 // There are no phi symbols, instead Range is used.
 // This is currently close to the UOps setup from tinygrad:
@@ -347,24 +415,7 @@ pub mod ssa {
     use anyhow::Result;
     use serde::{Deserialize, Serialize};
 
-    pub use super::{BinaryOp, UnaryOp};
-
-    #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-    pub enum DType {
-        PtrF32,
-        PtrI32,
-        F32,
-        I32,
-    }
-
-    impl DType {
-        pub fn bytes(&self) -> usize {
-            match self {
-                Self::PtrF32 | Self::PtrI32 => 8,
-                Self::F32 | Self::I32 => 4,
-            }
-        }
-    }
+    pub use super::{BinaryOp, DType, UnaryOp};
 
     #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
     pub struct VarId(usize);
