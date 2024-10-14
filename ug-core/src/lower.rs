@@ -98,21 +98,15 @@ fn lower_expr(
     let dst_id = Id::new();
     let block = match &node.inner.expr {
         E::Load(src) => {
-            let _offset = src.offset();
-            let _len = src.len();
-            let _stride = src.stride();
-            let src = match per_arg.get(&src.ptr().id()) {
-                None => anyhow::bail!("unknown arg {:?}", src.ptr().id()),
-                Some(id) => *id,
-            };
-            // TODO(laurent): compute the proper offset here based on stride,
-            // offset, and range_id.
+            let (ptr_i, off_i, src_b) = lower_ss(src, range_id, per_arg)?;
             let instr = SsaI::Load {
-                src,
-                offset: range_id.to_varid(),
+                src: ptr_i,
+                offset: off_i,
                 dtype: ssa::DType::F32, // TODO(laurent): support other dtypes
             };
-            vec![(dst_id, instr)]
+            let mut src_b = src_b.0;
+            src_b.push((dst_id, instr));
+            src_b
         }
         E::ScalarConst(c) => {
             let instr = match c {
@@ -147,6 +141,43 @@ fn lower_expr(
         }
     };
     Ok((dst_id, Block(block)))
+}
+
+fn lower_ss(
+    ss: &lang::StridedSlice,
+    range_id: Id,
+    per_arg: &std::collections::HashMap<lang::ArgId, ssa::VarId>,
+) -> Result<(ssa::VarId, ssa::VarId, Block)> {
+    let (off_i, off_b) = lower_index(ss.offset())?;
+    let (stride_i, stride_b) = lower_index(ss.stride())?;
+    let ptr_i = match per_arg.get(&ss.ptr().id()) {
+        None => anyhow::bail!("unknown arg {:?}", ss.ptr().id()),
+        Some(id) => *id,
+    };
+    let mul_i = Id::new();
+    let index_i = Id::new();
+    let index_b = vec![
+        (
+            mul_i,
+            SsaI::Binary {
+                op: ssa::BinaryOp::Mul,
+                lhs: range_id.to_varid(),
+                rhs: stride_i.to_varid(),
+                dtype: ssa::DType::I32,
+            },
+        ),
+        (
+            index_i,
+            SsaI::Binary {
+                op: ssa::BinaryOp::Add,
+                lhs: mul_i.to_varid(),
+                rhs: off_i.to_varid(),
+                dtype: ssa::DType::I32,
+            },
+        ),
+    ];
+    let instrs = [off_b.0.as_slice(), stride_b.0.as_slice(), index_b.as_slice()].concat();
+    Ok((ptr_i, index_i.to_varid(), Block(instrs)))
 }
 
 fn lower_index(index: &lang::IndexExprNode) -> Result<(Id, Block)> {
@@ -203,20 +234,10 @@ fn lower_b(kernel: &lang::Kernel) -> Result<Block> {
     }
     for op in kernel.ops.iter() {
         let lang::Ops::Store { dst, src } = op;
-        let offset = dst.offset();
         let len = dst.len();
-        let stride = dst.stride();
-        let dst = match per_arg.get(&dst.ptr().id()) {
-            None => anyhow::bail!("unknown arg {:?}", dst.ptr().id()),
-            Some(id) => *id,
-        };
 
-        let (off_i, off_b) = lower_index(offset)?;
-        instrs.extend_from_slice(off_b.0.as_slice());
         let (len_i, len_b) = lower_index(len)?;
         instrs.extend_from_slice(len_b.0.as_slice());
-        let (_stride_i, stride_b) = lower_index(stride)?;
-        instrs.extend_from_slice(stride_b.0.as_slice());
         let lo_id = Id::new();
         instrs.push((lo_id, SsaI::Const(ssa::Const::I32(0))));
 
@@ -227,10 +248,11 @@ fn lower_b(kernel: &lang::Kernel) -> Result<Block> {
 
         let (src_i, src_b) = lower_expr(src, range_id, &per_arg)?;
         instrs.extend_from_slice(src_b.0.as_slice());
+        let (ptr_i, off_i, dst_b) = lower_ss(dst, range_id, &per_arg)?;
+        instrs.extend_from_slice(dst_b.0.as_slice());
         let store = SsaI::Store {
-            dst,
-            // TODO(laurent): compute the offset based on the range idx and stride.
-            offset: off_i.to_varid(),
+            dst: ptr_i,
+            offset: off_i,
             value: src_i.to_varid(),
             dtype: ssa::DType::F32, // TODO(laurent): support other dtypes
         };
