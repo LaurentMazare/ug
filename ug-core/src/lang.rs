@@ -400,6 +400,9 @@ pub mod ssa {
         Const(Const),
         Unary { op: UnaryOp, arg: VarId, dtype: DType },
         Binary { op: BinaryOp, lhs: VarId, rhs: VarId, dtype: DType },
+        // TODO(laurent): using an absolute end_idx is convenient for jumping
+        // out of the loop but is problematic when combining blocks. Maybe we
+        // should switch to a relative one?
         Range { lo: VarId, up: VarId, end_idx: usize },
         Load { src: VarId, offset: VarId, dtype: DType },
         Assign { dst: VarId, src: VarId },
