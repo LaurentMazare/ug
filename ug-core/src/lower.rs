@@ -98,7 +98,6 @@ fn lower_expr(
     let dst_id = Id::new();
     let block = match &node.inner.expr {
         E::Load(src) => {
-            let _ptr = src.ptr();
             let _offset = src.offset();
             let _len = src.len();
             let _stride = src.stride();
@@ -106,7 +105,8 @@ fn lower_expr(
                 None => anyhow::bail!("unknown arg {:?}", src.ptr().id()),
                 Some(id) => *id,
             };
-
+            // TODO(laurent): compute the proper offset here based on stride,
+            // offset, and range_id.
             let instr = SsaI::Load {
                 src,
                 offset: range_id.to_varid(),
