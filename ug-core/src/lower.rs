@@ -5,30 +5,34 @@ use ssa::Instr as SsaI;
 // ssa::Instr are indexed based on their line number which is not convenient when
 // combining blocks of generated instructions
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-struct Id(usize);
+pub(crate) struct Id(usize);
 impl Id {
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         // https://users.rust-lang.org/t/idiomatic-rust-way-to-generate-unique-id/33805
         use std::sync::atomic;
         static COUNTER: atomic::AtomicUsize = atomic::AtomicUsize::new(1);
         Self(COUNTER.fetch_add(1, atomic::Ordering::Relaxed))
     }
 
-    fn to_varid(self) -> ssa::VarId {
+    pub(crate) fn to_varid(self) -> ssa::VarId {
         ssa::VarId::new(self.0)
     }
 
-    fn from_varid(v: ssa::VarId) -> Id {
+    pub(crate) fn from_varid(v: ssa::VarId) -> Id {
         Id(v.as_usize())
     }
 }
 
 // ssa like instructions but with explicit dst
 #[derive(Debug)]
-struct Block(Vec<(Id, SsaI)>);
+pub(crate) struct Block(Vec<(Id, SsaI)>);
 
 impl Block {
-    fn relocate(&self) -> Result<Vec<SsaI>> {
+    pub(crate) fn new(instrs: Vec<(Id, SsaI)>) -> Self {
+        Self(instrs)
+    }
+
+    pub(crate) fn relocate(&self) -> Result<Vec<SsaI>> {
         let mut per_id = std::collections::HashMap::new();
         let mut instrs = vec![];
         for (line_idx, (id, instr)) in self.0.iter().enumerate() {
@@ -257,8 +261,7 @@ impl lang::Kernel {
             instrs.push((id, SsaI::DefineGlobal { index, dtype }));
             per_arg.insert(arg.id(), id.to_varid());
         }
-        for op in self.ops.iter() {
-            let lang::Ops::Store { dst, src } = op;
+        for lang::Ops::Store { dst, src } in self.ops.iter() {
             let len = dst.len();
 
             let (len_i, len_b) = len.lower()?;

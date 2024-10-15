@@ -155,9 +155,9 @@ pub enum IndexExpr {
     Mul(IndexExprNode, IndexExprNode),
 }
 
-#[allow(unused)]
 #[derive(Debug, Clone)]
 pub(crate) struct IndexExprNodeInner {
+    #[allow(unused)]
     pub(crate) id: IndexNodeId,
     pub(crate) expr: IndexExpr,
 }
@@ -167,9 +167,9 @@ pub struct IndexExprNode {
     pub(crate) inner: std::sync::Arc<IndexExprNodeInner>,
 }
 
-#[allow(unused)]
 #[derive(Debug, Clone)]
 pub(crate) struct ExprNodeInner {
+    #[allow(unused)]
     pub(crate) id: NodeId,
     pub(crate) expr: Expr,
 }
@@ -414,8 +414,11 @@ pub mod op {
     }
 
     #[derive(Debug, Clone)]
+    #[allow(unused)]
     pub struct Kernel {
-        pub ops: Vec<Store>,
+        pub(crate) name: String,
+        pub(crate) args: Vec<super::Arg>,
+        pub(crate) ops: Vec<Store>,
     }
 }
 
