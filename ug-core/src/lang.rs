@@ -368,9 +368,15 @@ pub mod op {
 
     #[derive(Debug, Clone)]
     pub struct Layout {
-        pub shape: Vec<usize>,
+        shape: Vec<usize>,
         pub strides: Vec<usize>,
         pub offset: usize,
+    }
+
+    impl Layout {
+        pub fn num_elements(&self) -> usize {
+            self.shape.iter().product()
+        }
     }
 
     #[derive(Debug, Clone)]

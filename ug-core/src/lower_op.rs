@@ -4,6 +4,13 @@ use crate::lower::{Block, Id};
 use anyhow::Result;
 use ssa::Instr as SsaI;
 
+impl lang::op::Layout {
+    fn lower(&self, range_id: Id) -> Result<(Id, Block)> {
+        // TODO: handle the stride etc.
+        Ok((range_id, Block(vec![])))
+    }
+}
+
 impl lang::op::Ast {
     #[allow(clippy::only_used_in_recursion)]
     fn lower(
@@ -16,7 +23,15 @@ impl lang::op::Ast {
         let dst_i = Id::new();
         let instrs = match self.inner.as_ref() {
             A::Load { src, layout } => {
-                anyhow::bail!("TODO load")
+                let ptr_i = match per_arg.get(src) {
+                    None => anyhow::bail!("unknown arg {src:?}"),
+                    Some(id) => *id,
+                };
+                let (off_i, off_b) = layout.lower(range_id)?;
+                let load = SsaI::Load { src: ptr_i, dtype, offset: off_i.to_varid() };
+                let mut off_b = off_b.0;
+                off_b.push((dst_i, load));
+                off_b
             }
             A::Unary(op, arg) => {
                 let (arg_i, arg_b) = arg.lower(range_id, per_arg)?;
@@ -58,10 +73,9 @@ impl lang::op::Kernel {
                 None => anyhow::bail!("unknown arg {dst:?}"),
                 Some(id) => *id,
             };
-            // TODO(laurent): loop over the shape/offset.
-            let off_i = Id::new().to_varid(); // TODO
             let len_i = Id::new();
-            instrs.push((len_i, SsaI::Const(ssa::Const::I32(/* TODO */ 42))));
+            let num_el = layout.num_elements();
+            instrs.push((len_i, SsaI::Const(ssa::Const::I32(num_el as i32))));
             let lo_i = Id::new();
             instrs.push((lo_i, SsaI::Const(ssa::Const::I32(0))));
 
@@ -70,11 +84,14 @@ impl lang::op::Kernel {
             let start_line_idx = instrs.len();
             instrs.push((range_id, range));
 
+            let (off_i, off_b) = layout.lower(range_id)?;
+            instrs.extend_from_slice(off_b.0.as_slice());
+
             let (src_i, src_b) = value.lower(range_id, &per_arg)?;
             instrs.extend_from_slice(src_b.0.as_slice());
             let store = SsaI::Store {
                 dst: ptr_i,
-                offset: off_i,
+                offset: off_i.to_varid(),
                 value: src_i.to_varid(),
                 dtype: ssa::DType::F32, // TODO(laurent): support other dtypes
             };
