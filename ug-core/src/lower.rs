@@ -89,206 +89,213 @@ impl Block {
     }
 }
 
-fn lower_expr(
-    node: &lang::ExprNode,
-    range_id: Id,
-    per_arg: &std::collections::HashMap<lang::ArgId, ssa::VarId>,
-) -> Result<(Id, Block)> {
-    use lang::Expr as E;
-    let dst_id = Id::new();
-    let block = match &node.inner.expr {
-        E::Load(src) => {
-            let (ptr_i, off_i, src_b) = lower_ss(src, range_id, per_arg)?;
-            let instr = SsaI::Load {
-                src: ptr_i,
-                offset: off_i,
-                dtype: ssa::DType::F32, // TODO(laurent): support other dtypes
-            };
-            let mut src_b = src_b.0;
-            src_b.push((dst_id, instr));
-            src_b
-        }
-        E::ScalarConst(c) => {
-            let instr = match c {
-                lang::ScalarConst::I32(v) => SsaI::Const(ssa::Const::I32(*v)),
-                lang::ScalarConst::F32(v) => SsaI::Const(ssa::Const::F32(*v)),
-                lang::ScalarConst::Ptr(_) => anyhow::bail!("const ptr are not supported"),
-            };
-            vec![(dst_id, instr)]
-        }
-        E::Range(_, _) => anyhow::bail!("TODO range is not supported yet"),
-        E::Unary(op, arg) => {
-            let (arg_id, arg_b) = lower_expr(arg, range_id, per_arg)?;
-            let instr = SsaI::Unary {
-                op: *op,
-                arg: arg_id.to_varid(),
-                dtype: ssa::DType::F32, // TODO(laurent): support other dtypes
-            };
-            let last = vec![(dst_id, instr)];
-            [arg_b.0.as_slice(), last.as_slice()].concat()
-        }
-        E::Binary(op, lhs, rhs) => {
-            let (lhs_id, lhs_b) = lower_expr(lhs, range_id, per_arg)?;
-            let (rhs_id, rhs_b) = lower_expr(rhs, range_id, per_arg)?;
-            let instr = SsaI::Binary {
-                op: *op,
-                lhs: lhs_id.to_varid(),
-                rhs: rhs_id.to_varid(),
-                dtype: ssa::DType::F32, // TODO(laurent): support other dtypes
-            };
-            let last = vec![(dst_id, instr)];
-            [lhs_b.0.as_slice(), rhs_b.0.as_slice(), last.as_slice()].concat()
-        }
-    };
-    Ok((dst_id, Block(block)))
+impl lang::ExprNode {
+    fn lower(
+        &self,
+        range_id: Id,
+        per_arg: &std::collections::HashMap<lang::ArgId, ssa::VarId>,
+    ) -> Result<(Id, Block)> {
+        use lang::Expr as E;
+        let dst_id = Id::new();
+        let block = match &self.inner.expr {
+            E::Load(src) => {
+                let (ptr_i, off_i, src_b) = src.lower(range_id, per_arg)?;
+                let instr = SsaI::Load {
+                    src: ptr_i,
+                    offset: off_i,
+                    dtype: ssa::DType::F32, // TODO(laurent): support other dtypes
+                };
+                let mut src_b = src_b.0;
+                src_b.push((dst_id, instr));
+                src_b
+            }
+            E::ScalarConst(c) => {
+                let instr = match c {
+                    lang::ScalarConst::I32(v) => SsaI::Const(ssa::Const::I32(*v)),
+                    lang::ScalarConst::F32(v) => SsaI::Const(ssa::Const::F32(*v)),
+                    lang::ScalarConst::Ptr(_) => anyhow::bail!("const ptr are not supported"),
+                };
+                vec![(dst_id, instr)]
+            }
+            E::Range(_, _) => anyhow::bail!("TODO range is not supported yet"),
+            E::Unary(op, arg) => {
+                let (arg_id, arg_b) = arg.lower(range_id, per_arg)?;
+                let instr = SsaI::Unary {
+                    op: *op,
+                    arg: arg_id.to_varid(),
+                    dtype: ssa::DType::F32, // TODO(laurent): support other dtypes
+                };
+                let last = vec![(dst_id, instr)];
+                [arg_b.0.as_slice(), last.as_slice()].concat()
+            }
+            E::Binary(op, lhs, rhs) => {
+                let (lhs_id, lhs_b) = lhs.lower(range_id, per_arg)?;
+                let (rhs_id, rhs_b) = rhs.lower(range_id, per_arg)?;
+                let instr = SsaI::Binary {
+                    op: *op,
+                    lhs: lhs_id.to_varid(),
+                    rhs: rhs_id.to_varid(),
+                    dtype: ssa::DType::F32, // TODO(laurent): support other dtypes
+                };
+                let last = vec![(dst_id, instr)];
+                [lhs_b.0.as_slice(), rhs_b.0.as_slice(), last.as_slice()].concat()
+            }
+        };
+        Ok((dst_id, Block(block)))
+    }
 }
 
-fn lower_ss(
-    ss: &lang::StridedSlice,
-    range_id: Id,
-    per_arg: &std::collections::HashMap<lang::ArgId, ssa::VarId>,
-) -> Result<(ssa::VarId, ssa::VarId, Block)> {
-    println!("{ss:?}");
-    let (off_i, off_b) = lower_index(ss.offset())?;
-    let (stride_i, stride_b) = lower_index(ss.stride())?;
-    let ptr_i = match per_arg.get(&ss.ptr().id()) {
-        None => anyhow::bail!("unknown arg {:?}", ss.ptr().id()),
-        Some(id) => *id,
-    };
-    // TODO(laurent): remove this when we have some proper optimization pass.
-    if ss.offset().as_const() == Some(0) && ss.stride().as_const() == Some(1) {
-        Ok((ptr_i, range_id.to_varid(), Block(vec![])))
-    } else if ss.stride().as_const() == Some(1) {
-        let index_i = Id::new();
-        let index_b = vec![(
-            index_i,
-            SsaI::Binary {
-                op: ssa::BinaryOp::Add,
-                lhs: range_id.to_varid(),
-                rhs: off_i.to_varid(),
-                dtype: ssa::DType::I32,
-            },
-        )];
-        let instrs = [off_b.0.as_slice(), stride_b.0.as_slice(), index_b.as_slice()].concat();
-        Ok((ptr_i, index_i.to_varid(), Block(instrs)))
-    } else {
-        let mul_i = Id::new();
-        let index_i = Id::new();
-        let index_b = vec![
-            (
-                mul_i,
-                SsaI::Binary {
-                    op: ssa::BinaryOp::Mul,
-                    lhs: range_id.to_varid(),
-                    rhs: stride_i.to_varid(),
-                    dtype: ssa::DType::I32,
-                },
-            ),
-            (
+impl lang::StridedSlice {
+    fn lower(
+        &self,
+        range_id: Id,
+        per_arg: &std::collections::HashMap<lang::ArgId, ssa::VarId>,
+    ) -> Result<(ssa::VarId, ssa::VarId, Block)> {
+        let (off_i, off_b) = self.offset().lower()?;
+        let (stride_i, stride_b) = self.stride().lower()?;
+        let ptr_i = match per_arg.get(&self.ptr().id()) {
+            None => anyhow::bail!("unknown arg {:?}", self.ptr().id()),
+            Some(id) => *id,
+        };
+        // TODO(laurent): remove this when we have some proper optimization pass.
+        if self.offset().as_const() == Some(0) && self.stride().as_const() == Some(1) {
+            Ok((ptr_i, range_id.to_varid(), Block(vec![])))
+        } else if self.stride().as_const() == Some(1) {
+            let index_i = Id::new();
+            let index_b = vec![(
                 index_i,
                 SsaI::Binary {
                     op: ssa::BinaryOp::Add,
-                    lhs: mul_i.to_varid(),
+                    lhs: range_id.to_varid(),
                     rhs: off_i.to_varid(),
                     dtype: ssa::DType::I32,
                 },
-            ),
-        ];
-        let instrs = [off_b.0.as_slice(), stride_b.0.as_slice(), index_b.as_slice()].concat();
-        Ok((ptr_i, index_i.to_varid(), Block(instrs)))
+            )];
+            let instrs = [off_b.0.as_slice(), stride_b.0.as_slice(), index_b.as_slice()].concat();
+            Ok((ptr_i, index_i.to_varid(), Block(instrs)))
+        } else {
+            let mul_i = Id::new();
+            let index_i = Id::new();
+            let index_b = vec![
+                (
+                    mul_i,
+                    SsaI::Binary {
+                        op: ssa::BinaryOp::Mul,
+                        lhs: range_id.to_varid(),
+                        rhs: stride_i.to_varid(),
+                        dtype: ssa::DType::I32,
+                    },
+                ),
+                (
+                    index_i,
+                    SsaI::Binary {
+                        op: ssa::BinaryOp::Add,
+                        lhs: mul_i.to_varid(),
+                        rhs: off_i.to_varid(),
+                        dtype: ssa::DType::I32,
+                    },
+                ),
+            ];
+            let instrs = [off_b.0.as_slice(), stride_b.0.as_slice(), index_b.as_slice()].concat();
+            Ok((ptr_i, index_i.to_varid(), Block(instrs)))
+        }
     }
 }
 
-fn lower_index(index: &lang::IndexExprNode) -> Result<(Id, Block)> {
-    use lang::IndexExpr as E;
-    let dst_id = Id::new();
-    let block = match &index.inner.expr {
-        E::Add(lhs, rhs) => {
-            let (lhs_id, lhs_b) = lower_index(lhs)?;
-            let (rhs_id, rhs_b) = lower_index(rhs)?;
-            let instr = SsaI::Binary {
-                op: ssa::BinaryOp::Add,
-                lhs: lhs_id.to_varid(),
-                rhs: rhs_id.to_varid(),
-                dtype: ssa::DType::I32,
-            };
-            let last = vec![(dst_id, instr)];
-            [lhs_b.0.as_slice(), rhs_b.0.as_slice(), last.as_slice()].concat()
-        }
-        E::Mul(lhs, rhs) => {
-            let (lhs_id, lhs_b) = lower_index(lhs)?;
-            let (rhs_id, rhs_b) = lower_index(rhs)?;
-            let instr = SsaI::Binary {
-                op: ssa::BinaryOp::Mul,
-                lhs: lhs_id.to_varid(),
-                rhs: rhs_id.to_varid(),
-                dtype: ssa::DType::I32,
-            };
-            let last = vec![(dst_id, instr)];
-            [lhs_b.0.as_slice(), rhs_b.0.as_slice(), last.as_slice()].concat()
-        }
-        E::Const(v) => {
-            let instr = SsaI::Const(ssa::Const::I32(*v as i32));
-            vec![(dst_id, instr)]
-        }
-        E::ProgramId => {
-            let instr = SsaI::Special(ssa::Special::GridIdx);
-            vec![(dst_id, instr)]
-        }
-    };
-    Ok((dst_id, Block(block)))
-}
-
-fn lower_b(kernel: &lang::Kernel) -> Result<Block> {
-    let mut instrs = vec![];
-    let mut per_arg = std::collections::HashMap::new();
-    for (index, arg) in kernel.args.iter().enumerate() {
-        let id = Id::new();
-        let dtype = match arg.type_() {
-            lang::ArgType::Ptr => ssa::DType::PtrF32, // TODO(laurent): support other pointer types
-            lang::ArgType::I32 => ssa::DType::I32,
+impl lang::IndexExprNode {
+    fn lower(&self) -> Result<(Id, Block)> {
+        use lang::IndexExpr as E;
+        let dst_id = Id::new();
+        let block = match &self.inner.expr {
+            E::Add(lhs, rhs) => {
+                let (lhs_id, lhs_b) = lhs.lower()?;
+                let (rhs_id, rhs_b) = rhs.lower()?;
+                let instr = SsaI::Binary {
+                    op: ssa::BinaryOp::Add,
+                    lhs: lhs_id.to_varid(),
+                    rhs: rhs_id.to_varid(),
+                    dtype: ssa::DType::I32,
+                };
+                let last = vec![(dst_id, instr)];
+                [lhs_b.0.as_slice(), rhs_b.0.as_slice(), last.as_slice()].concat()
+            }
+            E::Mul(lhs, rhs) => {
+                let (lhs_id, lhs_b) = lhs.lower()?;
+                let (rhs_id, rhs_b) = rhs.lower()?;
+                let instr = SsaI::Binary {
+                    op: ssa::BinaryOp::Mul,
+                    lhs: lhs_id.to_varid(),
+                    rhs: rhs_id.to_varid(),
+                    dtype: ssa::DType::I32,
+                };
+                let last = vec![(dst_id, instr)];
+                [lhs_b.0.as_slice(), rhs_b.0.as_slice(), last.as_slice()].concat()
+            }
+            E::Const(v) => {
+                let instr = SsaI::Const(ssa::Const::I32(*v as i32));
+                vec![(dst_id, instr)]
+            }
+            E::ProgramId => {
+                let instr = SsaI::Special(ssa::Special::GridIdx);
+                vec![(dst_id, instr)]
+            }
         };
-        instrs.push((id, SsaI::DefineGlobal { index, dtype }));
-        per_arg.insert(arg.id(), id.to_varid());
+        Ok((dst_id, Block(block)))
     }
-    for op in kernel.ops.iter() {
-        let lang::Ops::Store { dst, src } = op;
-        let len = dst.len();
-
-        let (len_i, len_b) = lower_index(len)?;
-        instrs.extend_from_slice(len_b.0.as_slice());
-        let lo_id = Id::new();
-        instrs.push((lo_id, SsaI::Const(ssa::Const::I32(0))));
-
-        let range_id = Id::new();
-        let range = SsaI::Range { lo: lo_id.to_varid(), up: len_i.to_varid(), end_idx: 42 };
-        let start_line_idx = instrs.len();
-        instrs.push((range_id, range));
-
-        let (src_i, src_b) = lower_expr(src, range_id, &per_arg)?;
-        instrs.extend_from_slice(src_b.0.as_slice());
-        let (ptr_i, off_i, dst_b) = lower_ss(dst, range_id, &per_arg)?;
-        instrs.extend_from_slice(dst_b.0.as_slice());
-        let store = SsaI::Store {
-            dst: ptr_i,
-            offset: off_i,
-            value: src_i.to_varid(),
-            dtype: ssa::DType::F32, // TODO(laurent): support other dtypes
-        };
-        instrs.push((Id::new(), store));
-
-        let erange = ssa::Instr::EndRange { start_idx: start_line_idx };
-        let end_line_idx = instrs.len();
-        instrs.push((Id::new(), erange));
-        if let SsaI::Range { end_idx, .. } = &mut instrs[start_line_idx].1 {
-            *end_idx = end_line_idx + 1
-        }
-    }
-    Ok(Block(instrs))
 }
 
-pub fn lower(kernel: &lang::Kernel) -> Result<ssa::Kernel> {
-    let block = lower_b(kernel)?;
-    let instrs = block.relocate()?;
-    Ok(ssa::Kernel { instrs })
+impl lang::Kernel {
+    fn lower_b(&self) -> Result<Block> {
+        let mut instrs = vec![];
+        let mut per_arg = std::collections::HashMap::new();
+        for (index, arg) in self.args.iter().enumerate() {
+            let id = Id::new();
+            let dtype = match arg.type_() {
+                lang::ArgType::Ptr => ssa::DType::PtrF32, // TODO(laurent): support other pointer types
+                lang::ArgType::I32 => ssa::DType::I32,
+            };
+            instrs.push((id, SsaI::DefineGlobal { index, dtype }));
+            per_arg.insert(arg.id(), id.to_varid());
+        }
+        for op in self.ops.iter() {
+            let lang::Ops::Store { dst, src } = op;
+            let len = dst.len();
+
+            let (len_i, len_b) = len.lower()?;
+            instrs.extend_from_slice(len_b.0.as_slice());
+            let lo_id = Id::new();
+            instrs.push((lo_id, SsaI::Const(ssa::Const::I32(0))));
+
+            let range_id = Id::new();
+            let range = SsaI::Range { lo: lo_id.to_varid(), up: len_i.to_varid(), end_idx: 42 };
+            let start_line_idx = instrs.len();
+            instrs.push((range_id, range));
+
+            let (src_i, src_b) = src.lower(range_id, &per_arg)?;
+            instrs.extend_from_slice(src_b.0.as_slice());
+            let (ptr_i, off_i, dst_b) = dst.lower(range_id, &per_arg)?;
+            instrs.extend_from_slice(dst_b.0.as_slice());
+            let store = SsaI::Store {
+                dst: ptr_i,
+                offset: off_i,
+                value: src_i.to_varid(),
+                dtype: ssa::DType::F32, // TODO(laurent): support other dtypes
+            };
+            instrs.push((Id::new(), store));
+
+            let erange = ssa::Instr::EndRange { start_idx: start_line_idx };
+            let end_line_idx = instrs.len();
+            instrs.push((Id::new(), erange));
+            if let SsaI::Range { end_idx, .. } = &mut instrs[start_line_idx].1 {
+                *end_idx = end_line_idx + 1
+            }
+        }
+        Ok(Block(instrs))
+    }
+
+    pub fn lower(&self) -> Result<ssa::Kernel> {
+        let block = self.lower_b()?;
+        let instrs = block.relocate()?;
+        Ok(ssa::Kernel { instrs })
+    }
 }

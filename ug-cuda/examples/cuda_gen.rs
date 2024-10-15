@@ -38,7 +38,7 @@ fn eval_dotprod() -> Result<()> {
 fn eval_lower_add() -> Result<()> {
     let kernel = ug::samples::simple_add(1024);
     println!("<<<< ADD LANG >>>>\n{kernel:?}");
-    let kernel = ug::lower::lower(&kernel)?;
+    let kernel = kernel.lower()?;
     println!("<<<< ADD SSA >>>>\n{kernel:?}");
     let mut buf = vec![];
     ug_cuda::code_gen::gen(&mut buf, "dotprod", &kernel)?;

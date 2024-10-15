@@ -24,7 +24,7 @@ fn eval_dotprod() -> Result<()> {
 
 fn lower_add() -> Result<()> {
     let kernel = ug::samples::simple_add(2);
-    let ssa_kernel = ug::lower::lower(&kernel)?;
+    let ssa_kernel = kernel.lower()?;
     println!("{ssa_kernel:?}");
     let mut c = ug::interpreter::Buffer::I32(vec![0i32, 0]);
     let mut b = ug::interpreter::Buffer::I32(vec![3i32, 4]);

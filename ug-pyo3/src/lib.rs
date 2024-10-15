@@ -379,7 +379,7 @@ impl Kernel {
     }
 
     fn lower(&self) -> PyResult<SsaKernel> {
-        let ssa = ug::lower::lower(&self.0).map_err(w)?;
+        let ssa = self.0.lower().map_err(w)?;
         Ok(SsaKernel(ssa))
     }
 }
