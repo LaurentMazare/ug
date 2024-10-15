@@ -25,7 +25,7 @@ impl Id {
 
 // ssa like instructions but with explicit dst
 #[derive(Debug)]
-pub(crate) struct Block(Vec<(Id, SsaI)>);
+pub(crate) struct Block(pub(crate) Vec<(Id, SsaI)>);
 
 impl Block {
     pub(crate) fn new(instrs: Vec<(Id, SsaI)>) -> Self {

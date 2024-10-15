@@ -364,25 +364,7 @@ pub struct FlopsMem {
 
 // AST version of the SSA ops
 pub mod op {
-    pub use super::{BinaryOp, DType, ReduceOp, UnaryOp};
-
-    /// Unique identifier for arguments.
-    #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-    pub struct ArgId(usize);
-
-    impl ArgId {
-        #[allow(unused)]
-        fn new() -> Self {
-            // https://users.rust-lang.org/t/idiomatic-rust-way-to-generate-unique-id/33805
-            use std::sync::atomic;
-            static COUNTER: atomic::AtomicUsize = atomic::AtomicUsize::new(1);
-            Self(COUNTER.fetch_add(1, atomic::Ordering::Relaxed))
-        }
-
-        pub fn as_usize(&self) -> usize {
-            self.0
-        }
-    }
+    pub use super::{ArgId, BinaryOp, DType, ReduceOp, UnaryOp};
 
     #[derive(Debug, Clone)]
     pub struct Layout {
@@ -393,8 +375,8 @@ pub mod op {
 
     #[derive(Debug, Clone)]
     pub struct Ast {
-        pub inner: std::sync::Arc<AstInner>,
-        pub dtype: DType,
+        pub(crate) inner: std::sync::Arc<AstInner>,
+        pub(crate) dtype: DType,
     }
 
     #[derive(Debug, Clone)]
@@ -408,9 +390,9 @@ pub mod op {
 
     #[derive(Debug, Clone)]
     pub struct Store {
-        pub dst: ArgId,
-        pub layout: Layout,
-        pub value: Ast,
+        pub(crate) dst: ArgId,
+        pub(crate) layout: Layout,
+        pub(crate) value: Ast,
     }
 
     #[derive(Debug, Clone)]

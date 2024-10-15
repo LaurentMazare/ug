@@ -4,6 +4,24 @@ use crate::lower::{Block, Id};
 use anyhow::Result;
 use ssa::Instr as SsaI;
 
+impl lang::op::Ast {
+    fn lower(
+        &self,
+        range_id: Id,
+        per_arg: &std::collections::HashMap<lang::ArgId, ssa::VarId>,
+    ) -> Result<(Id, Block)> {
+        use lang::op::AstInner as A;
+        let _dtype = self.dtype;
+        match self.inner.as_ref() {
+            A::Load { src, layout } => {}
+            A::Unary(op, arg) => {}
+            A::Reduce(op, arg) => {}
+            A::Binary(op, lhs, rhs) => {}
+        }
+        todo!()
+    }
+}
+
 impl lang::op::Kernel {
     fn lower_b(&self) -> Result<Block> {
         let mut instrs = vec![];
@@ -19,16 +37,38 @@ impl lang::op::Kernel {
         }
 
         for lang::op::Store { dst, layout, value } in self.ops.iter() {
-            let ptr_i = Id::new().to_varid(); // TODO
+            let ptr_i = match per_arg.get(dst) {
+                None => anyhow::bail!("unknown arg {dst:?}"),
+                Some(id) => *id,
+            };
+            // TODO(laurent): loop over the shape/offset.
             let off_i = Id::new().to_varid(); // TODO
-            let src_i = Id::new().to_varid(); // TODO
+            let len_i = Id::new();
+            instrs.push((len_i, SsaI::Const(ssa::Const::I32(/* TODO */ 42))));
+            let lo_i = Id::new();
+            instrs.push((lo_i, SsaI::Const(ssa::Const::I32(0))));
+
+            let range_id = Id::new();
+            let range = SsaI::Range { lo: lo_i.to_varid(), up: len_i.to_varid(), end_idx: 42 };
+            let start_line_idx = instrs.len();
+            instrs.push((range_id, range));
+
+            let (src_i, src_b) = value.lower(range_id, &per_arg)?;
+            instrs.extend_from_slice(src_b.0.as_slice());
             let store = SsaI::Store {
                 dst: ptr_i,
                 offset: off_i,
-                value: src_i,
+                value: src_i.to_varid(),
                 dtype: ssa::DType::F32, // TODO(laurent): support other dtypes
             };
             instrs.push((Id::new(), store));
+
+            let erange = ssa::Instr::EndRange { start_idx: start_line_idx };
+            let end_line_idx = instrs.len();
+            instrs.push((Id::new(), erange));
+            if let SsaI::Range { end_idx, .. } = &mut instrs[start_line_idx].1 {
+                *end_idx = end_line_idx + 1
+            }
         }
         Ok(Block::new(instrs))
     }
