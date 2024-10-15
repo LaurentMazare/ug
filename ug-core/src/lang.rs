@@ -394,16 +394,28 @@ pub mod op {
     #[derive(Debug, Clone)]
     pub struct Ast {
         pub inner: std::sync::Arc<AstInner>,
+        pub dtype: DType,
     }
 
     #[derive(Debug, Clone)]
     pub enum AstInner {
         Load { src: ArgId, layout: Layout },
-        Store { dst: ArgId, layout: Layout },
         Reduce(ReduceOp, Ast),
         Unary(UnaryOp, Ast),
         Binary(BinaryOp, Ast, Ast),
-        DefineGlobal { index: usize, dtype: DType },
+        // TODO(laurent): Add some reshape/transpose/...
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct Store {
+        pub dst: ArgId,
+        pub layout: Layout,
+        pub value: Ast,
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct Kernel {
+        pub ops: Vec<Store>,
     }
 }
 
