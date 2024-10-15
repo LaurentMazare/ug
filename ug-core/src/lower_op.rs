@@ -5,20 +5,37 @@ use anyhow::Result;
 use ssa::Instr as SsaI;
 
 impl lang::op::Ast {
+    #[allow(clippy::only_used_in_recursion)]
     fn lower(
         &self,
         range_id: Id,
         per_arg: &std::collections::HashMap<lang::ArgId, ssa::VarId>,
     ) -> Result<(Id, Block)> {
         use lang::op::AstInner as A;
-        let _dtype = self.dtype;
-        match self.inner.as_ref() {
-            A::Load { src, layout } => {}
-            A::Unary(op, arg) => {}
-            A::Reduce(op, arg) => {}
-            A::Binary(op, lhs, rhs) => {}
-        }
-        todo!()
+        let dtype = self.dtype;
+        let dst_i = Id::new();
+        let instrs = match self.inner.as_ref() {
+            A::Load { src, layout } => {
+                anyhow::bail!("TODO load")
+            }
+            A::Unary(op, arg) => {
+                let (arg_i, arg_b) = arg.lower(range_id, per_arg)?;
+                let mut arg_b = arg_b.0;
+                arg_b.push((dst_i, SsaI::Unary { op: *op, arg: arg_i.to_varid(), dtype }));
+                arg_b
+            }
+            A::Reduce(op, arg) => {
+                anyhow::bail!("TODO reduce")
+            }
+            A::Binary(op, lhs, rhs) => {
+                let (lhs_i, lhs_b) = lhs.lower(range_id, per_arg)?;
+                let (rhs_i, rhs_b) = rhs.lower(range_id, per_arg)?;
+                let op =
+                    SsaI::Binary { op: *op, dtype, lhs: lhs_i.to_varid(), rhs: rhs_i.to_varid() };
+                [lhs_b.0.as_slice(), rhs_b.0.as_slice(), &[(dst_i, op)]].concat()
+            }
+        };
+        Ok((dst_i, Block(instrs)))
     }
 }
 
