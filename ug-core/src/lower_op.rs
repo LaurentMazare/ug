@@ -93,7 +93,7 @@ impl lang::op::Kernel {
                 dst: ptr_i,
                 offset: off_i.to_varid(),
                 value: src_i.to_varid(),
-                dtype: ssa::DType::F32, // TODO(laurent): support other dtypes
+                dtype: value.dtype,
             };
             instrs.push((Id::new(), store));
 
