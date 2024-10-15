@@ -1,4 +1,3 @@
-#![allow(unused)]
 use crate::lang::{self, ssa};
 use crate::lower::{Block, Id};
 use anyhow::Result;
@@ -6,8 +5,25 @@ use ssa::Instr as SsaI;
 
 impl lang::op::Layout {
     fn lower(&self, range_id: Id) -> Result<(Id, Block)> {
-        // TODO: handle the stride etc.
-        Ok((range_id, Block(vec![])))
+        if !self.c_contiguous() {
+            anyhow::bail!("only contiguous arrays are supported")
+        }
+        let offset = self.offset();
+        if offset == 0 {
+            Ok((range_id, Block(vec![])))
+        } else {
+            let dst_id = Id::new();
+            let off_id = Id::new();
+            let off = SsaI::Const(ssa::Const::I32(offset as i32));
+            let add = SsaI::Binary {
+                op: lang::BinaryOp::Add,
+                lhs: range_id.to_varid(),
+                rhs: off_id.to_varid(),
+                dtype: ssa::DType::I32,
+            };
+
+            Ok((dst_id, Block(vec![(off_id, off), (dst_id, add)])))
+        }
     }
 }
 
@@ -39,7 +55,7 @@ impl lang::op::Ast {
                 arg_b.push((dst_i, SsaI::Unary { op: *op, arg: arg_i.to_varid(), dtype }));
                 arg_b
             }
-            A::Reduce(op, arg) => {
+            A::Reduce(_op, _arg) => {
                 anyhow::bail!("TODO reduce")
             }
             A::Binary(op, lhs, rhs) => {

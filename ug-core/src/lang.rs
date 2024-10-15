@@ -369,13 +369,40 @@ pub mod op {
     #[derive(Debug, Clone)]
     pub struct Layout {
         shape: Vec<usize>,
-        pub strides: Vec<usize>,
-        pub offset: usize,
+        strides: Vec<usize>,
+        offset: usize,
     }
 
     impl Layout {
         pub fn num_elements(&self) -> usize {
             self.shape.iter().product()
+        }
+
+        pub fn dims(&self) -> usize {
+            self.shape.len()
+        }
+
+        pub fn strides(&self) -> &[usize] {
+            self.strides.as_slice()
+        }
+
+        pub fn shape(&self) -> &[usize] {
+            self.shape.as_slice()
+        }
+
+        pub fn offset(&self) -> usize {
+            self.offset
+        }
+
+        pub fn c_contiguous(&self) -> bool {
+            let mut prod_l = 1;
+            for (&s, &l) in self.strides.iter().zip(self.shape.iter()).rev() {
+                if s != prod_l {
+                    return false;
+                }
+                prod_l *= l
+            }
+            true
         }
     }
 
