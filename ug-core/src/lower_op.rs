@@ -54,8 +54,62 @@ impl lang::op::Ast {
                 arg_b.push((dst_i, SsaI::Unary { op: *op, arg: arg_i.to_varid(), dtype }));
                 arg_b
             }
-            A::Reduce { op: _, arg: _, axis: _ } => {
-                anyhow::bail!("TODO reduce")
+            A::Reduce { op, arg, axis: _ } => {
+                let mut instrs = vec![];
+                let (init_value, fold_op) = match (op, self.dtype) {
+                    (lang::ReduceOp::Add, ssa::DType::F32) => {
+                        (ssa::Const::F32(0f32), lang::BinaryOp::Add)
+                    }
+                    (lang::ReduceOp::Add, ssa::DType::I32) => {
+                        (ssa::Const::I32(0i32), lang::BinaryOp::Add)
+                    }
+                    (lang::ReduceOp::Max, ssa::DType::F32) => {
+                        // TODO(laurent): proper binary op.
+                        (ssa::Const::F32(f32::MAX), lang::BinaryOp::Add)
+                    }
+                    (lang::ReduceOp::Max, ssa::DType::I32) => {
+                        // TODO(laurent): proper binary op.
+                        (ssa::Const::I32(i32::MAX), lang::BinaryOp::Add)
+                    }
+                    (_, ssa::DType::PtrF32) | (_, ssa::DType::PtrI32) => {
+                        anyhow::bail!("incorrect dtype for reduce {:?}", self.dtype)
+                    }
+                };
+                let define_acc = SsaI::DefineAcc(init_value);
+                instrs.push((dst_i, define_acc));
+                let lo_id = Id::new();
+                instrs.push((lo_id, SsaI::Const(ssa::Const::I32(0))));
+                let up_id = Id::new();
+                let reduce_len = 0usize; // TODO(laurent): handle shapes properly and get the length from the shape.
+                instrs.push((up_id, SsaI::Const(ssa::Const::I32(reduce_len as i32))));
+                let range_id = Id::new();
+                let range = SsaI::Range { lo: lo_id.to_varid(), up: up_id.to_varid(), end_idx: 3 };
+                let start_line_idx = instrs.len();
+                instrs.push((range_id, range));
+
+                // TODO(laurent): pass both the global range_id and the local one.
+                let (arg_i, arg_b) = arg.lower(range_id, per_arg)?;
+                instrs.extend_from_slice(&arg_b.0);
+                let src_id = Id::new();
+                let fold_op = SsaI::Binary {
+                    op: fold_op,
+                    lhs: dst_i.to_varid(),
+                    rhs: arg_i.to_varid(),
+                    dtype: self.dtype,
+                };
+                instrs.push((src_id, fold_op));
+                instrs.push((
+                    Id::new(),
+                    SsaI::Assign { dst: dst_i.to_varid(), src: src_id.to_varid() },
+                ));
+
+                let erange = ssa::Instr::EndRange { start_idx: 1 };
+                let end_line_idx = instrs.len();
+                instrs.push((Id::new(), erange));
+                if let SsaI::Range { end_idx, .. } = &mut instrs[start_line_idx].1 {
+                    *end_idx = end_line_idx + 1
+                }
+                instrs
             }
             A::Binary { op, lhs, rhs } => {
                 let (lhs_i, lhs_b) = lhs.lower(range_id, per_arg)?;
