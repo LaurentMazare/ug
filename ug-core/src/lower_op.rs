@@ -6,7 +6,7 @@ use ssa::Instr as SsaI;
 impl lang::op::Layout {
     fn lower(&self, range_id: Id) -> Result<(Id, Block)> {
         if !self.c_contiguous() {
-            anyhow::bail!("only contiguous arrays are supported")
+            anyhow::bail!("only contiguous arrays are supported {self:?}")
         }
         let offset = self.offset();
         if offset == 0 {

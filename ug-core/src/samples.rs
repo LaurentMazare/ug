@@ -44,7 +44,24 @@ pub mod ssa {
 }
 
 pub mod op {
-    // use crate::lang::op::{AstInner as I, BinaryOp, Const, DType, Kernel, VarId};
+    use crate::lang::op::{self, Arg, ArgType, DType, Kernel, Layout};
+    use anyhow::Result;
+
+    pub fn softmax(dim1: usize, dim2: usize) -> Result<Kernel> {
+        let layout = Layout::from_shape(&[dim1, dim2]);
+        let src_ptr = Arg::new(ArgType::Ptr);
+        let dst_ptr = Arg::new(ArgType::Ptr);
+        let src = op::load(src_ptr.id(), layout.clone(), DType::F32)?;
+        let src_max = op::reduce(op::ReduceOp::Max, src.clone(), 1)?;
+        let diff = op::binary(op::BinaryOp::Sub, src_max, src)?;
+        let exp = op::unary(op::UnaryOp::Exp, diff)?;
+        let sum_exp = op::reduce(op::ReduceOp::Add, exp.clone(), 1)?;
+        let sm = op::binary(op::BinaryOp::Div, exp, sum_exp)?;
+        let st = op::store(dst_ptr.id(), layout, sm)?;
+        let kernel =
+            Kernel::new(format!("softmax_{dim1}_{dim2}"), vec![src_ptr, dst_ptr], vec![st]);
+        Ok(kernel)
+    }
 }
 
 use crate::lang::{Arg, ArgType, ExprNode as E, IndexExprNode as I, Kernel, Ops};

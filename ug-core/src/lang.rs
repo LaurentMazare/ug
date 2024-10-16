@@ -365,7 +365,7 @@ pub struct FlopsMem {
 
 // AST version of the SSA ops
 pub mod op {
-    pub use super::{ArgId, BinaryOp, DType, ReduceOp, UnaryOp};
+    pub use super::{Arg, ArgId, ArgType, BinaryOp, DType, ReduceOp, UnaryOp};
     use anyhow::Result;
     use std::sync::Arc;
 
@@ -377,6 +377,18 @@ pub mod op {
     }
 
     impl Layout {
+        pub fn from_shape(shape: &[usize]) -> Self {
+            let mut strides = vec![];
+            let mut stride = 1;
+            for l in shape.iter().rev() {
+                strides.push(stride);
+                stride *= l
+            }
+            strides.reverse();
+            let shape = shape.to_vec();
+            Self { shape, strides, offset: 0 }
+        }
+
         pub fn num_elements(&self) -> usize {
             self.shape.iter().product()
         }
@@ -448,6 +460,7 @@ pub mod op {
         } else {
             lhs.dtype
         };
+        // TODO(laurent): check the shape etc.
         let inner = AstInner::Binary { op, lhs, rhs };
         Ok(Ast { inner: Arc::new(inner), dtype })
     }
@@ -465,12 +478,28 @@ pub mod op {
         pub(crate) value: Ast,
     }
 
+    pub fn store(dst: ArgId, layout: Layout, value: Ast) -> Result<Store> {
+        Ok(Store { dst, layout, value })
+    }
+
+    impl Store {
+        pub fn dtype(&self) -> DType {
+            self.value.dtype
+        }
+    }
+
     #[derive(Debug, Clone)]
     #[allow(unused)]
     pub struct Kernel {
         pub(crate) name: String,
-        pub(crate) args: Vec<super::Arg>,
+        pub(crate) args: Vec<Arg>,
         pub(crate) ops: Vec<Store>,
+    }
+
+    impl Kernel {
+        pub fn new(name: String, args: Vec<Arg>, ops: Vec<Store>) -> Self {
+            Self { name, args, ops }
+        }
     }
 }
 

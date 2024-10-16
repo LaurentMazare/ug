@@ -34,9 +34,18 @@ fn lower_add() -> Result<()> {
     Ok(())
 }
 
+fn softmax() -> Result<()> {
+    let kernel = ug::samples::op::softmax(16, 1024)?;
+    println!("{kernel:?}");
+    let ssa_kernel = kernel.lower()?;
+    println!("{ssa_kernel:?}");
+    Ok(())
+}
+
 fn main() -> Result<()> {
     eval_add()?;
     eval_dotprod()?;
     lower_add()?;
+    softmax()?;
     Ok(())
 }
