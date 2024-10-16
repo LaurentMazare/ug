@@ -369,6 +369,8 @@ pub mod op {
     use anyhow::Result;
     use std::sync::Arc;
 
+    // TODO(laurent): Split the layout type in a separate module.
+    // TODO(laurent): Dedicated type for shape, similar to candle.
     #[derive(Debug, Clone)]
     pub struct Layout {
         shape: Vec<usize>,
@@ -425,6 +427,7 @@ pub mod op {
     pub struct Ast {
         pub(crate) inner: Arc<AstInner>,
         pub(crate) dtype: DType,
+        pub(crate) shape: Vec<usize>,
     }
 
     #[derive(Debug, Clone)]
@@ -437,21 +440,27 @@ pub mod op {
     }
 
     pub fn load(src: ArgId, layout: Layout, dtype: DType) -> Result<Ast> {
+        let shape = layout.shape.clone();
         let inner = AstInner::Load { src, layout };
-        Ok(Ast { inner: Arc::new(inner), dtype })
+        Ok(Ast { inner: Arc::new(inner), dtype, shape })
     }
 
     pub fn unary(op: UnaryOp, arg: Ast) -> Result<Ast> {
         let dtype = arg.dtype;
+        let shape = arg.shape.clone();
         let inner = AstInner::Unary { op, arg };
-        Ok(Ast { inner: Arc::new(inner), dtype })
+        Ok(Ast { inner: Arc::new(inner), dtype, shape })
     }
 
     pub fn reduce(op: ReduceOp, arg: Ast, axis: usize) -> Result<Ast> {
         let dtype = arg.dtype;
-        // TODO(laurent): check that the axis is compatible with the current shape.
+        let mut shape = arg.shape.clone();
+        if axis >= shape.len() {
+            anyhow::bail!("no axis {axis} in shape {shape:?}")
+        }
+        shape.remove(axis);
         let inner = AstInner::Reduce { op, arg, axis };
-        Ok(Ast { inner: Arc::new(inner), dtype })
+        Ok(Ast { inner: Arc::new(inner), dtype, shape })
     }
 
     pub fn binary(op: BinaryOp, lhs: Ast, rhs: Ast) -> Result<Ast> {
@@ -460,14 +469,22 @@ pub mod op {
         } else {
             lhs.dtype
         };
-        // TODO(laurent): check the shape etc.
+        // TODO(laurent): check the shape, should broadcast be implicit or not?
+        if lhs.shape != rhs.shape {
+            anyhow::bail!("shape mismatch in {op:?}, lhs: {:?}, rhs: {:?}", lhs.shape, rhs.shape)
+        }
+        let shape = lhs.shape.clone();
         let inner = AstInner::Binary { op, lhs, rhs };
-        Ok(Ast { inner: Arc::new(inner), dtype })
+        Ok(Ast { inner: Arc::new(inner), dtype, shape })
     }
 
     impl Ast {
         pub fn dtype(&self) -> DType {
             self.dtype
+        }
+
+        pub fn shape(&self) -> &[usize] {
+            self.shape.as_slice()
         }
     }
 
