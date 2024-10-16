@@ -415,10 +415,19 @@ pub mod op {
     #[derive(Debug, Clone)]
     pub enum AstInner {
         Load { src: ArgId, layout: Layout },
-        Reduce(ReduceOp, Ast),
-        Unary(UnaryOp, Ast),
-        Binary(BinaryOp, Ast, Ast),
-        // TODO(laurent): Add some reshape/transpose/...
+        Reduce { op: ReduceOp, arg: Ast, axis: usize },
+        Unary { op: UnaryOp, arg: Ast },
+        Binary { op: BinaryOp, lhs: Ast, rhs: Ast },
+        // TODO(laurent): Add some reshape/transpose/const...
+    }
+
+    pub fn load(src: ArgId, layout: Layout, dtype: DType) -> Ast {
+        Ast { inner: std::sync::Arc::new(AstInner::Load { src, layout }), dtype }
+    }
+
+    pub fn unary(op: UnaryOp, arg: Ast) -> Ast {
+        let dtype = arg.dtype;
+        Ast { inner: std::sync::Arc::new(AstInner::Unary { op, arg }), dtype }
     }
 
     #[derive(Debug, Clone)]

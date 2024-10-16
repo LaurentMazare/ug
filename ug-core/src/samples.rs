@@ -43,6 +43,10 @@ pub mod ssa {
     }
 }
 
+pub mod op {
+    // use crate::lang::op::{AstInner as I, BinaryOp, Const, DType, Kernel, VarId};
+}
+
 use crate::lang::{Arg, ArgType, ExprNode as E, IndexExprNode as I, Kernel, Ops};
 
 pub fn simple_add(block_size: usize) -> Kernel {
@@ -55,5 +59,5 @@ pub fn simple_add(block_size: usize) -> Kernel {
     let lhs = E::load(&lhs_ptr, &offset, &len, &stride);
     let rhs = E::load(&rhs_ptr, &offset, &len, &stride);
     let op = Ops::store(&dst_ptr, &offset, &len, &stride, &lhs.add(&rhs));
-    Kernel::new(format!("myfunc{block_size}"), vec![lhs_ptr, rhs_ptr, dst_ptr], vec![op])
+    Kernel::new(format!("simple_add_{block_size}"), vec![lhs_ptr, rhs_ptr, dst_ptr], vec![op])
 }

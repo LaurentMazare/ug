@@ -49,16 +49,16 @@ impl lang::op::Ast {
                 off_b.push((dst_i, load));
                 off_b
             }
-            A::Unary(op, arg) => {
+            A::Unary { op, arg } => {
                 let (arg_i, arg_b) = arg.lower(range_id, per_arg)?;
                 let mut arg_b = arg_b.0;
                 arg_b.push((dst_i, SsaI::Unary { op: *op, arg: arg_i.to_varid(), dtype }));
                 arg_b
             }
-            A::Reduce(_op, _arg) => {
+            A::Reduce { op: _, arg: _, axis: _ } => {
                 anyhow::bail!("TODO reduce")
             }
-            A::Binary(op, lhs, rhs) => {
+            A::Binary { op, lhs, rhs } => {
                 let (lhs_i, lhs_b) = lhs.lower(range_id, per_arg)?;
                 let (rhs_i, rhs_b) = rhs.lower(range_id, per_arg)?;
                 let op =
