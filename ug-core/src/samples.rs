@@ -55,7 +55,7 @@ pub mod op {
         let src_max = op::reduce(op::ReduceOp::Max, src.clone(), 1)?;
         let diff = op::binary(op::BinaryOp::Sub, src_max, src)?;
         let exp = op::unary(op::UnaryOp::Exp, diff)?;
-        let sum_exp = op::reduce(op::ReduceOp::Add, exp.clone(), 1)?;
+        let sum_exp = op::reduce(op::ReduceOp::Sum, exp.clone(), 1)?;
         let sm = op::binary(op::BinaryOp::Div, exp, sum_exp)?;
         let st = op::store(dst_ptr.id(), layout, sm)?;
         let kernel =

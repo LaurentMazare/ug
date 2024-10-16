@@ -33,7 +33,30 @@ impl<T: num::traits::real::Real + Copy, const N: usize> W<T, N> {
     }
 }
 
-impl<T: num::traits::Num + Copy, const N: usize> W<T, N> {
+pub trait MinMax {
+    fn min(lhs: Self, rhs: Self) -> Self;
+    fn max(lhs: Self, rhs: Self) -> Self;
+}
+
+impl MinMax for i32 {
+    fn min(lhs: Self, rhs: Self) -> Self {
+        lhs.min(rhs)
+    }
+    fn max(lhs: Self, rhs: Self) -> Self {
+        lhs.max(rhs)
+    }
+}
+
+impl MinMax for f32 {
+    fn min(lhs: Self, rhs: Self) -> Self {
+        lhs.min(rhs)
+    }
+    fn max(lhs: Self, rhs: Self) -> Self {
+        lhs.max(rhs)
+    }
+}
+
+impl<T: num::traits::Num + Copy + MinMax, const N: usize> W<T, N> {
     fn add(&self, rhs: &Self) -> Self {
         W(std::array::from_fn(|i| self.0[i] + rhs.0[i]))
     }
@@ -45,6 +68,12 @@ impl<T: num::traits::Num + Copy, const N: usize> W<T, N> {
     }
     fn div(&self, rhs: &Self) -> Self {
         W(std::array::from_fn(|i| self.0[i] / rhs.0[i]))
+    }
+    fn max(&self, rhs: &Self) -> Self {
+        W(std::array::from_fn(|i| T::max(self.0[i], rhs.0[i])))
+    }
+    fn min(&self, rhs: &Self) -> Self {
+        W(std::array::from_fn(|i| T::min(self.0[i], rhs.0[i])))
     }
 }
 
@@ -223,6 +252,12 @@ pub fn eval_ssa<const N: usize>(
                     (B::Div, Value::F32(v1), Value::F32(v2)) => Value::F32(v1.div(v2)),
                     (B::Div, Value::I32(v1), Value::I32(v2)) => Value::I32(v1.div(v2)),
                     (B::Div, _, _) => anyhow::bail!("dtype mismatch for {op:?}"),
+                    (B::Max, Value::F32(v1), Value::F32(v2)) => Value::F32(v1.max(v2)),
+                    (B::Max, Value::I32(v1), Value::I32(v2)) => Value::I32(v1.max(v2)),
+                    (B::Max, _, _) => anyhow::bail!("dtype mismatch for {op:?}"),
+                    (B::Min, Value::F32(v1), Value::F32(v2)) => Value::F32(v1.min(v2)),
+                    (B::Min, Value::I32(v1), Value::I32(v2)) => Value::I32(v1.min(v2)),
+                    (B::Min, _, _) => anyhow::bail!("dtype mismatch for {op:?}"),
                 };
                 (v, None)
             }

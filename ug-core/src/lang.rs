@@ -4,8 +4,10 @@ use std::sync::Arc;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum ReduceOp {
-    Add,
+    Sum,
+    Prod,
     Max,
+    Min,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -20,6 +22,8 @@ pub enum BinaryOp {
     Sub,
     Mul,
     Div,
+    Min,
+    Max,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]

@@ -102,18 +102,18 @@ pub fn gen<W: std::io::Write>(w: &mut W, func_name: &str, kernel: &ssa::Kernel) 
             }
             I::Binary { op, lhs, rhs, dtype } => {
                 let op = match op {
-                    ssa::BinaryOp::Add => "+",
-                    ssa::BinaryOp::Mul => "*",
-                    ssa::BinaryOp::Sub => "-",
-                    ssa::BinaryOp::Div => "/",
+                    ssa::BinaryOp::Add => format!("{} + {}", V(lhs.as_usize()), V(rhs.as_usize())),
+                    ssa::BinaryOp::Mul => format!("{} * {}", V(lhs.as_usize()), V(rhs.as_usize())),
+                    ssa::BinaryOp::Sub => format!("{} - {}", V(lhs.as_usize()), V(rhs.as_usize())),
+                    ssa::BinaryOp::Div => format!("{} / {}", V(lhs.as_usize()), V(rhs.as_usize())),
+                    ssa::BinaryOp::Min => {
+                        format!("min({}, {})", V(lhs.as_usize()), V(rhs.as_usize()))
+                    }
+                    ssa::BinaryOp::Max => {
+                        format!("max({}, {})", V(lhs.as_usize()), V(rhs.as_usize()))
+                    }
                 };
-                writeln!(
-                    w,
-                    "{indent}{} {var_id} = {} {op} {};",
-                    D(*dtype),
-                    V(lhs.as_usize()),
-                    V(rhs.as_usize())
-                )?;
+                writeln!(w, "{indent}{} {var_id} = {op};", D(*dtype),)?;
             }
             I::Unary { op, arg, dtype } => {
                 let op = match op {

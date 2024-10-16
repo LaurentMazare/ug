@@ -57,19 +57,29 @@ impl lang::op::Ast {
             A::Reduce { op, arg, axis: _ } => {
                 let mut instrs = vec![];
                 let (init_value, fold_op) = match (op, self.dtype) {
-                    (lang::ReduceOp::Add, ssa::DType::F32) => {
+                    (lang::ReduceOp::Sum, ssa::DType::F32) => {
                         (ssa::Const::F32(0f32), lang::BinaryOp::Add)
                     }
-                    (lang::ReduceOp::Add, ssa::DType::I32) => {
+                    (lang::ReduceOp::Sum, ssa::DType::I32) => {
                         (ssa::Const::I32(0i32), lang::BinaryOp::Add)
                     }
+                    (lang::ReduceOp::Prod, ssa::DType::F32) => {
+                        (ssa::Const::F32(1f32), lang::BinaryOp::Mul)
+                    }
+                    (lang::ReduceOp::Prod, ssa::DType::I32) => {
+                        (ssa::Const::I32(1i32), lang::BinaryOp::Mul)
+                    }
+                    (lang::ReduceOp::Min, ssa::DType::F32) => {
+                        (ssa::Const::F32(f32::MAX), lang::BinaryOp::Min)
+                    }
+                    (lang::ReduceOp::Min, ssa::DType::I32) => {
+                        (ssa::Const::I32(i32::MAX), lang::BinaryOp::Min)
+                    }
                     (lang::ReduceOp::Max, ssa::DType::F32) => {
-                        // TODO(laurent): proper binary op.
-                        (ssa::Const::F32(f32::MAX), lang::BinaryOp::Add)
+                        (ssa::Const::F32(f32::MIN), lang::BinaryOp::Max)
                     }
                     (lang::ReduceOp::Max, ssa::DType::I32) => {
-                        // TODO(laurent): proper binary op.
-                        (ssa::Const::I32(i32::MAX), lang::BinaryOp::Add)
+                        (ssa::Const::I32(i32::MIN), lang::BinaryOp::Max)
                     }
                     (_, ssa::DType::PtrF32) | (_, ssa::DType::PtrI32) => {
                         anyhow::bail!("incorrect dtype for reduce {:?}", self.dtype)
