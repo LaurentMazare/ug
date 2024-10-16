@@ -28,7 +28,6 @@ impl lang::op::Layout {
 }
 
 impl lang::op::Ast {
-    #[allow(clippy::only_used_in_recursion)]
     fn lower(
         &self,
         range_id: Id,

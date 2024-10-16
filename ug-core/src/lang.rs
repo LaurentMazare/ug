@@ -343,9 +343,9 @@ impl Ops {
     }
 }
 
-#[allow(unused)]
 #[derive(Debug, Clone)]
 pub struct Kernel {
+    #[allow(unused)]
     pub(crate) name: String,
     pub(crate) args: Vec<Arg>,
     pub(crate) ops: Vec<Ops>,
@@ -489,8 +489,8 @@ pub mod op {
     }
 
     #[derive(Debug, Clone)]
-    #[allow(unused)]
     pub struct Kernel {
+        #[allow(unused)]
         pub(crate) name: String,
         pub(crate) args: Vec<Arg>,
         pub(crate) ops: Vec<Store>,
