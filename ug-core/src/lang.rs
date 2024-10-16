@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
+use std::sync::Arc;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum ReduceOp {
@@ -164,7 +165,7 @@ pub(crate) struct IndexExprNodeInner {
 
 #[derive(Debug, Clone)]
 pub struct IndexExprNode {
-    pub(crate) inner: std::sync::Arc<IndexExprNodeInner>,
+    pub(crate) inner: Arc<IndexExprNodeInner>,
 }
 
 #[derive(Debug, Clone)]
@@ -178,7 +179,7 @@ impl IndexExprNode {
     fn from_expr(expr: IndexExpr) -> Self {
         let id = IndexNodeId::new();
         let inner = IndexExprNodeInner { id, expr };
-        Self { inner: std::sync::Arc::new(inner) }
+        Self { inner: Arc::new(inner) }
     }
 
     pub fn cst(v: usize) -> Self {
@@ -209,7 +210,7 @@ impl IndexExprNode {
 
 #[derive(Debug, Clone)]
 pub struct ExprNode {
-    pub(crate) inner: std::sync::Arc<ExprNodeInner>,
+    pub(crate) inner: Arc<ExprNodeInner>,
 }
 
 #[derive(Debug, Clone)]
@@ -254,7 +255,7 @@ impl ExprNode {
     fn from_expr(expr: Expr) -> Self {
         let id = NodeId::new();
         let inner = ExprNodeInner { id, expr };
-        Self { inner: std::sync::Arc::new(inner) }
+        Self { inner: Arc::new(inner) }
     }
 
     pub fn cst<C: Into<ScalarConst>>(c: C) -> Self {
@@ -365,6 +366,8 @@ pub struct FlopsMem {
 // AST version of the SSA ops
 pub mod op {
     pub use super::{ArgId, BinaryOp, DType, ReduceOp, UnaryOp};
+    use anyhow::Result;
+    use std::sync::Arc;
 
     #[derive(Debug, Clone)]
     pub struct Layout {
@@ -408,7 +411,7 @@ pub mod op {
 
     #[derive(Debug, Clone)]
     pub struct Ast {
-        pub(crate) inner: std::sync::Arc<AstInner>,
+        pub(crate) inner: Arc<AstInner>,
         pub(crate) dtype: DType,
     }
 
@@ -421,13 +424,38 @@ pub mod op {
         // TODO(laurent): Add some reshape/transpose/const...
     }
 
-    pub fn load(src: ArgId, layout: Layout, dtype: DType) -> Ast {
-        Ast { inner: std::sync::Arc::new(AstInner::Load { src, layout }), dtype }
+    pub fn load(src: ArgId, layout: Layout, dtype: DType) -> Result<Ast> {
+        let inner = AstInner::Load { src, layout };
+        Ok(Ast { inner: Arc::new(inner), dtype })
     }
 
-    pub fn unary(op: UnaryOp, arg: Ast) -> Ast {
+    pub fn unary(op: UnaryOp, arg: Ast) -> Result<Ast> {
         let dtype = arg.dtype;
-        Ast { inner: std::sync::Arc::new(AstInner::Unary { op, arg }), dtype }
+        let inner = AstInner::Unary { op, arg };
+        Ok(Ast { inner: Arc::new(inner), dtype })
+    }
+
+    pub fn reduce(op: ReduceOp, arg: Ast, axis: usize) -> Result<Ast> {
+        let dtype = arg.dtype;
+        // TODO(laurent): check that the axis is compatible with the current shape.
+        let inner = AstInner::Reduce { op, arg, axis };
+        Ok(Ast { inner: Arc::new(inner), dtype })
+    }
+
+    pub fn binary(op: BinaryOp, lhs: Ast, rhs: Ast) -> Result<Ast> {
+        let dtype = if lhs.dtype != rhs.dtype {
+            anyhow::bail!("dtype mismatch in {op:?}, lhs: {:?}, rhs: {:?}", lhs.dtype, rhs.dtype)
+        } else {
+            lhs.dtype
+        };
+        let inner = AstInner::Binary { op, lhs, rhs };
+        Ok(Ast { inner: Arc::new(inner), dtype })
+    }
+
+    impl Ast {
+        pub fn dtype(&self) -> DType {
+            self.dtype
+        }
     }
 
     #[derive(Debug, Clone)]
