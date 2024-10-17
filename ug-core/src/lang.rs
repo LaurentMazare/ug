@@ -370,68 +370,15 @@ pub struct FlopsMem {
 // AST version of the SSA ops
 pub mod op {
     pub use super::{Arg, ArgId, ArgType, BinaryOp, DType, ReduceOp, UnaryOp};
+    pub use crate::{Layout, Shape};
     use anyhow::Result;
     use std::sync::Arc;
-
-    // TODO(laurent): Split the layout type in a separate module.
-    // TODO(laurent): Dedicated type for shape, similar to candle.
-    #[derive(Debug, Clone)]
-    pub struct Layout {
-        shape: Vec<usize>,
-        strides: Vec<usize>,
-        offset: usize,
-    }
-
-    impl Layout {
-        pub fn from_shape(shape: &[usize]) -> Self {
-            let mut strides = vec![];
-            let mut stride = 1;
-            for l in shape.iter().rev() {
-                strides.push(stride);
-                stride *= l
-            }
-            strides.reverse();
-            let shape = shape.to_vec();
-            Self { shape, strides, offset: 0 }
-        }
-
-        pub fn num_elements(&self) -> usize {
-            self.shape.iter().product()
-        }
-
-        pub fn dims(&self) -> usize {
-            self.shape.len()
-        }
-
-        pub fn strides(&self) -> &[usize] {
-            self.strides.as_slice()
-        }
-
-        pub fn shape(&self) -> &[usize] {
-            self.shape.as_slice()
-        }
-
-        pub fn offset(&self) -> usize {
-            self.offset
-        }
-
-        pub fn c_contiguous(&self) -> bool {
-            let mut prod_l = 1;
-            for (&s, &l) in self.strides.iter().zip(self.shape.iter()).rev() {
-                if s != prod_l {
-                    return false;
-                }
-                prod_l *= l
-            }
-            true
-        }
-    }
 
     #[derive(Debug, Clone)]
     pub struct Ast {
         pub(crate) inner: Arc<AstInner>,
         pub(crate) dtype: DType,
-        pub(crate) shape: Vec<usize>,
+        pub(crate) shape: Shape,
     }
 
     #[derive(Debug, Clone)]
@@ -444,7 +391,7 @@ pub mod op {
     }
 
     pub fn load(src: ArgId, layout: Layout, dtype: DType) -> Result<Ast> {
-        let shape = layout.shape.clone();
+        let shape = layout.shape().clone();
         let inner = AstInner::Load { src, layout };
         Ok(Ast { inner: Arc::new(inner), dtype, shape })
     }
@@ -458,13 +405,13 @@ pub mod op {
 
     pub fn reduce(op: ReduceOp, arg: Ast, axis: usize) -> Result<Ast> {
         let dtype = arg.dtype;
-        let mut shape = arg.shape.clone();
+        let mut shape = arg.shape.dims().to_vec();
         if axis >= shape.len() {
             anyhow::bail!("no axis {axis} in shape {shape:?}")
         }
         shape.remove(axis);
         let inner = AstInner::Reduce { op, arg, axis };
-        Ok(Ast { inner: Arc::new(inner), dtype, shape })
+        Ok(Ast { inner: Arc::new(inner), dtype, shape: Shape::from(shape) })
     }
 
     pub fn binary(op: BinaryOp, lhs: Ast, rhs: Ast) -> Result<Ast> {
@@ -487,8 +434,8 @@ pub mod op {
             self.dtype
         }
 
-        pub fn shape(&self) -> &[usize] {
-            self.shape.as_slice()
+        pub fn shape(&self) -> &Shape {
+            &self.shape
         }
     }
 
