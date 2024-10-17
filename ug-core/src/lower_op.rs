@@ -13,12 +13,32 @@ struct Index {
 struct Indexes(Vec<Index>);
 
 impl lang::op::Layout {
-    fn lower(&self, range_id: Id) -> Result<(Id, Block)> {
-        if !self.c_contiguous() {
-            anyhow::bail!("only contiguous arrays are supported {self:?}")
+    fn lower(&self, idxs: &Indexes) -> Result<(Id, Block)> {
+        let strides = self.strides();
+        if idxs.0.len() != strides.len() {
+            anyhow::bail!(
+                "len mismatch between strides {} and idxs {}",
+                strides.len(),
+                idxs.0.len()
+            )
         }
-        let block = Block::empty();
-        Ok(block.add(range_id, self.offset() as i32))
+        let mut acc_id = Id::new();
+        let off = self.offset() as i32;
+        let mut block = Block::new(vec![(acc_id, SsaI::Const(off.into()))]);
+        for (idx, &stride) in idxs.0.iter().zip(strides.iter()) {
+            if idx.broadcast {
+                continue;
+            }
+            let dim_id = block.mul(idx.id, stride as i32);
+            acc_id = block.binop(ssa::BinaryOp::Add, dim_id, acc_id, DType::I32);
+        }
+        Ok((acc_id, block))
+    }
+
+    // TODO(laurent): remove this.
+    fn lower_r(&self, id: Id) -> Result<(Id, Block)> {
+        let idxs = Indexes(vec![Index { id, broadcast: false }]);
+        self.lower(&idxs)
     }
 }
 
@@ -64,7 +84,7 @@ impl lang::op::Ast {
                     None => anyhow::bail!("unknown arg {src:?}"),
                     Some(id) => *id,
                 };
-                let (off_i, off_b) = layout.lower(range_id)?;
+                let (off_i, off_b) = layout.lower_r(range_id)?;
                 let load = SsaI::Load { src: ptr_i, dtype, offset: off_i.to_varid() };
                 let mut off_b = off_b.0;
                 off_b.push((dst_i, load));
@@ -161,7 +181,7 @@ impl lang::op::Kernel {
             let start_line_idx = instrs.len();
             instrs.push((range_id, range));
 
-            let (off_i, off_b) = layout.lower(range_id)?;
+            let (off_i, off_b) = layout.lower_r(range_id)?;
             instrs.extend_from_slice(off_b.0.as_slice());
 
             let (src_i, src_b) = value.lower(range_id, &per_arg)?;

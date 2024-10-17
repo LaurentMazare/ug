@@ -28,15 +28,14 @@ impl Id {
 pub(crate) struct Block(pub(crate) Vec<(Id, SsaI)>);
 
 impl Block {
-    pub(crate) fn add(self, src_id: Id, v: i32) -> (Id, Self) {
+    pub(crate) fn add(&mut self, src_id: Id, v: i32) -> Id {
         if v == 0 {
-            (src_id, self)
+            src_id
         } else {
             let dst_id = Id::new();
-            let mut insts = self.0;
             let cst_id = Id::new();
-            insts.push((cst_id, SsaI::Const(v.into())));
-            insts.push((
+            self.0.push((cst_id, SsaI::Const(v.into())));
+            self.0.push((
                 dst_id,
                 SsaI::Binary {
                     op: lang::BinaryOp::Add,
@@ -45,19 +44,18 @@ impl Block {
                     dtype: lang::DType::I32,
                 },
             ));
-            (dst_id, Block(insts))
+            dst_id
         }
     }
 
-    pub(crate) fn mul(self, src_id: Id, v: i32) -> (Id, Self) {
+    pub(crate) fn mul(&mut self, src_id: Id, v: i32) -> Id {
         if v == 1 {
-            (src_id, self)
+            src_id
         } else {
             let dst_id = Id::new();
-            let mut insts = self.0;
             let cst_id = Id::new();
-            insts.push((cst_id, SsaI::Const(v.into())));
-            insts.push((
+            self.0.push((cst_id, SsaI::Const(v.into())));
+            self.0.push((
                 dst_id,
                 SsaI::Binary {
                     op: lang::BinaryOp::Mul,
@@ -66,8 +64,15 @@ impl Block {
                     dtype: lang::DType::I32,
                 },
             ));
-            (dst_id, Block(insts))
+            dst_id
         }
+    }
+
+    pub(crate) fn binop(&mut self, op: lang::BinaryOp, lhs: Id, rhs: Id, dtype: lang::DType) -> Id {
+        let id = Id::new();
+        let op = SsaI::Binary { op, lhs: lhs.to_varid(), rhs: rhs.to_varid(), dtype };
+        self.0.push((id, op));
+        id
     }
 
     pub(crate) fn empty() -> Self {
