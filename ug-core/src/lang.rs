@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
 use std::sync::Arc;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -39,6 +38,21 @@ impl DType {
         match self {
             Self::PtrF32 | Self::PtrI32 => 8,
             Self::F32 | Self::I32 => 4,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub enum Const {
+    I32(i32),
+    F32(f32),
+}
+
+impl Const {
+    fn dtype(&self) -> DType {
+        match self {
+            Self::I32(_) => DType::I32,
+            Self::F32(_) => DType::F32,
         }
     }
 }
@@ -297,7 +311,7 @@ impl ExprNode {
         Self::from_expr(Expr::Binary(BinaryOp::Mul, self.clone(), rhs.clone()))
     }
 
-    pub fn all_args(&self, args: &mut HashSet<Arg>) {
+    pub fn all_args(&self, args: &mut std::collections::HashSet<Arg>) {
         match &self.inner.expr {
             Expr::Load(ss) => {
                 args.insert(*ss.ptr());
@@ -341,7 +355,7 @@ impl Ops {
         }
     }
 
-    pub fn all_args(&self, args: &mut HashSet<Arg>) {
+    pub fn all_args(&self, args: &mut std::collections::HashSet<Arg>) {
         args.insert(*self.dst().ptr());
         self.src().all_args(args);
     }
@@ -369,7 +383,7 @@ pub struct FlopsMem {
 
 // AST version of the SSA ops
 pub mod op {
-    pub use super::{Arg, ArgId, ArgType, BinaryOp, DType, ReduceOp, UnaryOp};
+    pub use super::{Arg, ArgId, ArgType, BinaryOp, Const, DType, ReduceOp, UnaryOp};
     pub use crate::{Layout, Shape};
     use anyhow::Result;
     use std::sync::Arc;
@@ -387,7 +401,8 @@ pub mod op {
         Reduce { op: ReduceOp, arg: Ast, axis: usize },
         Unary { op: UnaryOp, arg: Ast },
         Binary { op: BinaryOp, lhs: Ast, rhs: Ast },
-        // TODO(laurent): Add some reshape/transpose/const...
+        Const(Const),
+        // TODO(laurent): Add some reshape/transpose...
     }
 
     pub fn load(src: ArgId, layout: Layout, dtype: DType) -> Result<Ast> {
@@ -429,6 +444,13 @@ pub mod op {
         Ok(Ast { inner: Arc::new(inner), dtype, shape })
     }
 
+    pub fn cst<I: Into<Const>>(v: I) -> Ast {
+        let v: Const = v.into();
+        let dtype = v.dtype();
+        let inner = AstInner::Const(v);
+        Ast { inner: Arc::new(inner), dtype, shape: Shape::from(()) }
+    }
+
     impl Ast {
         pub fn dtype(&self) -> DType {
             self.dtype
@@ -458,8 +480,7 @@ pub mod op {
 
     #[derive(Debug, Clone)]
     pub struct Kernel {
-        #[allow(unused)]
-        pub(crate) name: String,
+        name: String,
         pub(crate) args: Vec<Arg>,
         pub(crate) ops: Vec<Store>,
     }
@@ -467,6 +488,10 @@ pub mod op {
     impl Kernel {
         pub fn new(name: String, args: Vec<Arg>, ops: Vec<Store>) -> Self {
             Self { name, args, ops }
+        }
+
+        pub fn name(&self) -> &str {
+            self.name.as_str()
         }
     }
 }
@@ -479,7 +504,7 @@ pub mod ssa {
     use anyhow::Result;
     use serde::{Deserialize, Serialize};
 
-    pub use super::{BinaryOp, DType, UnaryOp};
+    pub use super::{BinaryOp, Const, DType, UnaryOp};
 
     #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
     pub struct VarId(usize);
@@ -492,12 +517,6 @@ pub mod ssa {
         pub fn as_usize(&self) -> usize {
             self.0
         }
-    }
-
-    #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-    pub enum Const {
-        I32(i32),
-        F32(f32),
     }
 
     #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]

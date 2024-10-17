@@ -66,6 +66,10 @@ class Kernel:
     def __init__(name, args, ops):
         pass
 
+    def lower(self):
+        """ """
+        pass
+
 class Ops:
     @staticmethod
     def store(dst, offset, len, stride, value):

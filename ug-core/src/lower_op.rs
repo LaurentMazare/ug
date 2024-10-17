@@ -75,6 +75,9 @@ impl lang::op::Ast {
                 off_b.push((dst_i, load));
                 off_b
             }
+            A::Const(c) => {
+                vec![(dst_i, SsaI::Const(*c))]
+            }
             A::Unary { op, arg } => {
                 let (arg_i, arg_b) = arg.lower(range_id, per_arg)?;
                 let mut arg_b = arg_b.0;
