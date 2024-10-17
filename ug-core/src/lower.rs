@@ -28,6 +28,52 @@ impl Id {
 pub(crate) struct Block(pub(crate) Vec<(Id, SsaI)>);
 
 impl Block {
+    pub(crate) fn add(self, src_id: Id, v: i32) -> (Id, Self) {
+        if v == 0 {
+            (src_id, self)
+        } else {
+            let dst_id = Id::new();
+            let mut insts = self.0;
+            let cst_id = Id::new();
+            insts.push((cst_id, SsaI::Const(v.into())));
+            insts.push((
+                dst_id,
+                SsaI::Binary {
+                    op: lang::BinaryOp::Add,
+                    lhs: src_id.to_varid(),
+                    rhs: cst_id.to_varid(),
+                    dtype: lang::DType::I32,
+                },
+            ));
+            (dst_id, Block(insts))
+        }
+    }
+
+    pub(crate) fn mul(self, src_id: Id, v: i32) -> (Id, Self) {
+        if v == 1 {
+            (src_id, self)
+        } else {
+            let dst_id = Id::new();
+            let mut insts = self.0;
+            let cst_id = Id::new();
+            insts.push((cst_id, SsaI::Const(v.into())));
+            insts.push((
+                dst_id,
+                SsaI::Binary {
+                    op: lang::BinaryOp::Mul,
+                    lhs: src_id.to_varid(),
+                    rhs: cst_id.to_varid(),
+                    dtype: lang::DType::I32,
+                },
+            ));
+            (dst_id, Block(insts))
+        }
+    }
+
+    pub(crate) fn empty() -> Self {
+        Self(vec![])
+    }
+
     pub(crate) fn new(instrs: Vec<(Id, SsaI)>) -> Self {
         Self(instrs)
     }

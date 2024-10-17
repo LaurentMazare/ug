@@ -3,27 +3,22 @@ use crate::lower::{Block, Id};
 use anyhow::Result;
 use ssa::{DType, Instr as SsaI};
 
+#[derive(Debug, Clone)]
+struct Index {
+    id: Id,
+    broadcast: bool,
+}
+
+#[derive(Debug, Clone)]
+struct Indexes(Vec<Index>);
+
 impl lang::op::Layout {
     fn lower(&self, range_id: Id) -> Result<(Id, Block)> {
         if !self.c_contiguous() {
             anyhow::bail!("only contiguous arrays are supported {self:?}")
         }
-        let offset = self.offset();
-        if offset == 0 {
-            Ok((range_id, Block(vec![])))
-        } else {
-            let dst_id = Id::new();
-            let off_id = Id::new();
-            let off = SsaI::Const(ssa::Const::I32(offset as i32));
-            let add = SsaI::Binary {
-                op: lang::BinaryOp::Add,
-                lhs: range_id.to_varid(),
-                rhs: off_id.to_varid(),
-                dtype: DType::I32,
-            };
-
-            Ok((dst_id, Block(vec![(off_id, off), (dst_id, add)])))
-        }
+        let block = Block::empty();
+        Ok(block.add(range_id, self.offset() as i32))
     }
 }
 

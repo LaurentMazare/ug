@@ -67,9 +67,9 @@ pub mod op {
 use crate::lang::{Arg, DType, ExprNode as E, IndexExprNode as I, Kernel, Ops};
 
 pub fn simple_add(block_size: usize) -> Kernel {
-    let lhs_ptr = Arg::new(DType::PtrI32);
-    let rhs_ptr = Arg::new(DType::PtrI32);
-    let dst_ptr = Arg::new(DType::PtrI32);
+    let lhs_ptr = Arg::new(DType::PtrF32);
+    let rhs_ptr = Arg::new(DType::PtrF32);
+    let dst_ptr = Arg::new(DType::PtrF32);
     let offset = I::mul(&I::program_id(), &I::cst(block_size));
     let stride = I::cst(1);
     let len = I::cst(block_size);

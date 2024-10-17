@@ -48,6 +48,18 @@ pub enum Const {
     F32(f32),
 }
 
+impl From<i32> for Const {
+    fn from(value: i32) -> Self {
+        Self::I32(value)
+    }
+}
+
+impl From<f32> for Const {
+    fn from(value: f32) -> Self {
+        Self::F32(value)
+    }
+}
+
 impl Const {
     fn dtype(&self) -> DType {
         match self {
