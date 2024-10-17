@@ -128,15 +128,9 @@ impl From<i32> for ScalarConst {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum ArgType {
-    Ptr,
-    I32,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Arg {
     id: ArgId,
-    type_: ArgType,
+    type_: DType,
 }
 
 impl PartialOrd for Arg {
@@ -152,7 +146,7 @@ impl Ord for Arg {
 }
 
 impl Arg {
-    pub fn new(type_: ArgType) -> Self {
+    pub fn new(type_: DType) -> Self {
         let id = ArgId::new();
         Self { id, type_ }
     }
@@ -161,7 +155,7 @@ impl Arg {
         self.id
     }
 
-    pub fn type_(&self) -> ArgType {
+    pub fn type_(&self) -> DType {
         self.type_
     }
 }
@@ -383,7 +377,7 @@ pub struct FlopsMem {
 
 // AST version of the SSA ops
 pub mod op {
-    pub use super::{Arg, ArgId, ArgType, BinaryOp, Const, DType, ReduceOp, UnaryOp};
+    pub use super::{Arg, ArgId, BinaryOp, Const, DType, ReduceOp, UnaryOp};
     pub use crate::{Layout, Shape};
     use anyhow::Result;
     use std::sync::Arc;

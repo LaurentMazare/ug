@@ -44,13 +44,13 @@ pub mod ssa {
 }
 
 pub mod op {
-    use crate::lang::op::{self, Arg, ArgType, DType, Kernel, Layout};
+    use crate::lang::op::{self, Arg, DType, Kernel, Layout};
     use anyhow::Result;
 
     pub fn softmax(dim1: usize, dim2: usize) -> Result<Kernel> {
         let layout = Layout::from_shape(&[dim1, dim2]);
-        let src_ptr = Arg::new(ArgType::Ptr);
-        let dst_ptr = Arg::new(ArgType::Ptr);
+        let src_ptr = Arg::new(DType::PtrF32);
+        let dst_ptr = Arg::new(DType::PtrF32);
         let src = op::load(src_ptr.id(), layout.clone(), DType::F32)?;
         let src_max = op::reduce(op::ReduceOp::Max, src.clone(), 1)?;
         let diff = op::binary(op::BinaryOp::Sub, src_max, src)?;
@@ -64,12 +64,12 @@ pub mod op {
     }
 }
 
-use crate::lang::{Arg, ArgType, ExprNode as E, IndexExprNode as I, Kernel, Ops};
+use crate::lang::{Arg, DType, ExprNode as E, IndexExprNode as I, Kernel, Ops};
 
 pub fn simple_add(block_size: usize) -> Kernel {
-    let lhs_ptr = Arg::new(ArgType::Ptr);
-    let rhs_ptr = Arg::new(ArgType::Ptr);
-    let dst_ptr = Arg::new(ArgType::Ptr);
+    let lhs_ptr = Arg::new(DType::PtrI32);
+    let rhs_ptr = Arg::new(DType::PtrI32);
+    let dst_ptr = Arg::new(DType::PtrI32);
     let offset = I::mul(&I::program_id(), &I::cst(block_size));
     let stride = I::cst(1);
     let len = I::cst(block_size);

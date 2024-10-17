@@ -254,10 +254,7 @@ impl lang::Kernel {
         let mut per_arg = std::collections::HashMap::new();
         for (index, arg) in self.args.iter().enumerate() {
             let id = Id::new();
-            let dtype = match arg.type_() {
-                lang::ArgType::Ptr => ssa::DType::PtrF32, // TODO(laurent): support other pointer types
-                lang::ArgType::I32 => ssa::DType::I32,
-            };
+            let dtype = arg.type_();
             instrs.push((id, SsaI::DefineGlobal { index, dtype }));
             per_arg.insert(arg.id(), id.to_varid());
         }

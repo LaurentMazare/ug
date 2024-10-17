@@ -272,13 +272,18 @@ struct Arg(ug::lang::Arg);
 #[pymethods]
 impl Arg {
     #[staticmethod]
-    fn ptr() -> Self {
-        Self(ug::lang::Arg::new(ug::lang::ArgType::Ptr))
+    fn ptr_f32() -> Self {
+        Self(ug::lang::Arg::new(ug::lang::DType::PtrF32))
+    }
+
+    #[staticmethod]
+    fn ptr_i32() -> Self {
+        Self(ug::lang::Arg::new(ug::lang::DType::PtrI32))
     }
 
     #[staticmethod]
     fn i32() -> Self {
-        Self(ug::lang::Arg::new(ug::lang::ArgType::I32))
+        Self(ug::lang::Arg::new(ug::lang::DType::I32))
     }
 
     fn __str__(&self) -> String {
