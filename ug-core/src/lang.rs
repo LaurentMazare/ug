@@ -409,7 +409,7 @@ pub mod op {
         if axis >= shape.len() {
             anyhow::bail!("no axis {axis} in shape {shape:?}")
         }
-        shape.remove(axis);
+        shape[axis] = 1; // keepdim by default.
         let inner = AstInner::Reduce { op, arg, axis };
         Ok(Ast { inner: Arc::new(inner), dtype, shape: Shape::from(shape) })
     }

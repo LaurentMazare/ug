@@ -1,5 +1,4 @@
 //! The shape of a tensor is a tuple with the size of each of its dimensions.
-#![allow(clippy::redundant_closure_call)]
 use anyhow::{Error, Result};
 
 #[derive(Clone, PartialEq, Eq)]
