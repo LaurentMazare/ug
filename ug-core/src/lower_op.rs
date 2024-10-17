@@ -81,7 +81,7 @@ impl lang::op::Ast {
                 arg_b.push((dst_i, SsaI::Unary { op: *op, arg: arg_i.to_varid(), dtype }));
                 arg_b
             }
-            A::Reduce { op, arg, axis: _ } => {
+            A::Reduce { op, arg, axis } => {
                 let mut instrs = vec![];
                 let init_value = op.init_value(self.dtype)?;
                 let fold_op = op.fold_op();
@@ -90,7 +90,10 @@ impl lang::op::Ast {
                 let lo_id = Id::new();
                 instrs.push((lo_id, SsaI::Const(ssa::Const::I32(0))));
                 let up_id = Id::new();
-                let reduce_len = 0usize; // TODO(laurent): handle shapes properly and get the length from the shape.
+                let reduce_len = match self.shape.dims().get(*axis) {
+                    None => anyhow::bail!("unexpected axis for reduce, {axis} {:?}", self.shape),
+                    Some(v) => *v,
+                };
                 instrs.push((up_id, SsaI::Const(ssa::Const::I32(reduce_len as i32))));
                 let range_id = Id::new();
                 let range = SsaI::Range { lo: lo_id.to_varid(), up: up_id.to_varid(), end_idx: 3 };
