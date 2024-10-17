@@ -28,6 +28,7 @@ impl Id {
 pub(crate) struct Block(pub(crate) Vec<(Id, SsaI)>);
 
 impl Block {
+    #[allow(unused)]
     pub(crate) fn add(&mut self, src_id: Id, v: i32) -> Id {
         if v == 0 {
             src_id
@@ -75,6 +76,7 @@ impl Block {
         id
     }
 
+    #[allow(unused)]
     pub(crate) fn empty() -> Self {
         Self(vec![])
     }

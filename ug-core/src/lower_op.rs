@@ -34,12 +34,6 @@ impl lang::op::Layout {
         }
         Ok((acc_id, block))
     }
-
-    // TODO(laurent): remove this.
-    fn lower_r(&self, id: Id) -> Result<(Id, Block)> {
-        let idxs = Indexes(vec![Index { id, broadcast: false }]);
-        self.lower(&idxs)
-    }
 }
 
 impl lang::op::ReduceOp {
@@ -72,7 +66,7 @@ impl lang::op::ReduceOp {
 impl lang::op::Ast {
     fn lower(
         &self,
-        range_id: Id,
+        idxs: &Indexes,
         per_arg: &std::collections::HashMap<lang::ArgId, ssa::VarId>,
     ) -> Result<(Id, Block)> {
         use lang::op::AstInner as A;
@@ -84,7 +78,7 @@ impl lang::op::Ast {
                     None => anyhow::bail!("unknown arg {src:?}"),
                     Some(id) => *id,
                 };
-                let (off_i, off_b) = layout.lower_r(range_id)?;
+                let (off_i, off_b) = layout.lower(idxs)?;
                 let load = SsaI::Load { src: ptr_i, dtype, offset: off_i.to_varid() };
                 let mut off_b = off_b.0;
                 off_b.push((dst_i, load));
@@ -94,7 +88,7 @@ impl lang::op::Ast {
                 vec![(dst_i, SsaI::Const(*c))]
             }
             A::Unary { op, arg } => {
-                let (arg_i, arg_b) = arg.lower(range_id, per_arg)?;
+                let (arg_i, arg_b) = arg.lower(idxs, per_arg)?;
                 let mut arg_b = arg_b.0;
                 arg_b.push((dst_i, SsaI::Unary { op: *op, arg: arg_i.to_varid(), dtype }));
                 arg_b
@@ -118,8 +112,9 @@ impl lang::op::Ast {
                 let start_line_idx = instrs.len();
                 instrs.push((range_id, range));
 
-                // TODO(laurent): pass both the global range_id and the local one.
-                let (arg_i, arg_b) = arg.lower(range_id, per_arg)?;
+                let mut reduce_idxs = idxs.clone();
+                reduce_idxs.0[*axis] = Index { id: range_id, broadcast: false };
+                let (arg_i, arg_b) = arg.lower(&reduce_idxs, per_arg)?;
                 instrs.extend_from_slice(&arg_b.0);
                 let src_id = Id::new();
                 let fold_op = SsaI::Binary {
@@ -143,8 +138,8 @@ impl lang::op::Ast {
                 instrs
             }
             A::Binary { op, lhs, rhs } => {
-                let (lhs_i, lhs_b) = lhs.lower(range_id, per_arg)?;
-                let (rhs_i, rhs_b) = rhs.lower(range_id, per_arg)?;
+                let (lhs_i, lhs_b) = lhs.lower(idxs, per_arg)?;
+                let (rhs_i, rhs_b) = rhs.lower(idxs, per_arg)?;
                 let op =
                     SsaI::Binary { op: *op, dtype, lhs: lhs_i.to_varid(), rhs: rhs_i.to_varid() };
                 [lhs_b.0.as_slice(), rhs_b.0.as_slice(), &[(dst_i, op)]].concat()
@@ -181,10 +176,11 @@ impl lang::op::Kernel {
             let start_line_idx = instrs.len();
             instrs.push((range_id, range));
 
-            let (off_i, off_b) = layout.lower_r(range_id)?;
+            let idxs = Indexes(vec![Index { id: range_id, broadcast: false }]);
+            let (off_i, off_b) = layout.lower(&idxs)?;
             instrs.extend_from_slice(off_b.0.as_slice());
 
-            let (src_i, src_b) = value.lower(range_id, &per_arg)?;
+            let (src_i, src_b) = value.lower(&idxs, &per_arg)?;
             instrs.extend_from_slice(src_b.0.as_slice());
             let store = SsaI::Store {
                 dst: ptr_i,
