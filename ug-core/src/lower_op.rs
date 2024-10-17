@@ -151,12 +151,12 @@ impl lang::op::Ast {
 
 impl lang::op::Kernel {
     fn lower_b(&self) -> Result<Block> {
-        let mut instrs = vec![];
+        let mut block = Block::empty();
         let mut per_arg = std::collections::HashMap::new();
         for (index, arg) in self.args.iter().enumerate() {
             let id = Id::new();
             let dtype = arg.type_();
-            instrs.push((id, SsaI::DefineGlobal { index, dtype }));
+            block.0.push((id, SsaI::DefineGlobal { index, dtype }));
             per_arg.insert(arg.id(), id.to_varid());
         }
 
@@ -165,39 +165,25 @@ impl lang::op::Kernel {
                 None => anyhow::bail!("unknown arg {dst:?}"),
                 Some(id) => *id,
             };
-            let len_i = Id::new();
             let num_el = layout.num_elements();
-            instrs.push((len_i, SsaI::Const(ssa::Const::I32(num_el as i32))));
-            let lo_i = Id::new();
-            instrs.push((lo_i, SsaI::Const(ssa::Const::I32(0))));
+            let r = block.range(0, num_el as i32);
 
-            let range_id = Id::new();
-            let range = SsaI::Range { lo: lo_i.to_varid(), up: len_i.to_varid(), end_idx: 42 };
-            let start_line_idx = instrs.len();
-            instrs.push((range_id, range));
-
-            let idxs = Indexes(vec![Index { id: range_id, broadcast: false }]);
+            let idxs = Indexes(vec![Index { id: r.id(), broadcast: false }]);
             let (off_i, off_b) = layout.lower(&idxs)?;
-            instrs.extend_from_slice(off_b.0.as_slice());
+            block.0.extend_from_slice(off_b.0.as_slice());
 
             let (src_i, src_b) = value.lower(&idxs, &per_arg)?;
-            instrs.extend_from_slice(src_b.0.as_slice());
+            block.0.extend_from_slice(src_b.0.as_slice());
             let store = SsaI::Store {
                 dst: ptr_i,
                 offset: off_i.to_varid(),
                 value: src_i.to_varid(),
                 dtype: value.dtype,
             };
-            instrs.push((Id::new(), store));
-
-            let erange = ssa::Instr::EndRange { start_idx: start_line_idx };
-            let end_line_idx = instrs.len();
-            instrs.push((Id::new(), erange));
-            if let SsaI::Range { end_idx, .. } = &mut instrs[start_line_idx].1 {
-                *end_idx = end_line_idx + 1
-            }
+            block.0.push((Id::new(), store));
+            block.end_range(r)?;
         }
-        Ok(Block::new(instrs))
+        Ok(block)
     }
 
     pub fn lower(&self) -> Result<ssa::Kernel> {

@@ -27,7 +27,43 @@ impl Id {
 #[derive(Debug)]
 pub(crate) struct Block(pub(crate) Vec<(Id, SsaI)>);
 
+#[derive(Debug)]
+pub(crate) struct Range {
+    id: Id,
+    start_line_idx: usize,
+}
+
+impl Range {
+    pub(crate) fn id(&self) -> Id {
+        self.id
+    }
+}
+
 impl Block {
+    pub(crate) fn range(&mut self, lo: i32, up: i32) -> Range {
+        let lo_i = Id::new();
+        self.0.push((lo_i, SsaI::Const(ssa::Const::I32(lo))));
+        let up_i = Id::new();
+        self.0.push((up_i, SsaI::Const(ssa::Const::I32(up))));
+        let range_i = Id::new();
+        let range = SsaI::Range { lo: lo_i.to_varid(), up: up_i.to_varid(), end_idx: 42 };
+        let start_line_idx = self.0.len();
+        self.0.push((range_i, range));
+        Range { id: range_i, start_line_idx }
+    }
+
+    pub(crate) fn end_range(&mut self, range: Range) -> Result<()> {
+        let erange = ssa::Instr::EndRange { start_idx: range.start_line_idx };
+        let end_line_idx = self.0.len();
+        self.0.push((Id::new(), erange));
+        if let SsaI::Range { end_idx, .. } = &mut self.0[range.start_line_idx].1 {
+            *end_idx = end_line_idx + 1
+        } else {
+            anyhow::bail!("error generating range")
+        }
+        Ok(())
+    }
+
     #[allow(unused)]
     pub(crate) fn add(&mut self, src_id: Id, v: i32) -> Id {
         if v == 0 {
