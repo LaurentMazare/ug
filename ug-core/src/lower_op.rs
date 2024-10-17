@@ -94,28 +94,21 @@ impl lang::op::Ast {
                 arg_b
             }
             A::Reduce { op, arg, axis } => {
-                let mut instrs = vec![];
+                let mut block = Block::empty();
                 let init_value = op.init_value(self.dtype)?;
                 let fold_op = op.fold_op();
                 let define_acc = SsaI::DefineAcc(init_value);
-                instrs.push((dst_i, define_acc));
-                let lo_id = Id::new();
-                instrs.push((lo_id, SsaI::Const(ssa::Const::I32(0))));
-                let up_id = Id::new();
+                block.0.push((dst_i, define_acc));
                 let reduce_len = match self.shape.dims().get(*axis) {
                     None => anyhow::bail!("unexpected axis for reduce, {axis} {:?}", self.shape),
                     Some(v) => *v,
                 };
-                instrs.push((up_id, SsaI::Const(ssa::Const::I32(reduce_len as i32))));
-                let range_id = Id::new();
-                let range = SsaI::Range { lo: lo_id.to_varid(), up: up_id.to_varid(), end_idx: 3 };
-                let start_line_idx = instrs.len();
-                instrs.push((range_id, range));
+                let r = block.range(0, reduce_len as i32);
 
                 let mut reduce_idxs = idxs.clone();
-                reduce_idxs.0[*axis] = Index { id: range_id, broadcast: false };
+                reduce_idxs.0[*axis] = Index { id: r.id(), broadcast: false };
                 let (arg_i, arg_b) = arg.lower(&reduce_idxs, per_arg)?;
-                instrs.extend_from_slice(&arg_b.0);
+                block.0.extend_from_slice(&arg_b.0);
                 let src_id = Id::new();
                 let fold_op = SsaI::Binary {
                     op: fold_op,
@@ -123,19 +116,13 @@ impl lang::op::Ast {
                     rhs: arg_i.to_varid(),
                     dtype: self.dtype,
                 };
-                instrs.push((src_id, fold_op));
-                instrs.push((
+                block.0.push((src_id, fold_op));
+                block.0.push((
                     Id::new(),
                     SsaI::Assign { dst: dst_i.to_varid(), src: src_id.to_varid() },
                 ));
-
-                let erange = ssa::Instr::EndRange { start_idx: 1 };
-                let end_line_idx = instrs.len();
-                instrs.push((Id::new(), erange));
-                if let SsaI::Range { end_idx, .. } = &mut instrs[start_line_idx].1 {
-                    *end_idx = end_line_idx + 1
-                }
-                instrs
+                block.end_range(r)?;
+                block.0
             }
             A::Binary { op, lhs, rhs } => {
                 let (lhs_i, lhs_b) = lhs.lower(idxs, per_arg)?;
