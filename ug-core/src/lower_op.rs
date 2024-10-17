@@ -1,7 +1,7 @@
 use crate::lang::{self, ssa};
 use crate::lower::{Block, Id};
 use anyhow::Result;
-use ssa::Instr as SsaI;
+use ssa::{DType, Instr as SsaI};
 
 impl lang::op::Layout {
     fn lower(&self, range_id: Id) -> Result<(Id, Block)> {
@@ -19,10 +19,37 @@ impl lang::op::Layout {
                 op: lang::BinaryOp::Add,
                 lhs: range_id.to_varid(),
                 rhs: off_id.to_varid(),
-                dtype: ssa::DType::I32,
+                dtype: DType::I32,
             };
 
             Ok((dst_id, Block(vec![(off_id, off), (dst_id, add)])))
+        }
+    }
+}
+
+impl lang::op::ReduceOp {
+    fn init_value(&self, dtype: DType) -> Result<ssa::Const> {
+        let value = match (self, dtype) {
+            (Self::Sum, DType::F32) => ssa::Const::F32(0f32),
+            (Self::Sum, DType::I32) => ssa::Const::I32(0i32),
+            (Self::Prod, DType::F32) => ssa::Const::F32(1f32),
+            (Self::Prod, DType::I32) => ssa::Const::I32(1i32),
+            (Self::Min, DType::F32) => ssa::Const::F32(f32::MAX),
+            (Self::Min, DType::I32) => ssa::Const::I32(i32::MAX),
+            (Self::Max, DType::F32) => ssa::Const::F32(f32::MIN),
+            (Self::Max, DType::I32) => ssa::Const::I32(i32::MIN),
+            (_, DType::PtrF32) | (_, DType::PtrI32) => {
+                anyhow::bail!("incorrect dtype for reduce {dtype:?}")
+            }
+        };
+        Ok(value)
+    }
+    fn fold_op(&self) -> lang::op::BinaryOp {
+        match self {
+            Self::Sum => lang::BinaryOp::Add,
+            Self::Prod => lang::BinaryOp::Mul,
+            Self::Max => lang::BinaryOp::Max,
+            Self::Min => lang::BinaryOp::Min,
         }
     }
 }
@@ -56,35 +83,8 @@ impl lang::op::Ast {
             }
             A::Reduce { op, arg, axis: _ } => {
                 let mut instrs = vec![];
-                let (init_value, fold_op) = match (op, self.dtype) {
-                    (lang::ReduceOp::Sum, ssa::DType::F32) => {
-                        (ssa::Const::F32(0f32), lang::BinaryOp::Add)
-                    }
-                    (lang::ReduceOp::Sum, ssa::DType::I32) => {
-                        (ssa::Const::I32(0i32), lang::BinaryOp::Add)
-                    }
-                    (lang::ReduceOp::Prod, ssa::DType::F32) => {
-                        (ssa::Const::F32(1f32), lang::BinaryOp::Mul)
-                    }
-                    (lang::ReduceOp::Prod, ssa::DType::I32) => {
-                        (ssa::Const::I32(1i32), lang::BinaryOp::Mul)
-                    }
-                    (lang::ReduceOp::Min, ssa::DType::F32) => {
-                        (ssa::Const::F32(f32::MAX), lang::BinaryOp::Min)
-                    }
-                    (lang::ReduceOp::Min, ssa::DType::I32) => {
-                        (ssa::Const::I32(i32::MAX), lang::BinaryOp::Min)
-                    }
-                    (lang::ReduceOp::Max, ssa::DType::F32) => {
-                        (ssa::Const::F32(f32::MIN), lang::BinaryOp::Max)
-                    }
-                    (lang::ReduceOp::Max, ssa::DType::I32) => {
-                        (ssa::Const::I32(i32::MIN), lang::BinaryOp::Max)
-                    }
-                    (_, ssa::DType::PtrF32) | (_, ssa::DType::PtrI32) => {
-                        anyhow::bail!("incorrect dtype for reduce {:?}", self.dtype)
-                    }
-                };
+                let init_value = op.init_value(self.dtype)?;
+                let fold_op = op.fold_op();
                 let define_acc = SsaI::DefineAcc(init_value);
                 instrs.push((dst_i, define_acc));
                 let lo_id = Id::new();
@@ -140,8 +140,8 @@ impl lang::op::Kernel {
         for (index, arg) in self.args.iter().enumerate() {
             let id = Id::new();
             let dtype = match arg.type_() {
-                lang::ArgType::Ptr => ssa::DType::PtrF32, // TODO(laurent): support other pointer types
-                lang::ArgType::I32 => ssa::DType::I32,
+                lang::ArgType::Ptr => DType::PtrF32, // TODO(laurent): support other pointer types
+                lang::ArgType::I32 => DType::I32,
             };
             instrs.push((id, SsaI::DefineGlobal { index, dtype }));
             per_arg.insert(arg.id(), id.to_varid());
