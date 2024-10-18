@@ -60,7 +60,11 @@ pub fn gen<W: std::io::Write>(w: &mut W, func_name: &str, kernel: &ssa::Kernel) 
             },
             I::DefineAcc(cst) | I::Const(cst) => match cst {
                 ssa::Const::I32(v) => writeln!(w, "{indent}int {var_id} = {v};")?,
-                ssa::Const::F32(v) => writeln!(w, "{indent}float {var_id} = {v};")?,
+                ssa::Const::F32(v) => {
+                    // We use the debug trait rather than display for floats as the outcome
+                    // on f32::MIN would not round trip properly with display.
+                    writeln!(w, "{indent}float {var_id} = {v:?};")?
+                }
             },
             I::Range { lo, up, end_idx: _ } => {
                 writeln!(
