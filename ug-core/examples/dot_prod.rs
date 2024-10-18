@@ -35,10 +35,13 @@ fn lower_add() -> Result<()> {
 }
 
 fn softmax() -> Result<()> {
-    let kernel = ug::samples::op::softmax(16, 1024)?;
+    let kernel = ug::samples::op::softmax(2, 4)?;
     println!("{kernel:?}");
     let ssa_kernel = kernel.lower()?;
     println!("{ssa_kernel:?}");
+    let mut a = ug::interpreter::Buffer::F32(vec![0., 1., 2., 3., 2., 1., 2., 1.]);
+    let mut b = ug::interpreter::Buffer::F32(vec![0f32; 8]);
+    ug::interpreter::eval_ssa::<1>(&ssa_kernel, vec![&mut a, &mut b], &[], 0)?;
     Ok(())
 }
 
