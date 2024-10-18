@@ -163,16 +163,16 @@ pub fn eval_ssa<const N: usize>(
 
     while let Some(instr) = kernel.instrs.get(current_idx) {
         let var_id = VarId::new(current_idx);
-        let value = match instr {
-            Instr::DefineGlobal { index, dtype: _ } => Value::Ptr(BufId::new(*index)),
-            Instr::Const(Const::F32(v)) => Value::F32(W::splat(*v)),
-            Instr::Const(Const::I32(v)) => Value::I32(W::splat(*v)),
+        let (value, jump_idx) = match instr {
+            Instr::DefineGlobal { index, dtype: _ } => (Value::Ptr(BufId::new(*index)), None),
+            Instr::Const(Const::F32(v)) => (Value::F32(W::splat(*v)), None),
+            Instr::Const(Const::I32(v)) => (Value::I32(W::splat(*v)), None),
             Instr::Range { lo, up, end_idx } => {
                 if current_idx >= context.values.len() {
                     anyhow::bail!("get out of bounds {current_idx}")
                 }
                 if context.values[current_idx].is_none() {
-                    context.get(*lo)?
+                    (context.get(*lo)?, None)
                 } else {
                     let v = context.values[current_idx].as_i32()?.add(&W::splat(1));
                     let up = context.get(*up)?;
@@ -189,21 +189,23 @@ pub fn eval_ssa<const N: usize>(
                     if all_jump != any_jump {
                         anyhow::bail!("diverging threads in wrap")
                     }
-                    if all_jump {
-                        current_idx = end_idx.as_usize()
-                    }
-                    Value::I32(v)
+                    let (v, jump_idx) = if all_jump {
+                        // Re-initialize to lo in case the loop is taken another time.
+                        let lo = context.get(*lo)?;
+                        let lo = lo.as_i32()?;
+                        (lo.clone(), Some(end_idx.as_usize() + 1))
+                    } else {
+                        (v, None)
+                    };
+                    (Value::I32(v), jump_idx)
                 }
             }
             Instr::Assign { dst, src } => {
                 let value = context.get(*src).unwrap();
                 context.set(*dst, value)?;
-                value
+                (value, None)
             }
-            Instr::EndRange { start_idx } => {
-                current_idx = start_idx.as_usize();
-                continue; // A bit hacky but this is to avoid the current_idx += 1
-            }
+            Instr::EndRange { start_idx } => (Value::None, Some(start_idx.as_usize())),
             Instr::Load { src, offset, dtype: _ } => {
                 let offset = context.get(*offset)?;
                 let offset = offset.as_i32()?;
@@ -212,10 +214,11 @@ pub fn eval_ssa<const N: usize>(
                     Value::LocalPtr(idx) => &context.local_buffers[idx.as_usize()],
                     _ => anyhow::bail!("unexpected dtype for src in load {src:?}"),
                 };
-                match buffer {
+                let value = match buffer {
                     Buffer::F32(v) => Value::F32(W(offset.0.map(|o| v[o as usize]))),
                     Buffer::I32(v) => Value::I32(W(offset.0.map(|o| v[o as usize]))),
-                }
+                };
+                (value, None)
             }
             Instr::Store { dst, offset, value, dtype: _ } => {
                 let offset = context.get(*offset)?;
@@ -237,13 +240,13 @@ pub fn eval_ssa<const N: usize>(
                     }
                     (_, v) => anyhow::bail!("unexpected dtype for value in store {v:?}"),
                 };
-                value
+                (value, None)
             }
             Instr::Binary { op, lhs, rhs, dtype: _ } => {
                 use crate::lang::ssa::BinaryOp as B;
                 let lhs = context.get(*lhs)?;
                 let rhs = context.get(*rhs)?;
-                match (op, &lhs, &rhs) {
+                let v = match (op, &lhs, &rhs) {
                     (B::Add, Value::F32(v1), Value::F32(v2)) => Value::F32(v1.add(v2)),
                     (B::Add, Value::I32(v1), Value::I32(v2)) => Value::I32(v1.add(v2)),
                     (B::Add, _, _) => anyhow::bail!("dtype mismatch for {op:?}"),
@@ -262,29 +265,31 @@ pub fn eval_ssa<const N: usize>(
                     (B::Min, Value::F32(v1), Value::F32(v2)) => Value::F32(v1.min(v2)),
                     (B::Min, Value::I32(v1), Value::I32(v2)) => Value::I32(v1.min(v2)),
                     (B::Min, _, _) => anyhow::bail!("dtype mismatch for {op:?}"),
-                }
+                };
+                (v, None)
             }
             Instr::Unary { op, arg, dtype: _ } => {
                 use crate::lang::ssa::UnaryOp as U;
                 let arg = context.get(*arg)?;
-                match (op, &arg) {
+                let v = match (op, &arg) {
                     (U::Neg, Value::F32(v)) => Value::F32(v.neg()),
                     (U::Neg, Value::I32(v)) => Value::I32(v.neg()),
                     (U::Neg, _) => anyhow::bail!("dtype mismatch for {op:?} {arg:?}"),
                     (U::Exp, Value::F32(v)) => Value::F32(v.exp()),
                     (U::Exp, _) => anyhow::bail!("dtype mismatch for {op:?} {arg:?}"),
-                }
+                };
+                (v, None)
             }
             // DefineAcc is handled in the same way as Const, the only difference is that Assign
             // can modify it. This isn't even checked for in this interpreter, all the vars can be
             // assigned but optimizations/code generation might rely on it.
-            Instr::DefineAcc(Const::F32(v)) => Value::F32(W::splat(*v)),
-            Instr::DefineAcc(Const::I32(v)) => Value::I32(W::splat(*v)),
+            Instr::DefineAcc(Const::F32(v)) => (Value::F32(W::splat(*v)), None),
+            Instr::DefineAcc(Const::I32(v)) => (Value::I32(W::splat(*v)), None),
             Instr::Special(ssa::Special::LocalIdx) => {
-                Value::I32(W(std::array::from_fn(|i| i as i32)))
+                (Value::I32(W(std::array::from_fn(|i| i as i32))), None)
             }
-            Instr::Special(ssa::Special::GridIdx) => Value::I32(W::splat(grid_idx as i32)),
-            Instr::Barrier => Value::None,
+            Instr::Special(ssa::Special::GridIdx) => (Value::I32(W::splat(grid_idx as i32)), None),
+            Instr::Barrier => (Value::None, None),
             Instr::DefineLocal { size, dtype } => {
                 // We allocate a new buffer on each DefineLocal, this assumes that such calls are
                 // never made inside a loop otherwise the previous value should be used.
@@ -297,13 +302,13 @@ pub fn eval_ssa<const N: usize>(
                     }
                 };
                 context.local_buffers.push(buf);
-                Value::LocalPtr(BufId::new(buf_id))
+                (Value::LocalPtr(BufId::new(buf_id)), None)
             }
         };
         if !value.is_none() {
             context.set(var_id, value)?;
         }
-        current_idx += 1
+        current_idx = jump_idx.unwrap_or(current_idx + 1);
     }
     Ok(())
 }
