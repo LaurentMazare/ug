@@ -201,8 +201,8 @@ pub fn eval_ssa<const N: usize>(
                 value
             }
             Instr::EndRange { start_idx } => {
-                current_idx = start_idx.as_usize().saturating_sub(1);
-                Value::None
+                current_idx = start_idx.as_usize();
+                continue; // A bit hacky but this is to avoid the current_idx += 1
             }
             Instr::Load { src, offset, dtype: _ } => {
                 let offset = context.get(*offset)?;
