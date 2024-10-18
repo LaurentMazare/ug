@@ -47,9 +47,9 @@ fn softmax() -> Result<()> {
 }
 
 fn main() -> Result<()> {
-    // eval_add()?;
-    // eval_dotprod()?;
-    // lower_add()?;
+    eval_add()?;
+    eval_dotprod()?;
+    lower_add()?;
     softmax()?;
     Ok(())
 }
