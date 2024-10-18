@@ -20,6 +20,7 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           command: check
+          args: -p ug
 
   test:
     name: Test Suite
@@ -37,7 +38,8 @@ jobs:
           override: true
       - uses: actions-rs/cargo@v1
         with:
-          command: test -p ug
+          command: test
+          args: -p ug
 
   fmt:
     name: Rustfmt
