@@ -1,11 +1,45 @@
 use anyhow::Result;
 use ug::lang::ssa;
 
-struct V(usize);
+struct V(ssa::VarId);
 
 impl std::fmt::Display for V {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "__var{}", self.0)
+        write!(f, "__var{}", self.0.as_usize())
+    }
+}
+
+struct C(ssa::Const);
+
+impl std::fmt::Display for C {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use std::num::FpCategory;
+        match self.0 {
+            ssa::Const::I32(v) => write!(f, "{v}"),
+            ssa::Const::F32(v) => match v.classify() {
+                // Using the INFINITY / NAN macros would feel a bit better but they don't
+                // seem available and I haven't find out how to include<cmath>.
+                FpCategory::Nan => write!(f, "0. / 0."),
+                FpCategory::Infinite if v > 0. => write!(f, "1. / 0."),
+                FpCategory::Infinite => write!(f, "-1. / 0."),
+                FpCategory::Zero | FpCategory::Normal | FpCategory::Subnormal => {
+                    // We use the debug trait rather than display for floats as the outcome
+                    // on f32::MIN would not round trip properly with display.
+                    write!(f, "{v:?}")
+                }
+            },
+        }
+    }
+}
+
+struct A(ssa::A);
+
+impl std::fmt::Display for A {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.0 {
+            ssa::A::Var(v) => V(v).fmt(f),
+            ssa::A::Const(c) => C(c).fmt(f),
+        }
     }
 }
 
@@ -39,14 +73,14 @@ pub fn gen<W: std::io::Write>(w: &mut W, func_name: &str, kernel: &ssa::Kernel) 
         }
         let is_last = arg_idx == args.len() - 1;
         let delim = if is_last { "" } else { "," };
-        writeln!(w, "  {} {}{delim}", D(dtype), V(var_id))?;
+        writeln!(w, "  {} {}{delim}", D(dtype), V(ssa::VarId::new(var_id)))?;
     }
     writeln!(w, ") {{")?;
 
     let mut depth = 0;
     for (var_id, instr) in kernel.instrs.iter().enumerate() {
         use ssa::Instr as I;
-        let var_id = V(var_id);
+        let var_id = V(ssa::VarId::new(var_id));
         let indent = " ".repeat(2 * depth + 2);
         match instr {
             I::DefineGlobal { index: _, dtype: _ } => {}
@@ -81,8 +115,8 @@ pub fn gen<W: std::io::Write>(w: &mut W, func_name: &str, kernel: &ssa::Kernel) 
                 writeln!(
                     w,
                     "{indent}for (int {var_id} = {}; {var_id} < {}; ++{var_id}) {{",
-                    V(lo.as_usize()),
-                    V(up.as_usize())
+                    A(*lo),
+                    A(*up)
                 )?;
                 depth += 1;
             }
@@ -95,38 +129,22 @@ pub fn gen<W: std::io::Write>(w: &mut W, func_name: &str, kernel: &ssa::Kernel) 
                 writeln!(w, "{indent}}}")?;
             }
             I::Load { src, offset, dtype } => {
-                writeln!(
-                    w,
-                    "{indent}{} {var_id} = {}[{}];",
-                    D(*dtype),
-                    V(src.as_usize()),
-                    V(offset.as_usize())
-                )?;
+                writeln!(w, "{indent}{} {var_id} = {}[{}];", D(*dtype), V(*src), A(*offset))?;
             }
             I::Assign { dst, src } => {
-                writeln!(w, "{indent}{} = {};", V(dst.as_usize()), V(src.as_usize()))?;
+                writeln!(w, "{indent}{} = {};", V(*dst), A(*src))?;
             }
             I::Store { dst, offset, value, dtype: _ } => {
-                writeln!(
-                    w,
-                    "{indent}{}[{}] = {};",
-                    V(dst.as_usize()),
-                    V(offset.as_usize()),
-                    V(value.as_usize())
-                )?;
+                writeln!(w, "{indent}{}[{}] = {};", V(*dst), A(*offset), A(*value))?;
             }
             I::Binary { op, lhs, rhs, dtype } => {
                 let op = match op {
-                    ssa::BinaryOp::Add => format!("{} + {}", V(lhs.as_usize()), V(rhs.as_usize())),
-                    ssa::BinaryOp::Mul => format!("{} * {}", V(lhs.as_usize()), V(rhs.as_usize())),
-                    ssa::BinaryOp::Sub => format!("{} - {}", V(lhs.as_usize()), V(rhs.as_usize())),
-                    ssa::BinaryOp::Div => format!("{} / {}", V(lhs.as_usize()), V(rhs.as_usize())),
-                    ssa::BinaryOp::Min => {
-                        format!("min({}, {})", V(lhs.as_usize()), V(rhs.as_usize()))
-                    }
-                    ssa::BinaryOp::Max => {
-                        format!("max({}, {})", V(lhs.as_usize()), V(rhs.as_usize()))
-                    }
+                    ssa::BinaryOp::Add => format!("{} + {}", A(*lhs), A(*rhs)),
+                    ssa::BinaryOp::Mul => format!("{} * {}", A(*lhs), A(*rhs)),
+                    ssa::BinaryOp::Sub => format!("{} - {}", A(*lhs), A(*rhs)),
+                    ssa::BinaryOp::Div => format!("{} / {}", A(*lhs), A(*rhs)),
+                    ssa::BinaryOp::Min => format!("min({}, {})", A(*lhs), A(*rhs)),
+                    ssa::BinaryOp::Max => format!("max({}, {})", A(*lhs), A(*rhs)),
                 };
                 writeln!(w, "{indent}{} {var_id} = {op};", D(*dtype),)?;
             }
@@ -135,7 +153,7 @@ pub fn gen<W: std::io::Write>(w: &mut W, func_name: &str, kernel: &ssa::Kernel) 
                     ssa::UnaryOp::Exp => "exp",
                     ssa::UnaryOp::Neg => "neg",
                 };
-                writeln!(w, "{indent}{} {var_id} = {op}({});", D(*dtype), V(arg.as_usize()),)?;
+                writeln!(w, "{indent}{} {var_id} = {op}({});", D(*dtype), A(*arg))?;
             }
             I::Special(ssa::Special::LocalIdx) => {
                 writeln!(w, "{indent}int {var_id} = threadIdx.x;")?

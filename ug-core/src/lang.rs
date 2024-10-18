@@ -552,6 +552,30 @@ pub mod ssa {
         GridIdx,
     }
 
+    #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+    pub enum A {
+        Var(VarId),
+        Const(Const),
+    }
+
+    impl From<VarId> for A {
+        fn from(value: VarId) -> Self {
+            Self::Var(value)
+        }
+    }
+
+    impl From<i32> for A {
+        fn from(value: i32) -> Self {
+            Self::Const(Const::I32(value))
+        }
+    }
+
+    impl From<f32> for A {
+        fn from(value: f32) -> Self {
+            Self::Const(Const::F32(value))
+        }
+    }
+
     #[derive(Debug, Clone, Serialize, Deserialize)]
     /// The loop start_idx and end_idx are using VarIds as these are derived from line numbers in
     /// the final SSA.
@@ -561,13 +585,13 @@ pub mod ssa {
         DefineLocal { size: usize, dtype: DType },
         Special(Special),
         Const(Const),
-        Unary { op: UnaryOp, arg: VarId, dtype: DType },
-        Binary { op: BinaryOp, lhs: VarId, rhs: VarId, dtype: DType },
-        Range { lo: VarId, up: VarId, end_idx: VarId },
-        Load { src: VarId, offset: VarId, dtype: DType },
-        Assign { dst: VarId, src: VarId },
+        Unary { op: UnaryOp, arg: A, dtype: DType },
+        Binary { op: BinaryOp, lhs: A, rhs: A, dtype: DType },
+        Range { lo: A, up: A, end_idx: VarId },
+        Load { src: VarId, offset: A, dtype: DType },
+        Assign { dst: VarId, src: A },
         EndRange { start_idx: VarId },
-        Store { dst: VarId, offset: VarId, value: VarId, dtype: DType },
+        Store { dst: VarId, offset: A, value: A, dtype: DType },
         Barrier,
     }
 
@@ -590,13 +614,21 @@ pub mod ssa {
                     }
                     Instr::Range { lo, up, end_idx: _ } => {
                         mults.push(mult);
-                        let lo = match self.instrs[lo.0] {
-                            Instr::Const(Const::I32(lo)) => lo,
-                            _ => anyhow::bail!("range lo is not a const"),
+                        let lo = match lo {
+                            A::Const(Const::I32(lo)) => *lo,
+                            A::Const(Const::F32(_)) => anyhow::bail!("range lo is not a const i32"),
+                            A::Var(lo) => match self.instrs[lo.0] {
+                                Instr::Const(Const::I32(lo)) => lo,
+                                _ => anyhow::bail!("range lo is not a const"),
+                            },
                         };
-                        let up = match self.instrs[up.0] {
-                            Instr::Const(Const::I32(up)) => up,
-                            _ => anyhow::bail!("range up is not a const"),
+                        let up = match up {
+                            A::Const(Const::I32(up)) => *up,
+                            A::Const(Const::F32(_)) => anyhow::bail!("range up is not a const i32"),
+                            A::Var(up) => match self.instrs[up.0] {
+                                Instr::Const(Const::I32(up)) => up,
+                                _ => anyhow::bail!("range lo is not a const"),
+                            },
                         };
                         mult *= (up - lo).max(0) as usize;
                     }

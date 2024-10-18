@@ -18,6 +18,10 @@ impl Id {
         ssa::VarId::new(self.0)
     }
 
+    pub(crate) fn to_a(self) -> ssa::A {
+        ssa::A::Var(ssa::VarId::new(self.0))
+    }
+
     pub(crate) fn from_varid(v: ssa::VarId) -> Id {
         Id(v.as_usize())
     }
@@ -46,8 +50,7 @@ impl Block {
         let up_i = Id::new();
         self.0.push((up_i, SsaI::Const(ssa::Const::I32(up))));
         let (range_id, erange_id) = (Id::new(), Id::new());
-        let range =
-            SsaI::Range { lo: lo_i.to_varid(), up: up_i.to_varid(), end_idx: erange_id.to_varid() };
+        let range = SsaI::Range { lo: lo_i.to_a(), up: up_i.to_a(), end_idx: erange_id.to_varid() };
         self.0.push((range_id, range));
         Range { range_id, erange_id }
     }
@@ -70,8 +73,8 @@ impl Block {
                 dst_id,
                 SsaI::Binary {
                     op: lang::BinaryOp::Add,
-                    lhs: src_id.to_varid(),
-                    rhs: cst_id.to_varid(),
+                    lhs: src_id.to_a(),
+                    rhs: cst_id.to_a(),
                     dtype: lang::DType::I32,
                 },
             ));
@@ -90,8 +93,8 @@ impl Block {
                 dst_id,
                 SsaI::Binary {
                     op: lang::BinaryOp::Mul,
-                    lhs: src_id.to_varid(),
-                    rhs: cst_id.to_varid(),
+                    lhs: src_id.to_a(),
+                    rhs: cst_id.to_a(),
                     dtype: lang::DType::I32,
                 },
             ));
@@ -101,7 +104,7 @@ impl Block {
 
     pub(crate) fn binop(&mut self, op: lang::BinaryOp, lhs: Id, rhs: Id, dtype: lang::DType) -> Id {
         let id = Id::new();
-        let op = SsaI::Binary { op, lhs: lhs.to_varid(), rhs: rhs.to_varid(), dtype };
+        let op = SsaI::Binary { op, lhs: lhs.to_a(), rhs: rhs.to_a(), dtype };
         self.0.push((id, op));
         id
     }
@@ -124,44 +127,51 @@ impl Block {
         }
         let mut instrs = vec![];
         for (_, instr) in self.0.iter() {
-            let get_id = |&id| {
+            let get_id = |id: ssa::VarId| {
                 per_id
                     .get(&Id::from_varid(id))
                     .copied()
                     .with_context(|| format!("id not found {id:?}"))
             };
+            let get_a = |a: ssa::A| {
+                let a = match a {
+                    ssa::A::Var(v) => ssa::A::Var(get_id(v)?),
+                    ssa::A::Const(c) => ssa::A::Const(c),
+                };
+                Ok::<_, anyhow::Error>(a)
+            };
             let instr = match instr {
                 SsaI::Store { dst, offset, value, dtype } => {
-                    let dst = get_id(dst)?;
-                    let offset = get_id(offset)?;
-                    let value = get_id(value)?;
+                    let dst = get_id(*dst)?;
+                    let offset = get_a(*offset)?;
+                    let value = get_a(*value)?;
                     SsaI::Store { dst, offset, value, dtype: *dtype }
                 }
                 SsaI::Range { lo, up, end_idx } => {
-                    let lo = get_id(lo)?;
-                    let up = get_id(up)?;
-                    let end_idx = get_id(end_idx)?;
+                    let lo = get_a(*lo)?;
+                    let up = get_a(*up)?;
+                    let end_idx = get_id(*end_idx)?;
                     SsaI::Range { lo, up, end_idx }
                 }
                 SsaI::Load { src, offset, dtype } => {
-                    let src = get_id(src)?;
-                    let offset = get_id(offset)?;
+                    let src = get_id(*src)?;
+                    let offset = get_a(*offset)?;
                     SsaI::Load { src, offset, dtype: *dtype }
                 }
                 SsaI::Const(c) => SsaI::Const(*c),
                 SsaI::Binary { op, lhs, rhs, dtype } => {
-                    let lhs = get_id(lhs)?;
-                    let rhs = get_id(rhs)?;
+                    let lhs = get_a(*lhs)?;
+                    let rhs = get_a(*rhs)?;
                     SsaI::Binary { op: *op, lhs, rhs, dtype: *dtype }
                 }
                 SsaI::Unary { op, arg, dtype } => {
-                    let arg = get_id(arg)?;
+                    let arg = get_a(*arg)?;
                     SsaI::Unary { op: *op, arg, dtype: *dtype }
                 }
                 SsaI::DefineAcc(c) => SsaI::DefineAcc(*c),
                 SsaI::Assign { dst, src } => {
-                    let dst = get_id(dst)?;
-                    let src = get_id(src)?;
+                    let dst = get_id(*dst)?;
+                    let src = get_a(*src)?;
                     SsaI::Assign { dst, src }
                 }
                 SsaI::Special(s) => SsaI::Special(*s),
@@ -173,7 +183,7 @@ impl Block {
                 }
                 SsaI::Barrier => SsaI::Barrier,
                 SsaI::EndRange { start_idx } => {
-                    let start_idx = get_id(start_idx)?;
+                    let start_idx = get_id(*start_idx)?;
                     SsaI::EndRange { start_idx }
                 }
             };
@@ -196,7 +206,7 @@ impl lang::ExprNode {
                 let (ptr_i, off_i, src_b) = src.lower(range_id, per_arg)?;
                 let instr = SsaI::Load {
                     src: ptr_i,
-                    offset: off_i,
+                    offset: off_i.into(),
                     dtype: ssa::DType::F32, // TODO(laurent): support other dtypes
                 };
                 let mut src_b = src_b.0;
@@ -216,7 +226,7 @@ impl lang::ExprNode {
                 let (arg_id, arg_b) = arg.lower(range_id, per_arg)?;
                 let instr = SsaI::Unary {
                     op: *op,
-                    arg: arg_id.to_varid(),
+                    arg: arg_id.to_a(),
                     dtype: ssa::DType::F32, // TODO(laurent): support other dtypes
                 };
                 let last = vec![(dst_id, instr)];
@@ -227,8 +237,8 @@ impl lang::ExprNode {
                 let (rhs_id, rhs_b) = rhs.lower(range_id, per_arg)?;
                 let instr = SsaI::Binary {
                     op: *op,
-                    lhs: lhs_id.to_varid(),
-                    rhs: rhs_id.to_varid(),
+                    lhs: lhs_id.to_a(),
+                    rhs: rhs_id.to_a(),
                     dtype: ssa::DType::F32, // TODO(laurent): support other dtypes
                 };
                 let last = vec![(dst_id, instr)];
@@ -260,8 +270,8 @@ impl lang::StridedSlice {
                 index_i,
                 SsaI::Binary {
                     op: ssa::BinaryOp::Add,
-                    lhs: range_id.to_varid(),
-                    rhs: off_i.to_varid(),
+                    lhs: range_id.to_a(),
+                    rhs: off_i.to_a(),
                     dtype: ssa::DType::I32,
                 },
             )];
@@ -275,8 +285,8 @@ impl lang::StridedSlice {
                     mul_i,
                     SsaI::Binary {
                         op: ssa::BinaryOp::Mul,
-                        lhs: range_id.to_varid(),
-                        rhs: stride_i.to_varid(),
+                        lhs: range_id.to_a(),
+                        rhs: stride_i.to_a(),
                         dtype: ssa::DType::I32,
                     },
                 ),
@@ -284,8 +294,8 @@ impl lang::StridedSlice {
                     index_i,
                     SsaI::Binary {
                         op: ssa::BinaryOp::Add,
-                        lhs: mul_i.to_varid(),
-                        rhs: off_i.to_varid(),
+                        lhs: mul_i.to_a(),
+                        rhs: off_i.to_a(),
                         dtype: ssa::DType::I32,
                     },
                 ),
@@ -306,8 +316,8 @@ impl lang::IndexExprNode {
                 let (rhs_id, rhs_b) = rhs.lower()?;
                 let instr = SsaI::Binary {
                     op: ssa::BinaryOp::Add,
-                    lhs: lhs_id.to_varid(),
-                    rhs: rhs_id.to_varid(),
+                    lhs: lhs_id.to_a(),
+                    rhs: rhs_id.to_a(),
                     dtype: ssa::DType::I32,
                 };
                 let last = vec![(dst_id, instr)];
@@ -318,8 +328,8 @@ impl lang::IndexExprNode {
                 let (rhs_id, rhs_b) = rhs.lower()?;
                 let instr = SsaI::Binary {
                     op: ssa::BinaryOp::Mul,
-                    lhs: lhs_id.to_varid(),
-                    rhs: rhs_id.to_varid(),
+                    lhs: lhs_id.to_a(),
+                    rhs: rhs_id.to_a(),
                     dtype: ssa::DType::I32,
                 };
                 let last = vec![(dst_id, instr)];
@@ -357,11 +367,8 @@ impl lang::Kernel {
             instrs.push((lo_id, SsaI::Const(ssa::Const::I32(0))));
 
             let (range_id, erange_id) = (Id::new(), Id::new());
-            let range = SsaI::Range {
-                lo: lo_id.to_varid(),
-                up: len_i.to_varid(),
-                end_idx: erange_id.to_varid(),
-            };
+            let range =
+                SsaI::Range { lo: lo_id.to_a(), up: len_i.to_a(), end_idx: erange_id.to_varid() };
             instrs.push((range_id, range));
 
             let (src_i, src_b) = src.lower(range_id, &per_arg)?;
@@ -370,8 +377,8 @@ impl lang::Kernel {
             instrs.extend_from_slice(dst_b.0.as_slice());
             let store = SsaI::Store {
                 dst: ptr_i,
-                offset: off_i,
-                value: src_i.to_varid(),
+                offset: off_i.into(),
+                value: src_i.to_a(),
                 dtype: ssa::DType::F32, // TODO(laurent): support other dtypes
             };
             instrs.push((Id::new(), store));

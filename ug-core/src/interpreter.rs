@@ -159,12 +159,21 @@ impl<'a, const N: usize> Context<'a, N> {
         Ok(())
     }
 
-    fn get(&mut self, id: VarId) -> Result<Value<N>> {
+    fn get_id(&self, id: VarId) -> Result<Value<N>> {
         let id = id.as_usize();
         match self.values.get(id) {
             None => anyhow::bail!("get out of bound {id:?}"),
             Some(dst) => Ok(*dst),
         }
+    }
+
+    fn get(&self, a: ssa::A) -> Result<Value<N>> {
+        let value = match a {
+            ssa::A::Var(id) => self.get_id(id)?,
+            ssa::A::Const(Const::F32(v)) => Value::F32(W::splat(v)),
+            ssa::A::Const(Const::I32(v)) => Value::I32(W::splat(v)),
+        };
+        Ok(value)
     }
 }
 
@@ -223,7 +232,7 @@ pub fn eval_ssa<const N: usize>(
             Instr::Load { src, offset, dtype: _ } => {
                 let offset = context.get(*offset)?;
                 let offset = offset.as_i32()?;
-                let buffer = match context.get(*src)? {
+                let buffer = match context.get_id(*src)? {
                     Value::Ptr(idx) => context.buffers[idx.as_usize()],
                     Value::LocalPtr(idx) => &context.local_buffers[idx.as_usize()],
                     _ => anyhow::bail!("unexpected dtype for src in load {src:?}"),
@@ -238,7 +247,7 @@ pub fn eval_ssa<const N: usize>(
                 let offset = context.get(*offset)?;
                 let offset = offset.as_i32()?;
                 let value = context.get(*value)?;
-                let buffer = match context.get(*dst)? {
+                let buffer = match context.get_id(*dst)? {
                     Value::Ptr(idx) => {
                         context.buffers.get_mut(idx.as_usize()).map(|v| v as &mut Buffer)
                     }

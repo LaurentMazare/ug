@@ -13,6 +13,10 @@ fn v(id: usize) -> ssa::VarId {
     ssa::VarId::new(id)
 }
 
+fn a(id: usize) -> ssa::A {
+    ssa::A::Var(v(id))
+}
+
 #[macro_export]
 macro_rules! py_bail {
     ($msg:literal $(,)?) => {
@@ -138,17 +142,17 @@ impl SsaInstr {
     #[staticmethod]
     fn range(lo: usize, up: usize, end_idx: usize) -> Self {
         let end_idx = ssa::VarId::new(end_idx);
-        Self(ssa::Instr::Range { lo: v(lo), up: v(up), end_idx })
+        Self(ssa::Instr::Range { lo: a(lo), up: a(up), end_idx })
     }
 
     #[staticmethod]
     fn load(src: usize, offset: usize, dtype: DType) -> Self {
-        Self(ssa::Instr::Load { src: v(src), offset: v(offset), dtype: dtype.0 })
+        Self(ssa::Instr::Load { src: v(src), offset: a(offset), dtype: dtype.0 })
     }
 
     #[staticmethod]
     fn store(dst: usize, offset: usize, value: usize, dtype: DType) -> Self {
-        Self(ssa::Instr::Store { dst: v(dst), offset: v(offset), value: v(value), dtype: dtype.0 })
+        Self(ssa::Instr::Store { dst: v(dst), offset: a(offset), value: a(value), dtype: dtype.0 })
     }
 
     #[staticmethod]
@@ -173,7 +177,7 @@ impl SsaInstr {
             "exp" => ssa::UnaryOp::Exp,
             _ => py_bail!("unknown unary op '{op}'"),
         };
-        Ok(Self(ssa::Instr::Unary { op, arg: v(arg), dtype: dtype.0 }))
+        Ok(Self(ssa::Instr::Unary { op, arg: a(arg), dtype: dtype.0 }))
     }
 
     #[staticmethod]
@@ -185,7 +189,7 @@ impl SsaInstr {
             "div" => ssa::BinaryOp::Div,
             _ => py_bail!("unknown binary op '{op}'"),
         };
-        Ok(Self(ssa::Instr::Binary { op, lhs: v(lhs), rhs: v(rhs), dtype: dtype.0 }))
+        Ok(Self(ssa::Instr::Binary { op, lhs: a(lhs), rhs: a(rhs), dtype: dtype.0 }))
     }
 }
 

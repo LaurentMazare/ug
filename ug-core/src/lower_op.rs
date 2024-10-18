@@ -79,7 +79,7 @@ impl lang::op::Ast {
                     Some(id) => *id,
                 };
                 let (off_i, off_b) = layout.lower(idxs)?;
-                let load = SsaI::Load { src: ptr_i, dtype, offset: off_i.to_varid() };
+                let load = SsaI::Load { src: ptr_i, dtype, offset: off_i.to_a() };
                 let mut off_b = off_b.0;
                 off_b.push((dst_i, load));
                 off_b
@@ -98,7 +98,7 @@ impl lang::op::Ast {
             A::Unary { op, arg } => {
                 let (arg_i, arg_b) = arg.lower(idxs, per_arg)?;
                 let mut arg_b = arg_b.0;
-                arg_b.push((dst_i, SsaI::Unary { op: *op, arg: arg_i.to_varid(), dtype }));
+                arg_b.push((dst_i, SsaI::Unary { op: *op, arg: arg_i.to_a(), dtype }));
                 arg_b
             }
             A::Reduce { op, arg, axis } => {
@@ -120,23 +120,21 @@ impl lang::op::Ast {
                 let src_id = Id::new();
                 let fold_op = SsaI::Binary {
                     op: fold_op,
-                    lhs: dst_i.to_varid(),
-                    rhs: arg_i.to_varid(),
+                    lhs: dst_i.to_a(),
+                    rhs: arg_i.to_a(),
                     dtype: self.dtype,
                 };
                 block.0.push((src_id, fold_op));
-                block.0.push((
-                    Id::new(),
-                    SsaI::Assign { dst: dst_i.to_varid(), src: src_id.to_varid() },
-                ));
+                block
+                    .0
+                    .push((Id::new(), SsaI::Assign { dst: dst_i.to_varid(), src: src_id.to_a() }));
                 block.end_range(r)?;
                 block.0
             }
             A::Binary { op, lhs, rhs } => {
                 let (lhs_i, lhs_b) = lhs.lower(idxs, per_arg)?;
                 let (rhs_i, rhs_b) = rhs.lower(idxs, per_arg)?;
-                let op =
-                    SsaI::Binary { op: *op, dtype, lhs: lhs_i.to_varid(), rhs: rhs_i.to_varid() };
+                let op = SsaI::Binary { op: *op, dtype, lhs: lhs_i.to_a(), rhs: rhs_i.to_a() };
                 [lhs_b.0.as_slice(), rhs_b.0.as_slice(), &[(dst_i, op)]].concat()
             }
         };
@@ -175,8 +173,8 @@ impl lang::op::Kernel {
             block.0.extend_from_slice(src_b.0.as_slice());
             let store = SsaI::Store {
                 dst: ptr_i,
-                offset: off_i.to_varid(),
-                value: src_i.to_varid(),
+                offset: off_i.to_a(),
+                value: src_i.to_a(),
                 dtype: value.dtype,
             };
             block.0.push((Id::new(), store));
