@@ -408,6 +408,7 @@ pub mod op {
         Unary { op: UnaryOp, arg: Ast },
         Binary { op: BinaryOp, lhs: Ast, rhs: Ast },
         Const(Const),
+        Broadcast { arg: Ast, axis: usize, dim_len: usize },
         // TODO(laurent): Add some reshape/transpose...
     }
 
@@ -415,6 +416,21 @@ pub mod op {
         let shape = layout.shape().clone();
         let inner = AstInner::Load { src, layout };
         Ok(Ast { inner: Arc::new(inner), dtype, shape })
+    }
+
+    pub fn broadcast(arg: Ast, axis: usize, dim_len: usize) -> Result<Ast> {
+        let dtype = arg.dtype;
+        let mut dims = arg.shape.dims().to_vec();
+        match dims.get(axis) {
+            None => anyhow::bail!("unexpected axis for reduce, {axis} {dims:?}"),
+            Some(1) => (),
+            Some(_) => {
+                anyhow::bail!("expected a len of 1 on the broadcasted dim {axis} {dims:?}")
+            }
+        };
+        dims[axis] = dim_len;
+        let inner = AstInner::Broadcast { arg, axis, dim_len };
+        Ok(Ast { inner: Arc::new(inner), dtype, shape: Shape::from_dims(&dims) })
     }
 
     pub fn unary(op: UnaryOp, arg: Ast) -> Result<Ast> {

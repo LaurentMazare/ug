@@ -84,6 +84,10 @@ impl lang::op::Ast {
                 off_b.push((dst_i, load));
                 off_b
             }
+            A::Broadcast { arg: _, axis: _, dim_len: _ } => {
+                todo!()
+                // arg.lower(idxs, per_arg)
+            }
             A::Const(c) => {
                 vec![(dst_i, SsaI::Const(*c))]
             }
