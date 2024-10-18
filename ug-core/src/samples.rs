@@ -4,19 +4,18 @@ pub mod ssa {
     pub fn simple_add(vec_len: usize) -> Kernel {
         let v = VarId::new;
         let a = |i| A::Var(VarId::new(i));
+        let i32 = |i| A::Const(Const::I32(i));
         let dtype = DType::I32;
         let instrs = vec![
             /* 0 */ I::DefineGlobal { index: 0, dtype: DType::PtrI32 },
             /* 1 */ I::DefineGlobal { index: 1, dtype: DType::PtrI32 },
             /* 2 */ I::DefineGlobal { index: 2, dtype: DType::PtrI32 },
-            /* 3 */ I::Const(Const::I32(0)),
-            /* 4 */ I::Const(Const::I32(vec_len as i32)),
-            /* 5 */ I::Range { lo: a(3), up: a(4), end_idx: v(10) },
-            /* 6 */ I::Load { src: v(1), offset: a(5), dtype },
-            /* 7 */ I::Load { src: v(2), offset: a(5), dtype },
-            /* 8 */ I::Binary { op: self::BinaryOp::Add, lhs: a(6), rhs: a(7), dtype },
-            /* 9 */ I::Store { dst: v(0), offset: a(5), value: a(8), dtype },
-            /* 10 */ I::EndRange { start_idx: v(5) },
+            /* 3 */ I::Range { lo: i32(0), up: i32(vec_len as i32), end_idx: v(8) },
+            /* 4 */ I::Load { src: v(1), offset: a(3), dtype },
+            /* 5 */ I::Load { src: v(2), offset: a(3), dtype },
+            /* 6 */ I::Binary { op: self::BinaryOp::Add, lhs: a(4), rhs: a(5), dtype },
+            /* 7 */ I::Store { dst: v(0), offset: a(3), value: a(6), dtype },
+            /* 8 */ I::EndRange { start_idx: v(3) },
         ];
         Kernel { instrs }
     }

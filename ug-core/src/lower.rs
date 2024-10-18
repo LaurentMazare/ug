@@ -45,12 +45,8 @@ impl Range {
 
 impl Block {
     pub(crate) fn range(&mut self, lo: i32, up: i32) -> Range {
-        let lo_i = Id::new();
-        self.0.push((lo_i, SsaI::Const(ssa::Const::I32(lo))));
-        let up_i = Id::new();
-        self.0.push((up_i, SsaI::Const(ssa::Const::I32(up))));
         let (range_id, erange_id) = (Id::new(), Id::new());
-        let range = SsaI::Range { lo: lo_i.to_a(), up: up_i.to_a(), end_idx: erange_id.to_varid() };
+        let range = SsaI::Range { lo: lo.into(), up: up.into(), end_idx: erange_id.to_varid() };
         self.0.push((range_id, range));
         Range { range_id, erange_id }
     }
@@ -67,14 +63,12 @@ impl Block {
             src_id
         } else {
             let dst_id = Id::new();
-            let cst_id = Id::new();
-            self.0.push((cst_id, SsaI::Const(v.into())));
             self.0.push((
                 dst_id,
                 SsaI::Binary {
                     op: lang::BinaryOp::Add,
                     lhs: src_id.to_a(),
-                    rhs: cst_id.to_a(),
+                    rhs: v.into(),
                     dtype: lang::DType::I32,
                 },
             ));
@@ -87,14 +81,12 @@ impl Block {
             src_id
         } else {
             let dst_id = Id::new();
-            let cst_id = Id::new();
-            self.0.push((cst_id, SsaI::Const(v.into())));
             self.0.push((
                 dst_id,
                 SsaI::Binary {
                     op: lang::BinaryOp::Mul,
                     lhs: src_id.to_a(),
-                    rhs: cst_id.to_a(),
+                    rhs: v.into(),
                     dtype: lang::DType::I32,
                 },
             ));
