@@ -100,6 +100,22 @@ pub enum Buffer {
     I32(Vec<i32>),
 }
 
+impl Buffer {
+    pub fn as_f32(&self) -> Result<&[f32]> {
+        match self {
+            Self::F32(data) => Ok(data.as_slice()),
+            _ => anyhow::bail!("unexpected buffer type"),
+        }
+    }
+
+    pub fn as_i32(&self) -> Result<&[i32]> {
+        match self {
+            Self::I32(data) => Ok(data.as_slice()),
+            _ => anyhow::bail!("unexpected buffer type"),
+        }
+    }
+}
+
 impl<const N: usize> Value<N> {
     pub fn is_none(&self) -> bool {
         matches!(self, Self::None)
