@@ -84,9 +84,13 @@ impl lang::op::Ast {
                 off_b.push((dst_i, load));
                 off_b
             }
-            A::Broadcast { arg: _, axis: _, dim_len: _ } => {
-                todo!()
-                // arg.lower(idxs, per_arg)
+            A::Broadcast { arg, axis, dim_len: _ } => {
+                let mut idxs = idxs.0.to_vec();
+                match idxs.get_mut(*axis) {
+                    None => anyhow::bail!("unexpected axis for broadcast, {axis} {:?}", self.shape),
+                    Some(v) => v.broadcast = true,
+                };
+                return arg.lower(&Indexes(idxs), per_arg);
             }
             A::Const(c) => {
                 vec![(dst_i, SsaI::Const(*c))]
