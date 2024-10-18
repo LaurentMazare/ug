@@ -187,7 +187,7 @@ pub fn eval_ssa<const N: usize>(
                         }
                     }
                     if all_jump != any_jump {
-                        anyhow::bail!("diverging threads in wrap")
+                        anyhow::bail!("diverging threads in warp")
                     }
                     if all_jump {
                         // Re-initialize to lo in case the loop is taken another time.
