@@ -54,7 +54,7 @@ pub mod op {
         let src = op::load(src_ptr.id(), layout.clone(), DType::F32)?;
         let src_max = op::reduce(op::ReduceOp::Max, src.clone(), 1)?;
         let src_max = op::broadcast(src_max, 1, dim2)?;
-        let diff = op::binary(op::BinaryOp::Sub, src_max, src)?;
+        let diff = op::binary(op::BinaryOp::Sub, src, src_max)?;
         let exp = op::unary(op::UnaryOp::Exp, diff)?;
         let sum_exp = op::reduce(op::ReduceOp::Sum, exp.clone(), 1)?;
         let sum_exp = op::broadcast(sum_exp, 1, dim2)?;

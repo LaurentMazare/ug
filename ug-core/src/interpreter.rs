@@ -189,15 +189,13 @@ pub fn eval_ssa<const N: usize>(
                     if all_jump != any_jump {
                         anyhow::bail!("diverging threads in wrap")
                     }
-                    let (v, jump_idx) = if all_jump {
+                    if all_jump {
                         // Re-initialize to lo in case the loop is taken another time.
-                        let lo = context.get(*lo)?;
-                        let lo = lo.as_i32()?;
-                        (lo.clone(), Some(end_idx.as_usize() + 1))
+                        context.set(var_id, Value::None)?;
+                        (Value::None, Some(end_idx.as_usize() + 1))
                     } else {
-                        (v, None)
-                    };
-                    (Value::I32(v), jump_idx)
+                        (Value::I32(v), None)
+                    }
                 }
             }
             Instr::Assign { dst, src } => {
@@ -223,6 +221,7 @@ pub fn eval_ssa<const N: usize>(
             Instr::Store { dst, offset, value, dtype: _ } => {
                 let offset = context.get(*offset)?;
                 let offset = offset.as_i32()?;
+                println!("{offset:?} {value:?}");
                 let value = context.get(*value)?;
                 let buffer = match context.get(*dst)? {
                     Value::Ptr(idx) => {

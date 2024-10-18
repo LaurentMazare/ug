@@ -107,7 +107,7 @@ impl lang::op::Ast {
                 let fold_op = op.fold_op();
                 let define_acc = SsaI::DefineAcc(init_value);
                 block.0.push((dst_i, define_acc));
-                let reduce_len = match self.shape.dims().get(*axis) {
+                let reduce_len = match arg.shape.dims().get(*axis) {
                     None => anyhow::bail!("unexpected axis for reduce, {axis} {:?}", self.shape),
                     Some(v) => *v,
                 };
