@@ -221,7 +221,6 @@ pub fn eval_ssa<const N: usize>(
             Instr::Store { dst, offset, value, dtype: _ } => {
                 let offset = context.get(*offset)?;
                 let offset = offset.as_i32()?;
-                println!("{offset:?} {value:?}");
                 let value = context.get(*value)?;
                 let buffer = match context.get(*dst)? {
                     Value::Ptr(idx) => {
