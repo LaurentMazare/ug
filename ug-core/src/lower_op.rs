@@ -43,9 +43,9 @@ impl lang::op::ReduceOp {
             (Self::Sum, DType::I32) => ssa::Const::I32(0i32),
             (Self::Prod, DType::F32) => ssa::Const::F32(1f32),
             (Self::Prod, DType::I32) => ssa::Const::I32(1i32),
-            (Self::Min, DType::F32) => ssa::Const::F32(f32::MAX),
+            (Self::Min, DType::F32) => ssa::Const::F32(f32::INFINITY),
             (Self::Min, DType::I32) => ssa::Const::I32(i32::MAX),
-            (Self::Max, DType::F32) => ssa::Const::F32(f32::MIN),
+            (Self::Max, DType::F32) => ssa::Const::F32(f32::NEG_INFINITY),
             (Self::Max, DType::I32) => ssa::Const::I32(i32::MIN),
             (_, DType::PtrF32) | (_, DType::PtrI32) => {
                 anyhow::bail!("incorrect dtype for reduce {dtype:?}")

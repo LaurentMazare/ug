@@ -61,9 +61,20 @@ pub fn gen<W: std::io::Write>(w: &mut W, func_name: &str, kernel: &ssa::Kernel) 
             I::DefineAcc(cst) | I::Const(cst) => match cst {
                 ssa::Const::I32(v) => writeln!(w, "{indent}int {var_id} = {v};")?,
                 ssa::Const::F32(v) => {
-                    // We use the debug trait rather than display for floats as the outcome
-                    // on f32::MIN would not round trip properly with display.
-                    writeln!(w, "{indent}float {var_id} = {v:?};")?
+                    use std::num::FpCategory;
+                    let v = match v.classify() {
+                        // Using the INFINITY / NAN macros would feel a bit better but they don't
+                        // seem available and I haven't find out how to include<cmath>.
+                        FpCategory::Nan => "0. / 0.".to_string(),
+                        FpCategory::Infinite if *v > 0. => "1. / 0.".to_string(),
+                        FpCategory::Infinite => "-1. / 0.".to_string(),
+                        FpCategory::Zero | FpCategory::Normal | FpCategory::Subnormal => {
+                            // We use the debug trait rather than display for floats as the outcome
+                            // on f32::MIN would not round trip properly with display.
+                            format!("{v:?}")
+                        }
+                    };
+                    writeln!(w, "{indent}float {var_id} = {v};")?
                 }
             },
             I::Range { lo, up, end_idx: _ } => {
