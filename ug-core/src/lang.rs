@@ -539,6 +539,11 @@ pub mod ssa {
         pub fn as_usize(&self) -> usize {
             self.0
         }
+
+        /// A placeholder value, never to be used for anything else.
+        pub fn null() -> Self {
+            Self(usize::MAX)
+        }
     }
 
     #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -548,6 +553,8 @@ pub mod ssa {
     }
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
+    /// The loop start_idx and end_idx are using VarIds as these are derived from line numbers in
+    /// the final SSA.
     pub enum Instr {
         DefineAcc(Const),
         DefineGlobal { index: usize, dtype: DType },
@@ -556,13 +563,10 @@ pub mod ssa {
         Const(Const),
         Unary { op: UnaryOp, arg: VarId, dtype: DType },
         Binary { op: BinaryOp, lhs: VarId, rhs: VarId, dtype: DType },
-        // TODO(laurent): using an absolute end_idx is convenient for jumping
-        // out of the loop but is problematic when combining blocks. Maybe we
-        // should switch to a relative one?
-        Range { lo: VarId, up: VarId, end_idx: usize },
+        Range { lo: VarId, up: VarId, end_idx: VarId },
         Load { src: VarId, offset: VarId, dtype: DType },
         Assign { dst: VarId, src: VarId },
-        EndRange { start_idx: usize },
+        EndRange { start_idx: VarId },
         Store { dst: VarId, offset: VarId, value: VarId, dtype: DType },
         Barrier,
     }

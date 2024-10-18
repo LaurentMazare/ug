@@ -132,11 +132,12 @@ impl SsaInstr {
 
     #[staticmethod]
     fn end_range(start_idx: usize) -> Self {
-        Self(ssa::Instr::EndRange { start_idx })
+        Self(ssa::Instr::EndRange { start_idx: ssa::VarId::new(start_idx) })
     }
 
     #[staticmethod]
     fn range(lo: usize, up: usize, end_idx: usize) -> Self {
+        let end_idx = ssa::VarId::new(end_idx);
         Self(ssa::Instr::Range { lo: v(lo), up: v(up), end_idx })
     }
 

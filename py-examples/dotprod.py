@@ -9,7 +9,7 @@ instrs = [
     Instr.define_global(2, ug.DType.ptr_f32),
     Instr.const_i32(0),
     Instr.const_i32(vec_len),
-    Instr.range(3, 4, 11),
+    Instr.range(3, 4, 10),
     Instr.load(1, 5, ug.DType.f32),
     Instr.load(2, 5, ug.DType.f32),
     Instr.binary("add", 6, 7, ug.DType.f32),

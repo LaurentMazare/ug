@@ -29,13 +29,13 @@ pub(crate) struct Block(pub(crate) Vec<(Id, SsaI)>);
 
 #[derive(Debug)]
 pub(crate) struct Range {
-    id: Id,
-    start_line_idx: usize,
+    range_id: Id,
+    erange_id: Id,
 }
 
 impl Range {
     pub(crate) fn id(&self) -> Id {
-        self.id
+        self.range_id
     }
 }
 
@@ -45,22 +45,16 @@ impl Block {
         self.0.push((lo_i, SsaI::Const(ssa::Const::I32(lo))));
         let up_i = Id::new();
         self.0.push((up_i, SsaI::Const(ssa::Const::I32(up))));
-        let range_i = Id::new();
-        let range = SsaI::Range { lo: lo_i.to_varid(), up: up_i.to_varid(), end_idx: 42 };
-        let start_line_idx = self.0.len();
-        self.0.push((range_i, range));
-        Range { id: range_i, start_line_idx }
+        let (range_id, erange_id) = (Id::new(), Id::new());
+        let range =
+            SsaI::Range { lo: lo_i.to_varid(), up: up_i.to_varid(), end_idx: erange_id.to_varid() };
+        self.0.push((range_id, range));
+        Range { range_id, erange_id }
     }
 
     pub(crate) fn end_range(&mut self, range: Range) -> Result<()> {
-        let erange = ssa::Instr::EndRange { start_idx: range.start_line_idx };
-        let end_line_idx = self.0.len();
-        self.0.push((Id::new(), erange));
-        if let SsaI::Range { end_idx, .. } = &mut self.0[range.start_line_idx].1 {
-            *end_idx = end_line_idx + 1
-        } else {
-            anyhow::bail!("error generating range")
-        }
+        let erange = ssa::Instr::EndRange { start_idx: range.range_id.to_varid() };
+        self.0.push((range.erange_id, erange));
         Ok(())
     }
 
@@ -121,11 +115,15 @@ impl Block {
         Self(instrs)
     }
 
+    // This switches all the VarId to be in line number rather than "random" unique identifiers.
     pub(crate) fn relocate(&self) -> Result<Vec<SsaI>> {
         let mut per_id = std::collections::HashMap::new();
-        let mut instrs = vec![];
-        for (line_idx, (id, instr)) in self.0.iter().enumerate() {
+        for (line_idx, (id, _)) in self.0.iter().enumerate() {
             let line_idx = ssa::VarId::new(line_idx);
+            per_id.insert(id, line_idx);
+        }
+        let mut instrs = vec![];
+        for (_, instr) in self.0.iter() {
             let get_id = |&id| {
                 per_id
                     .get(&Id::from_varid(id))
@@ -142,7 +140,8 @@ impl Block {
                 SsaI::Range { lo, up, end_idx } => {
                     let lo = get_id(lo)?;
                     let up = get_id(up)?;
-                    SsaI::Range { lo, up, end_idx: *end_idx }
+                    let end_idx = get_id(end_idx)?;
+                    SsaI::Range { lo, up, end_idx }
                 }
                 SsaI::Load { src, offset, dtype } => {
                     let src = get_id(src)?;
@@ -173,9 +172,11 @@ impl Block {
                     SsaI::DefineGlobal { index: *index, dtype: *dtype }
                 }
                 SsaI::Barrier => SsaI::Barrier,
-                SsaI::EndRange { start_idx } => SsaI::EndRange { start_idx: *start_idx },
+                SsaI::EndRange { start_idx } => {
+                    let start_idx = get_id(start_idx)?;
+                    SsaI::EndRange { start_idx }
+                }
             };
-            per_id.insert(id, line_idx);
             instrs.push(instr)
         }
         Ok(instrs)
@@ -355,9 +356,12 @@ impl lang::Kernel {
             let lo_id = Id::new();
             instrs.push((lo_id, SsaI::Const(ssa::Const::I32(0))));
 
-            let range_id = Id::new();
-            let range = SsaI::Range { lo: lo_id.to_varid(), up: len_i.to_varid(), end_idx: 42 };
-            let start_line_idx = instrs.len();
+            let (range_id, erange_id) = (Id::new(), Id::new());
+            let range = SsaI::Range {
+                lo: lo_id.to_varid(),
+                up: len_i.to_varid(),
+                end_idx: erange_id.to_varid(),
+            };
             instrs.push((range_id, range));
 
             let (src_i, src_b) = src.lower(range_id, &per_arg)?;
@@ -372,12 +376,8 @@ impl lang::Kernel {
             };
             instrs.push((Id::new(), store));
 
-            let erange = ssa::Instr::EndRange { start_idx: start_line_idx };
-            let end_line_idx = instrs.len();
-            instrs.push((Id::new(), erange));
-            if let SsaI::Range { end_idx, .. } = &mut instrs[start_line_idx].1 {
-                *end_idx = end_line_idx + 1
-            }
+            let erange = ssa::Instr::EndRange { start_idx: range_id.to_varid() };
+            instrs.push((erange_id, erange));
         }
         Ok(Block(instrs))
     }
