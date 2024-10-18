@@ -152,10 +152,14 @@ impl lang::op::Kernel {
                 None => anyhow::bail!("unknown arg {dst:?}"),
                 Some(id) => *id,
             };
-            let num_el = layout.num_elements();
-            let r = block.range(0, num_el as i32);
+            let mut ranges = vec![];
+            for &len in layout.dims().iter() {
+                let r = block.range(0, len as i32);
+                ranges.push(r)
+            }
+            let idxs =
+                Indexes(ranges.iter().map(|v| Index { id: v.id(), broadcast: false }).collect());
 
-            let idxs = Indexes(vec![Index { id: r.id(), broadcast: false }]);
             let (off_i, off_b) = layout.lower(&idxs)?;
             block.0.extend_from_slice(off_b.0.as_slice());
 
@@ -168,7 +172,9 @@ impl lang::op::Kernel {
                 dtype: value.dtype,
             };
             block.0.push((Id::new(), store));
-            block.end_range(r)?;
+            for r in ranges.into_iter().rev() {
+                block.end_range(r)?;
+            }
         }
         Ok(block)
     }
