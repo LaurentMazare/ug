@@ -190,7 +190,7 @@ pub fn eval_ssa<const N: usize>(
                         anyhow::bail!("diverging threads in wrap")
                     }
                     if all_jump {
-                        current_idx = end_idx.as_usize() + 1
+                        current_idx = end_idx.as_usize()
                     }
                     Value::I32(v)
                 }

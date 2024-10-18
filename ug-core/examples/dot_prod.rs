@@ -42,6 +42,7 @@ fn softmax() -> Result<()> {
     let mut a = ug::interpreter::Buffer::F32(vec![0., 1., 2., 3., 2., 1., 2., 1.]);
     let mut b = ug::interpreter::Buffer::F32(vec![0f32; 8]);
     ug::interpreter::eval_ssa::<1>(&ssa_kernel, vec![&mut a, &mut b], &[], 0)?;
+    println!("a: {a:?}\nb: {b:?}");
     Ok(())
 }
 
