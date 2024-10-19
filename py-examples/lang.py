@@ -1,11 +1,11 @@
 import ug
-from ug import IndexExpr as I, Expr as E, Ops as O, Kernel
+from ug.lang import Arg, IndexExpr as I, Expr as E, Ops as O, Kernel
 
 BLOCK_SIZE = 32
 
-lhs_ptr = ug.Arg.ptr_f32()
-rhs_ptr = ug.Arg.ptr_f32()
-dst_ptr = ug.Arg.ptr_f32()
+lhs_ptr = Arg.ptr_f32()
+rhs_ptr = Arg.ptr_f32()
+dst_ptr = Arg.ptr_f32()
 
 offset = I.program_id() * I.cst(BLOCK_SIZE)
 stride = I.cst(1)

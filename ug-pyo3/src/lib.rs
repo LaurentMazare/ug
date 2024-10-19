@@ -401,15 +401,18 @@ fn mod_(py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     ssa.add_class::<SsaKernel>()?;
     ssa.add_class::<SsaInstr>()?;
 
+    let lang = PyModule::new_bound(py, "lang")?;
+    lang.add_class::<Kernel>()?;
+    lang.add_class::<Ops>()?;
+    lang.add_class::<Arg>()?;
+    lang.add_class::<Expr>()?;
+    lang.add_class::<IndexExpr>()?;
+
     m.add_class::<Device>()?;
     m.add_class::<DType>()?;
     m.add_class::<Func>()?;
     m.add_class::<Slice>()?;
-    m.add_class::<Kernel>()?;
-    m.add_class::<Ops>()?;
-    m.add_class::<Arg>()?;
-    m.add_class::<Expr>()?;
-    m.add_class::<IndexExpr>()?;
     m.add_submodule(&ssa)?;
+    m.add_submodule(&lang)?;
     Ok(())
 }
