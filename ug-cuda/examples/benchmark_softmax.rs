@@ -25,12 +25,11 @@ fn slow_softmax(n_rows: usize, n_cols: usize) -> Result<()> {
         device.synchronize()?;
         Ok::<_, anyhow::Error>(())
     };
-    println!("warmup");
+    println!("warmup {:?}", kernel.flops_mem_per_thread()?);
     run()?;
     let start_time = std::time::Instant::now();
     let mut n_reps = 0;
     loop {
-        println!("here");
         run()?;
         n_reps += 1;
         let elapsed = start_time.elapsed().as_secs_f64();
