@@ -95,6 +95,137 @@ impl DType {
     }
 }
 
+mod op {
+    use super::w;
+    use pyo3::prelude::*;
+    use ug::lang::op;
+
+    #[pyclass]
+    #[derive(Clone)]
+    pub struct Arg(ug::lang::Arg);
+
+    #[pymethods]
+    impl Arg {
+        #[staticmethod]
+        fn ptr_f32() -> Self {
+            Self(ug::lang::Arg::new(ug::lang::DType::PtrF32))
+        }
+
+        #[staticmethod]
+        fn ptr_i32() -> Self {
+            Self(ug::lang::Arg::new(ug::lang::DType::PtrI32))
+        }
+
+        #[staticmethod]
+        fn i32() -> Self {
+            Self(ug::lang::Arg::new(ug::lang::DType::I32))
+        }
+
+        fn __str__(&self) -> String {
+            format!("{:?}", self.0)
+        }
+    }
+
+    #[pyclass]
+    #[derive(Clone)]
+    pub struct Ast(op::Ast);
+
+    #[pymethods]
+    impl Ast {
+        #[staticmethod]
+        fn i32(v: i32) -> Self {
+            Ast(op::cst(v))
+        }
+
+        #[staticmethod]
+        fn f32(v: f32) -> Self {
+            Ast(op::cst(v))
+        }
+
+        fn __add__(&self, rhs: &Self) -> PyResult<Self> {
+            let ast = op::binary(op::BinaryOp::Add, self.0.clone(), rhs.0.clone()).map_err(w)?;
+            Ok(Ast(ast))
+        }
+
+        fn __sub__(&self, rhs: &Self) -> PyResult<Self> {
+            let ast = op::binary(op::BinaryOp::Sub, self.0.clone(), rhs.0.clone()).map_err(w)?;
+            Ok(Ast(ast))
+        }
+
+        fn __mul__(&self, rhs: &Self) -> PyResult<Self> {
+            let ast = op::binary(op::BinaryOp::Mul, self.0.clone(), rhs.0.clone()).map_err(w)?;
+            Ok(Ast(ast))
+        }
+
+        fn __truediv__(&self, rhs: &Self) -> PyResult<Self> {
+            let ast = op::binary(op::BinaryOp::Div, self.0.clone(), rhs.0.clone()).map_err(w)?;
+            Ok(Ast(ast))
+        }
+
+        fn __neg__(&self) -> PyResult<Self> {
+            let ast = op::unary(op::UnaryOp::Neg, self.0.clone()).map_err(w)?;
+            Ok(Ast(ast))
+        }
+
+        fn exp(&self) -> PyResult<Self> {
+            let ast = op::unary(op::UnaryOp::Exp, self.0.clone()).map_err(w)?;
+            Ok(Ast(ast))
+        }
+
+        fn sum(&self, axis: usize) -> PyResult<Self> {
+            let ast = op::reduce(op::ReduceOp::Sum, self.0.clone(), axis).map_err(w)?;
+            Ok(Ast(ast))
+        }
+
+        fn prod(&self, axis: usize) -> PyResult<Self> {
+            let ast = op::reduce(op::ReduceOp::Prod, self.0.clone(), axis).map_err(w)?;
+            Ok(Ast(ast))
+        }
+
+        fn min(&self, axis: usize) -> PyResult<Self> {
+            let ast = op::reduce(op::ReduceOp::Min, self.0.clone(), axis).map_err(w)?;
+            Ok(Ast(ast))
+        }
+
+        fn max(&self, axis: usize) -> PyResult<Self> {
+            let ast = op::reduce(op::ReduceOp::Max, self.0.clone(), axis).map_err(w)?;
+            Ok(Ast(ast))
+        }
+
+        fn shape(&self, py: Python) -> PyObject {
+            let shape = self.0.shape().dims().to_vec();
+            pyo3::types::PyTuple::new_bound(py, shape).into_py(py)
+        }
+    }
+
+    #[pyclass]
+    #[derive(Clone)]
+    pub struct Store(op::Store);
+
+    #[pyclass]
+    #[derive(Clone)]
+    pub struct Kernel(op::Kernel);
+
+    #[pymethods]
+    impl Kernel {
+        #[new]
+        fn new(name: String, args: Vec<Arg>, ops: Vec<Store>) -> Self {
+            let args = args.into_iter().map(|v| v.0).collect();
+            let ops = ops.into_iter().map(|v| v.0).collect();
+            Self(op::Kernel::new(name, args, ops))
+        }
+
+        fn __str__(&self) -> String {
+            format!("{:?}", self.0)
+        }
+
+        fn lower(&self) -> PyResult<super::ssa::Kernel> {
+            let ssa = self.0.lower().map_err(w)?;
+            Ok(super::ssa::Kernel(ssa))
+        }
+    }
+}
+
 mod ssa {
     use super::{w, DType};
     use pyo3::prelude::*;
@@ -418,11 +549,18 @@ fn mod_(py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     lang.add_class::<Expr>()?;
     lang.add_class::<IndexExpr>()?;
 
+    let op = PyModule::new_bound(py, "op")?;
+    op.add_class::<op::Arg>()?;
+    op.add_class::<op::Ast>()?;
+    op.add_class::<op::Kernel>()?;
+    op.add_class::<op::Store>()?;
+
     m.add_class::<Device>()?;
     m.add_class::<DType>()?;
     m.add_class::<Func>()?;
     m.add_class::<Slice>()?;
     m.add_submodule(&ssa)?;
     m.add_submodule(&lang)?;
+    m.add_submodule(&op)?;
     Ok(())
 }
