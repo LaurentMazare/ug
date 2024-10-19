@@ -132,24 +132,6 @@ mod op {
 
     #[pymethods]
     impl Ast {
-        #[staticmethod]
-        fn load(arg: Arg, shape: Vec<usize>) -> PyResult<Self> {
-            let layout = op::Layout::from_shape(shape);
-            let dtype = arg.0.dtype();
-            let st = op::load(arg.0.id(), layout, dtype).map_err(w)?;
-            Ok(Self(st))
-        }
-
-        #[staticmethod]
-        fn i32(v: i32) -> Self {
-            Self(op::cst(v))
-        }
-
-        #[staticmethod]
-        fn f32(v: f32) -> Self {
-            Self(op::cst(v))
-        }
-
         fn __add__(&self, rhs: &Self) -> PyResult<Self> {
             let ast = op::binary(op::BinaryOp::Add, self.0.clone(), rhs.0.clone()).map_err(w)?;
             Ok(Self(ast))
@@ -209,6 +191,29 @@ mod op {
             let shape = self.0.shape().dims().to_vec();
             pyo3::types::PyTuple::new_bound(py, shape).into_py(py)
         }
+    }
+
+    #[pyfunction]
+    pub fn load(arg: Arg, shape: Vec<usize>) -> PyResult<Ast> {
+        use ug::lang::DType;
+        let layout = op::Layout::from_shape(shape);
+        let dtype = match arg.0.dtype() {
+            DType::PtrF32 => DType::F32,
+            DType::PtrI32 => DType::I32,
+            DType::F32 | DType::I32 => py_bail!("unexpected dtype for load {:?}", arg.0),
+        };
+        let st = op::load(arg.0.id(), layout, dtype).map_err(w)?;
+        Ok(Ast(st))
+    }
+
+    #[pyfunction]
+    pub fn i32(v: i32) -> Ast {
+        Ast(op::cst(v))
+    }
+
+    #[pyfunction]
+    pub fn f32(v: f32) -> Ast {
+        Ast(op::cst(v))
     }
 
     #[pyclass]
@@ -577,6 +582,9 @@ fn mod_(py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     op.add_class::<op::Ast>()?;
     op.add_class::<op::Kernel>()?;
     op.add_class::<op::Store>()?;
+    op.add_function(wrap_pyfunction!(op::i32, m)?)?;
+    op.add_function(wrap_pyfunction!(op::f32, m)?)?;
+    op.add_function(wrap_pyfunction!(op::load, m)?)?;
 
     m.add_class::<Device>()?;
     m.add_class::<DType>()?;

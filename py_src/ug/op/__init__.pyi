@@ -19,6 +19,10 @@ class Arg:
         pass
 
 class Ast:
+    def broadcast(self, axis, dim_len):
+        """ """
+        pass
+
     def exp(self):
         """ """
         pass
@@ -30,6 +34,11 @@ class Ast:
 
     @staticmethod
     def i32(v):
+        """ """
+        pass
+
+    @staticmethod
+    def load(arg, shape):
         """ """
         pass
 
@@ -62,4 +71,5 @@ class Kernel:
         pass
 
 class Store:
-    pass
+    def __init__(dst, shape, value):
+        pass
