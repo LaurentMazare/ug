@@ -142,7 +142,7 @@ impl From<i32> for ScalarConst {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Arg {
     id: ArgId,
-    type_: DType,
+    dtype: DType,
 }
 
 impl PartialOrd for Arg {
@@ -158,17 +158,17 @@ impl Ord for Arg {
 }
 
 impl Arg {
-    pub fn new(type_: DType) -> Self {
+    pub fn new(dtype: DType) -> Self {
         let id = ArgId::new();
-        Self { id, type_ }
+        Self { id, dtype }
     }
 
     pub fn id(&self) -> ArgId {
         self.id
     }
 
-    pub fn type_(&self) -> DType {
-        self.type_
+    pub fn dtype(&self) -> DType {
+        self.dtype
     }
 }
 

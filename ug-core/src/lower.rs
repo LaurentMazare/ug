@@ -346,7 +346,7 @@ impl lang::Kernel {
         let mut per_arg = std::collections::HashMap::new();
         for (index, arg) in self.args.iter().enumerate() {
             let id = Id::new();
-            let dtype = arg.type_();
+            let dtype = arg.dtype();
             instrs.push((id, SsaI::DefineGlobal { index, dtype }));
             per_arg.insert(arg.id(), id.to_varid());
         }

@@ -133,63 +133,76 @@ mod op {
     #[pymethods]
     impl Ast {
         #[staticmethod]
+        fn load(arg: Arg, shape: Vec<usize>) -> PyResult<Self> {
+            let layout = op::Layout::from_shape(shape);
+            let dtype = arg.0.dtype();
+            let st = op::load(arg.0.id(), layout, dtype).map_err(w)?;
+            Ok(Self(st))
+        }
+
+        #[staticmethod]
         fn i32(v: i32) -> Self {
-            Ast(op::cst(v))
+            Self(op::cst(v))
         }
 
         #[staticmethod]
         fn f32(v: f32) -> Self {
-            Ast(op::cst(v))
+            Self(op::cst(v))
         }
 
         fn __add__(&self, rhs: &Self) -> PyResult<Self> {
             let ast = op::binary(op::BinaryOp::Add, self.0.clone(), rhs.0.clone()).map_err(w)?;
-            Ok(Ast(ast))
+            Ok(Self(ast))
         }
 
         fn __sub__(&self, rhs: &Self) -> PyResult<Self> {
             let ast = op::binary(op::BinaryOp::Sub, self.0.clone(), rhs.0.clone()).map_err(w)?;
-            Ok(Ast(ast))
+            Ok(Self(ast))
         }
 
         fn __mul__(&self, rhs: &Self) -> PyResult<Self> {
             let ast = op::binary(op::BinaryOp::Mul, self.0.clone(), rhs.0.clone()).map_err(w)?;
-            Ok(Ast(ast))
+            Ok(Self(ast))
         }
 
         fn __truediv__(&self, rhs: &Self) -> PyResult<Self> {
             let ast = op::binary(op::BinaryOp::Div, self.0.clone(), rhs.0.clone()).map_err(w)?;
-            Ok(Ast(ast))
+            Ok(Self(ast))
         }
 
         fn __neg__(&self) -> PyResult<Self> {
             let ast = op::unary(op::UnaryOp::Neg, self.0.clone()).map_err(w)?;
-            Ok(Ast(ast))
+            Ok(Self(ast))
+        }
+
+        fn broadcast(&self, axis: usize, dim_len: usize) -> PyResult<Self> {
+            let ast = op::broadcast(self.0.clone(), axis, dim_len).map_err(w)?;
+            Ok(Self(ast))
         }
 
         fn exp(&self) -> PyResult<Self> {
             let ast = op::unary(op::UnaryOp::Exp, self.0.clone()).map_err(w)?;
-            Ok(Ast(ast))
+            Ok(Self(ast))
         }
 
         fn sum(&self, axis: usize) -> PyResult<Self> {
             let ast = op::reduce(op::ReduceOp::Sum, self.0.clone(), axis).map_err(w)?;
-            Ok(Ast(ast))
+            Ok(Self(ast))
         }
 
         fn prod(&self, axis: usize) -> PyResult<Self> {
             let ast = op::reduce(op::ReduceOp::Prod, self.0.clone(), axis).map_err(w)?;
-            Ok(Ast(ast))
+            Ok(Self(ast))
         }
 
         fn min(&self, axis: usize) -> PyResult<Self> {
             let ast = op::reduce(op::ReduceOp::Min, self.0.clone(), axis).map_err(w)?;
-            Ok(Ast(ast))
+            Ok(Self(ast))
         }
 
         fn max(&self, axis: usize) -> PyResult<Self> {
             let ast = op::reduce(op::ReduceOp::Max, self.0.clone(), axis).map_err(w)?;
-            Ok(Ast(ast))
+            Ok(Self(ast))
         }
 
         fn shape(&self, py: Python) -> PyObject {
@@ -201,6 +214,16 @@ mod op {
     #[pyclass]
     #[derive(Clone)]
     pub struct Store(op::Store);
+
+    #[pymethods]
+    impl Store {
+        #[new]
+        fn new(dst: Arg, shape: Vec<usize>, value: Ast) -> PyResult<Self> {
+            let layout = op::Layout::from_shape(shape);
+            let st = op::store(dst.0.id(), layout, value.0.clone()).map_err(w)?;
+            Ok(Self(st))
+        }
+    }
 
     #[pyclass]
     #[derive(Clone)]

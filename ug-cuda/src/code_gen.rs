@@ -150,7 +150,7 @@ pub fn gen<W: std::io::Write>(w: &mut W, func_name: &str, kernel: &ssa::Kernel) 
             }
             I::Unary { op, arg, dtype } => {
                 let op = match op {
-                    ssa::UnaryOp::Exp => "exp",
+                    ssa::UnaryOp::Exp => "__expf",
                     ssa::UnaryOp::Neg => "neg",
                 };
                 writeln!(w, "{indent}{} {var_id} = {op}({});", D(*dtype), A(*arg))?;
