@@ -8,7 +8,8 @@ const N_ROWS: usize = 4096;
 fn slow_softmax(n_rows: usize, n_cols: usize) -> Result<()> {
     let mut rng = rand::thread_rng();
     let kernel = ug::samples::op::softmax(n_rows, n_cols)?;
-    let kernel = kernel.lower(&Default::default())?;
+    let lower_opts = ug::lower_op::Opts::default().with_global(true);
+    let kernel = kernel.lower(&lower_opts)?;
     let mut buf = vec![];
     ug_cuda::code_gen::gen(&mut buf, "dotprod", &kernel)?;
     let cuda_code = String::from_utf8(buf)?;
@@ -21,7 +22,15 @@ fn slow_softmax(n_rows: usize, n_cols: usize) -> Result<()> {
     let arg = device.slice_from_values(&arg)?;
     let run = || {
         unsafe {
-            func.launch2(arg.slice(), res.slice(), cudarc::driver::LaunchConfig::for_num_elems(1))?
+            func.launch2(
+                arg.slice(),
+                res.slice(),
+                cudarc::driver::LaunchConfig {
+                    grid_dim: (n_rows as u32, 1, 1),
+                    block_dim: (1, 1, 1),
+                    shared_mem_bytes: 0,
+                },
+            )?
         }
         device.synchronize()?;
         Ok::<_, anyhow::Error>(())
@@ -36,7 +45,7 @@ fn slow_softmax(n_rows: usize, n_cols: usize) -> Result<()> {
         let elapsed = start_time.elapsed().as_secs_f64();
         if elapsed > 2. {
             println!(
-                "rows: {n_rows:4}    cols: {n_cols:4}    reps: {n_reps:4}    time-per-rep: {:.2}",
+                "rows: {n_rows:4}    cols: {n_cols:4}    reps: {n_reps:4}    time-per-rep: {:.2}s",
                 elapsed / (n_reps as f64)
             );
             break;

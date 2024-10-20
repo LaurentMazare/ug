@@ -3,19 +3,30 @@ use crate::lower::{Block, Id};
 use anyhow::Result;
 use ssa::{DType, Instr as SsaI};
 
+// Default for bool is false.
 #[derive(Debug, Clone, Default)]
 pub struct Opts {
     local: Option<usize>,
+    global: bool,
 }
 
 impl Opts {
-    pub fn with_local(mut self, local: usize) -> Self {
-        self.local = Some(local);
+    pub fn with_global(mut self, global: bool) -> Self {
+        self.global = global;
+        self
+    }
+
+    pub fn with_local(mut self, local: Option<usize>) -> Self {
+        self.local = local;
         self
     }
 
     pub fn local(&self) -> Option<usize> {
         self.local
+    }
+
+    pub fn global(&self) -> bool {
+        self.global
     }
 }
 
@@ -159,9 +170,11 @@ impl lang::op::Ast {
 }
 
 impl lang::op::Kernel {
-    fn lower_b(&self, _opts: &Opts) -> Result<Block> {
+    fn lower_b(&self, opts: &Opts) -> Result<Block> {
         let mut block = Block::empty();
         let mut per_arg = std::collections::HashMap::new();
+        let grid_id = Id::new();
+        block.0.push((grid_id, SsaI::Special(ssa::Special::GridIdx)));
         for (index, arg) in self.args.iter().enumerate() {
             let id = Id::new();
             let dtype = arg.dtype();
@@ -174,13 +187,20 @@ impl lang::op::Kernel {
                 None => anyhow::bail!("unknown arg {dst:?}"),
                 Some(id) => *id,
             };
-            let mut ranges = vec![];
-            for &len in layout.dims().iter() {
-                let r = block.range(0, len as i32);
-                ranges.push(r)
+            let mut ranges = Vec::with_capacity(layout.rank());
+            let mut idxs = Vec::with_capacity(layout.rank());
+            for (dim_idx, &len) in layout.dims().iter().enumerate() {
+                let id = if dim_idx == 0 && opts.global {
+                    grid_id
+                } else {
+                    let r = block.range(0, len as i32);
+                    let id = r.id();
+                    ranges.push(r);
+                    id
+                };
+                idxs.push(Index { id, broadcast: false });
             }
-            let idxs =
-                Indexes(ranges.iter().map(|v| Index { id: v.id(), broadcast: false }).collect());
+            let idxs = Indexes(idxs);
 
             let (off_i, off_b) = layout.lower(&idxs)?;
             block.0.extend_from_slice(off_b.0.as_slice());
