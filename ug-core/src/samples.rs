@@ -1,5 +1,7 @@
 pub mod ssa {
+    use crate::lang::ssa;
     use crate::lang::ssa::{BinaryOp, Const, DType, Instr as I, Kernel, VarId, A};
+    use anyhow::Result;
 
     pub fn simple_add(vec_len: usize) -> Kernel {
         let v = VarId::new;
@@ -41,6 +43,28 @@ pub mod ssa {
             /* 13*/ I::Store { dst: v(0), offset: a(3), value: a(5), dtype },
         ];
         Kernel { instrs }
+    }
+
+    pub fn softmax(_dim1: usize, dim2: usize) -> Result<Kernel> {
+        let mut b = crate::lower::Block::empty();
+        let dtype = DType::F32;
+        let src_i = b.push(I::DefineGlobal { index: 0, dtype: DType::PtrF32 });
+        let dst_i = b.push(I::DefineGlobal { index: 1, dtype: DType::PtrF32 });
+        let g_i = b.push(I::Special(ssa::Special::GridIdx));
+        let l_i = b.push(I::Special(ssa::Special::LocalIdx));
+        let off_i = b.mul(g_i, dim2 as i32);
+        let off_i = b.binop(BinaryOp::Add, off_i, l_i, dtype);
+        let load_i = b.push(I::Load { src: src_i.to_varid(), offset: off_i.to_a(), dtype });
+        // TODO: Compute the max value over dim2
+        let value_i = b.unary(ssa::UnaryOp::Exp, load_i, dtype);
+        // TODO: Normalize
+        b.push(I::Store {
+            dst: dst_i.to_varid(),
+            offset: off_i.to_a(),
+            value: value_i.to_a(),
+            dtype,
+        });
+        Ok(Kernel { instrs: b.relocate()? })
     }
 }
 

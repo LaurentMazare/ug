@@ -94,6 +94,19 @@ impl Block {
         }
     }
 
+    pub(crate) fn push(&mut self, inst: SsaI) -> Id {
+        let id = Id::new();
+        self.0.push((id, inst));
+        id
+    }
+
+    pub(crate) fn unary(&mut self, op: lang::UnaryOp, arg: Id, dtype: lang::DType) -> Id {
+        let id = Id::new();
+        let op = SsaI::Unary { op, arg: arg.to_a(), dtype };
+        self.0.push((id, op));
+        id
+    }
+
     pub(crate) fn binop(&mut self, op: lang::BinaryOp, lhs: Id, rhs: Id, dtype: lang::DType) -> Id {
         let id = Id::new();
         let op = SsaI::Binary { op, lhs: lhs.to_a(), rhs: rhs.to_a(), dtype };
