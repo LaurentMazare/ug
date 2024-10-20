@@ -481,6 +481,27 @@ pub mod op {
         pub fn shape(&self) -> &Shape {
             &self.shape
         }
+
+        /// Return all top-level reduce ops for an AST. Reduce ops that are within another reduce
+        /// op are not returned.
+        pub fn reduce_ops(&self) -> Vec<Self> {
+            fn visit(ast: &Ast, ops: &mut Vec<Ast>) {
+                match ast.inner.as_ref() {
+                    AstInner::Reduce { .. } => ops.push(ast.clone()),
+                    AstInner::Unary { op: _, arg } => visit(arg, ops),
+                    AstInner::Binary { op: _, lhs, rhs } => {
+                        visit(lhs, ops);
+                        visit(rhs, ops)
+                    }
+                    // TODO: Shape tweaks should be propagated.
+                    AstInner::Broadcast { arg, .. } => visit(arg, ops),
+                    AstInner::Load { .. } | AstInner::Const(_) => {}
+                }
+            }
+            let mut ops = vec![];
+            visit(self, &mut ops);
+            ops
+        }
     }
 
     #[derive(Debug, Clone)]
@@ -552,7 +573,7 @@ pub mod ssa {
         GridIdx,
     }
 
-    #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
     pub enum A {
         Var(VarId),
         Const(Const),
@@ -576,7 +597,7 @@ pub mod ssa {
         }
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
     /// The loop start_idx and end_idx are using VarIds as these are derived from line numbers in
     /// the final SSA.
     pub enum Instr {
