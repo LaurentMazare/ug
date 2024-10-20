@@ -13,7 +13,9 @@ fn slow_softmax(n_rows: usize, n_cols: usize) -> Result<()> {
     let mut buf = vec![];
     ug_cuda::code_gen::gen(&mut buf, "dotprod", &kernel)?;
     let cuda_code = String::from_utf8(buf)?;
-    // println!("{cuda_code}");
+    if n_cols == 128 {
+        println!("{cuda_code}");
+    }
     let device = ug_cuda::runtime::Device::new(0)?;
     let func = device.compile_cu(&cuda_code, "foo", "dotprod")?;
     let n_elements = n_rows * n_cols;

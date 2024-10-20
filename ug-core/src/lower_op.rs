@@ -55,17 +55,28 @@ impl lang::op::Layout {
                 idxs.0.len()
             )
         }
-        let mut acc_id = Id::new();
         let off = self.offset() as i32;
-        let mut block = Block::new(vec![(acc_id, SsaI::Const(off.into()))]);
-        for (idx, &stride) in idxs.0.iter().zip(strides.iter()) {
-            if idx.broadcast {
-                continue;
+        if idxs.0.iter().filter(|v| !v.broadcast).count() == 0 {
+            let acc_id = Id::new();
+            let block = Block::new(vec![(acc_id, SsaI::Const(off.into()))]);
+            Ok((acc_id, block))
+        } else {
+            let mut acc_id = None;
+            let mut block = Block::empty();
+            for (idx, &stride) in idxs.0.iter().zip(strides.iter()) {
+                if idx.broadcast {
+                    continue;
+                }
+                let dim_id = block.mul(idx.id, stride as i32);
+                let new_id = match acc_id {
+                    Some(acc_id) => block.binop(ssa::BinaryOp::Add, dim_id, acc_id, DType::I32),
+                    None => block.add(dim_id, off),
+                };
+                acc_id = Some(new_id)
             }
-            let dim_id = block.mul(idx.id, stride as i32);
-            acc_id = block.binop(ssa::BinaryOp::Add, dim_id, acc_id, DType::I32);
+            let acc_id = acc_id.unwrap();
+            Ok((acc_id, block))
         }
-        Ok((acc_id, block))
     }
 }
 
