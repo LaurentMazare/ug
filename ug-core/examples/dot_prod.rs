@@ -37,7 +37,7 @@ fn lower_add() -> Result<()> {
 fn softmax() -> Result<()> {
     let kernel = ug::samples::op::softmax(2, 4)?;
     println!("{kernel:?}");
-    let ssa_kernel = kernel.lower()?;
+    let ssa_kernel = kernel.lower(&Default::default())?;
     println!("{ssa_kernel:?}");
     let mut a = ug::interpreter::Buffer::F32(vec![0., 1., 2., 3., 2., 1., 2., 1.]);
     let mut b = ug::interpreter::Buffer::F32(vec![0f32; 8]);

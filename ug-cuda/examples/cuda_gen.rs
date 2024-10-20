@@ -67,7 +67,7 @@ fn eval_lower_add() -> Result<()> {
 fn eval_softmax() -> Result<()> {
     let kernel = ug::samples::op::softmax(2, 4)?;
     println!("<<<< ADD LANG >>>>\n{kernel:?}");
-    let kernel = kernel.lower()?;
+    let kernel = kernel.lower(&Default::default())?;
     println!("<<<< ADD SSA >>>>\n{kernel:?}");
     let mut buf = vec![];
     ug_cuda::code_gen::gen(&mut buf, "dotprod", &kernel)?;

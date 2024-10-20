@@ -8,7 +8,7 @@ const N_ROWS: usize = 4096;
 fn slow_softmax(n_rows: usize, n_cols: usize) -> Result<()> {
     let mut rng = rand::thread_rng();
     let kernel = ug::samples::op::softmax(n_rows, n_cols)?;
-    let kernel = kernel.lower()?;
+    let kernel = kernel.lower(&Default::default())?;
     let mut buf = vec![];
     ug_cuda::code_gen::gen(&mut buf, "dotprod", &kernel)?;
     let cuda_code = String::from_utf8(buf)?;

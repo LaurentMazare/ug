@@ -3,6 +3,22 @@ use crate::lower::{Block, Id};
 use anyhow::Result;
 use ssa::{DType, Instr as SsaI};
 
+#[derive(Debug, Clone, Default)]
+pub struct Opts {
+    local: Option<usize>,
+}
+
+impl Opts {
+    pub fn with_local(mut self, local: usize) -> Self {
+        self.local = Some(local);
+        self
+    }
+
+    pub fn local(&self) -> Option<usize> {
+        self.local
+    }
+}
+
 #[derive(Debug, Clone)]
 struct Index {
     id: Id,
@@ -143,7 +159,7 @@ impl lang::op::Ast {
 }
 
 impl lang::op::Kernel {
-    fn lower_b(&self) -> Result<Block> {
+    fn lower_b(&self, _opts: &Opts) -> Result<Block> {
         let mut block = Block::empty();
         let mut per_arg = std::collections::HashMap::new();
         for (index, arg) in self.args.iter().enumerate() {
@@ -185,8 +201,8 @@ impl lang::op::Kernel {
         Ok(block)
     }
 
-    pub fn lower(&self) -> Result<ssa::Kernel> {
-        let block = self.lower_b()?;
+    pub fn lower(&self, opts: &Opts) -> Result<ssa::Kernel> {
+        let block = self.lower_b(opts)?;
         let instrs = block.relocate()?;
         Ok(ssa::Kernel { instrs })
     }
