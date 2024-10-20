@@ -295,6 +295,7 @@ pub fn eval_ssa<const N: usize>(
                 use crate::lang::ssa::UnaryOp as U;
                 let arg = context.get(*arg)?;
                 let v = match (op, &arg) {
+                    (U::Id, _) => arg,
                     (U::Neg, Value::F32(v)) => Value::F32(v.neg()),
                     (U::Neg, Value::I32(v)) => Value::I32(v.neg()),
                     (U::Neg, _) => anyhow::bail!("dtype mismatch for {op:?} {arg:?}"),

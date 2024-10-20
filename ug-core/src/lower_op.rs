@@ -1,4 +1,4 @@
-use crate::lang::{self, ssa};
+use crate::lang::{self, op::Ast, ssa};
 use crate::lower::{Block, Id};
 use anyhow::Result;
 use ssa::{DType, Instr as SsaI};
@@ -109,11 +109,48 @@ impl lang::op::ReduceOp {
 
 // Simple optimization that extract the constant bits that do not depend of the index on
 // some specific axis so that these can be evaluated out of loop.
-fn extract_const(ast: &lang::op::Ast, _axis: usize) -> (Vec<lang::op::Ast>, lang::op::Ast) {
-    (vec![], ast.clone())
+fn extract_const(ast: &Ast, axis: usize) -> Result<(Vec<(Id, Ast)>, Ast)> {
+    fn walk(ast: &Ast, tgt_axis: usize, accs: &mut Vec<(Id, Ast)>) -> Result<Ast> {
+        use lang::op::AstInner as A;
+        let ast = match ast.inner.as_ref() {
+            A::Id { .. } | A::Load { .. } | A::Const(_) => ast.clone(),
+            A::Reduce { op, arg, axis } => {
+                if *axis == tgt_axis {
+                    let src = Id::new();
+                    accs.push((src, ast.clone()));
+                    let inner = A::Id { src };
+                    Ast {
+                        inner: std::sync::Arc::new(inner),
+                        dtype: ast.dtype(),
+                        shape: ast.shape().clone(),
+                    }
+                } else {
+                    let arg = walk(arg, tgt_axis, accs)?;
+                    lang::op::reduce(*op, arg, *axis)?
+                }
+            }
+            A::Unary { op, arg } => {
+                let arg = walk(arg, tgt_axis, accs)?;
+                lang::op::unary(*op, arg)?
+            }
+            A::Binary { op, lhs, rhs } => {
+                let lhs = walk(lhs, tgt_axis, accs)?;
+                let rhs = walk(rhs, tgt_axis, accs)?;
+                lang::op::binary(*op, lhs, rhs)?
+            }
+            A::Broadcast { arg, axis, dim_len } => {
+                let arg = walk(arg, tgt_axis, accs)?;
+                lang::op::broadcast(arg, *axis, *dim_len)?
+            }
+        };
+        Ok(ast)
+    }
+    let mut accs = vec![];
+    let ast = walk(ast, axis, &mut accs)?;
+    Ok((accs, ast))
 }
 
-impl lang::op::Ast {
+impl Ast {
     fn lower(
         &self,
         idxs: &Indexes,
@@ -157,10 +194,15 @@ impl lang::op::Ast {
                 let dst_i = Id::new();
                 let mut block = Block::empty();
 
-                let (const_bits, arg) = extract_const(arg, *axis);
-                for const_bit in const_bits.iter() {
-                    let (_dst_id, const_bit) = const_bit.lower(idxs, per_arg)?;
-                    block.0.extend_from_slice(const_bit.0.as_slice())
+                let (const_bits, arg) = extract_const(arg, *axis)?;
+                for (exp_id, const_bit) in const_bits.iter() {
+                    let dtype = const_bit.dtype();
+                    let (dst_id, const_bit) = const_bit.lower(idxs, per_arg)?;
+                    block.0.extend_from_slice(const_bit.0.as_slice());
+                    block.0.push((
+                        *exp_id,
+                        SsaI::Unary { op: lang::UnaryOp::Id, arg: dst_id.to_a(), dtype },
+                    ));
                 }
 
                 let init_value = op.init_value(self.dtype)?;
