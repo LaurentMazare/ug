@@ -107,6 +107,12 @@ impl lang::op::ReduceOp {
     }
 }
 
+// Simple optimization that extract the constant bits that do not depend of the index on
+// some specific axis so that these can be evaluated out of loop.
+fn extract_const(ast: &lang::op::Ast, _axis: usize) -> (Vec<lang::op::Ast>, lang::op::Ast) {
+    (vec![], ast.clone())
+}
+
 impl lang::op::Ast {
     fn lower(
         &self,
@@ -150,6 +156,13 @@ impl lang::op::Ast {
             A::Reduce { op, arg, axis } => {
                 let dst_i = Id::new();
                 let mut block = Block::empty();
+
+                let (const_bits, arg) = extract_const(arg, *axis);
+                for const_bit in const_bits.iter() {
+                    let (_dst_id, const_bit) = const_bit.lower(idxs, per_arg)?;
+                    block.0.extend_from_slice(const_bit.0.as_slice())
+                }
+
                 let init_value = op.init_value(self.dtype)?;
                 let fold_op = op.fold_op();
                 let define_acc = SsaI::DefineAcc(init_value);

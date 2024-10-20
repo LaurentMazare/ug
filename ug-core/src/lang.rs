@@ -403,6 +403,8 @@ pub mod op {
 
     #[derive(Debug, Clone, PartialEq)]
     pub enum AstInner {
+        // Id nodes are used to share common parts when linearizing the code. Maybe this should be
+        // part of a separate type.
         Id { src: crate::lower::Id },
         Load { src: ArgId, layout: Layout },
         Reduce { op: ReduceOp, arg: Ast, axis: usize },
