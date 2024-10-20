@@ -53,7 +53,7 @@ pub mod ssa {
         let g_i = b.push(I::Special(ssa::Special::GridIdx));
         let l_i = b.push(I::Special(ssa::Special::LocalIdx));
         let off_i = b.mul(g_i, dim2 as i32);
-        let off_i = b.binop(BinaryOp::Add, off_i, l_i, dtype);
+        let off_i = b.binop(BinaryOp::Add, off_i, l_i, DType::I32);
         let load_i = b.push(I::Load { src: src_i.to_varid(), offset: off_i.to_a(), dtype });
         // TODO: Compute the max value over dim2
         let value_i = b.unary(ssa::UnaryOp::Exp, load_i, dtype);
