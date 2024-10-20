@@ -3,30 +3,36 @@ use crate::lower::{Block, Id};
 use anyhow::Result;
 use ssa::{DType, Instr as SsaI};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AxisLen {
+    pub axis: usize,
+    pub len: usize,
+}
+
 // Default for bool is false.
 #[derive(Debug, Clone, Default)]
 pub struct Opts {
-    local: Option<usize>,
-    global: bool,
+    local: Option<AxisLen>,
+    global: Option<AxisLen>,
 }
 
 impl Opts {
-    pub fn with_global(mut self, global: bool) -> Self {
-        self.global = global;
+    pub fn with_global(mut self, axis: usize, len: usize) -> Self {
+        self.global = Some(AxisLen { axis, len });
         self
     }
 
-    pub fn with_local(mut self, local: Option<usize>) -> Self {
-        self.local = local;
+    pub fn with_local(mut self, axis: usize, len: usize) -> Self {
+        self.local = Some(AxisLen { axis, len });
         self
     }
 
-    pub fn local(&self) -> Option<usize> {
-        self.local
+    pub fn global(&self) -> &Option<AxisLen> {
+        &self.global
     }
 
-    pub fn global(&self) -> bool {
-        self.global
+    pub fn local(&self) -> &Option<AxisLen> {
+        &self.local
     }
 }
 
@@ -175,6 +181,8 @@ impl lang::op::Kernel {
         let mut per_arg = std::collections::HashMap::new();
         let grid_id = Id::new();
         block.0.push((grid_id, SsaI::Special(ssa::Special::GridIdx)));
+        let local_id = Id::new();
+        block.0.push((local_id, SsaI::Special(ssa::Special::LocalIdx)));
         for (index, arg) in self.args.iter().enumerate() {
             let id = Id::new();
             let dtype = arg.dtype();
@@ -190,13 +198,15 @@ impl lang::op::Kernel {
             let mut ranges = Vec::with_capacity(layout.rank());
             let mut idxs = Vec::with_capacity(layout.rank());
             for (dim_idx, &len) in layout.dims().iter().enumerate() {
-                let id = if dim_idx == 0 && opts.global {
-                    grid_id
-                } else {
-                    let r = block.range(0, len as i32);
-                    let id = r.id();
-                    ranges.push(r);
-                    id
+                let id = match (opts.global(), opts.local()) {
+                    (Some(g), _) if g.axis == dim_idx => grid_id,
+                    (_, Some(l)) if l.axis == dim_idx => local_id,
+                    (_, _) => {
+                        let r = block.range(0, len as i32);
+                        let id = r.id();
+                        ranges.push(r);
+                        id
+                    }
                 };
                 idxs.push(Index { id, broadcast: false });
             }
