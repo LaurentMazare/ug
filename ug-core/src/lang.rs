@@ -394,14 +394,14 @@ pub mod op {
     use anyhow::Result;
     use std::sync::Arc;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, PartialEq)]
     pub struct Ast {
         pub(crate) inner: Arc<AstInner>,
         pub(crate) dtype: DType,
         pub(crate) shape: Shape,
     }
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, PartialEq)]
     pub enum AstInner {
         Load { src: ArgId, layout: Layout },
         Reduce { op: ReduceOp, arg: Ast, axis: usize },

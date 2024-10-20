@@ -549,7 +549,7 @@ mod tests {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Layout {
     shape: Shape,
     strides: Vec<usize>,

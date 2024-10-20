@@ -9,12 +9,14 @@ fn slow_softmax(n_rows: usize, n_cols: usize) -> Result<()> {
     let mut rng = rand::thread_rng();
     let kernel = ug::samples::op::softmax(n_rows, n_cols)?;
     let lower_opts = ug::lower_op::Opts::default().with_global(0, n_rows).with_local(1, n_cols);
-    let kernel = kernel.lower(&lower_opts)?;
+    let ssa_kernel = kernel.lower(&lower_opts)?;
     let mut buf = vec![];
-    ug_cuda::code_gen::gen(&mut buf, "dotprod", &kernel)?;
+    ug_cuda::code_gen::gen(&mut buf, "dotprod", &ssa_kernel)?;
     let cuda_code = String::from_utf8(buf)?;
     if n_cols == 128 {
-        println!("{cuda_code}");
+        println!("KERNEL\n{kernel:?}");
+        println!("SSA\n{ssa_kernel:?}");
+        println!("CUDA\n{cuda_code}");
     }
     let device = ug_cuda::runtime::Device::new(0)?;
     let func = device.compile_cu(&cuda_code, "foo", "dotprod")?;
@@ -37,7 +39,7 @@ fn slow_softmax(n_rows: usize, n_cols: usize) -> Result<()> {
         device.synchronize()?;
         Ok::<_, anyhow::Error>(())
     };
-    println!("warmup {:?}", kernel.flops_mem_per_thread()?);
+    println!("warmup {:?}", ssa_kernel.flops_mem_per_thread()?);
     run()?;
     let start_time = std::time::Instant::now();
     let mut n_reps = 0;
