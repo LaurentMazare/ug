@@ -115,9 +115,9 @@ impl lang::op::Ast {
     ) -> Result<(Id, Block)> {
         use lang::op::AstInner as A;
         let dtype = self.dtype;
-        let dst_i = Id::new();
-        let instrs = match self.inner.as_ref() {
+        let dst_block = match self.inner.as_ref() {
             A::Load { src, layout } => {
+                let dst_i = Id::new();
                 let ptr_i = match per_arg.get(src) {
                     None => anyhow::bail!("unknown arg {src:?}"),
                     Some(id) => *id,
@@ -126,7 +126,7 @@ impl lang::op::Ast {
                 let load = SsaI::Load { src: ptr_i, dtype, offset: off_i.to_a() };
                 let mut off_b = off_b.0;
                 off_b.push((dst_i, load));
-                off_b
+                (dst_i, Block(off_b))
             }
             A::Broadcast { arg, axis, dim_len: _ } => {
                 let mut idxs = idxs.0.to_vec();
@@ -134,18 +134,21 @@ impl lang::op::Ast {
                     None => anyhow::bail!("unexpected axis for broadcast, {axis} {:?}", self.shape),
                     Some(v) => v.broadcast = true,
                 };
-                return arg.lower(&Indexes(idxs), per_arg);
+                arg.lower(&Indexes(idxs), per_arg)?
             }
             A::Const(c) => {
-                vec![(dst_i, SsaI::Const(*c))]
+                let dst_i = Id::new();
+                (dst_i, Block::new(vec![(dst_i, SsaI::Const(*c))]))
             }
             A::Unary { op, arg } => {
+                let dst_i = Id::new();
                 let (arg_i, arg_b) = arg.lower(idxs, per_arg)?;
                 let mut arg_b = arg_b.0;
                 arg_b.push((dst_i, SsaI::Unary { op: *op, arg: arg_i.to_a(), dtype }));
-                arg_b
+                (dst_i, Block(arg_b))
             }
             A::Reduce { op, arg, axis } => {
+                let dst_i = Id::new();
                 let mut block = Block::empty();
                 let init_value = op.init_value(self.dtype)?;
                 let fold_op = op.fold_op();
@@ -173,16 +176,19 @@ impl lang::op::Ast {
                     .0
                     .push((Id::new(), SsaI::Assign { dst: dst_i.to_varid(), src: src_id.to_a() }));
                 block.end_range(r)?;
-                block.0
+                (dst_i, block)
             }
             A::Binary { op, lhs, rhs } => {
+                let dst_i = Id::new();
                 let (lhs_i, lhs_b) = lhs.lower(idxs, per_arg)?;
                 let (rhs_i, rhs_b) = rhs.lower(idxs, per_arg)?;
                 let op = SsaI::Binary { op: *op, dtype, lhs: lhs_i.to_a(), rhs: rhs_i.to_a() };
-                [lhs_b.0.as_slice(), rhs_b.0.as_slice(), &[(dst_i, op)]].concat()
+                let instrs = [lhs_b.0.as_slice(), rhs_b.0.as_slice(), &[(dst_i, op)]].concat();
+                (dst_i, Block(instrs))
             }
+            A::Id { src } => (*src, Block::empty()),
         };
-        Ok((dst_i, Block(instrs)))
+        Ok(dst_block)
     }
 }
 

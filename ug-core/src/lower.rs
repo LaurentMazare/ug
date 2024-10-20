@@ -5,7 +5,7 @@ use ssa::Instr as SsaI;
 // ssa::Instr are indexed based on their line number which is not convenient when
 // combining blocks of generated instructions
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub(crate) struct Id(usize);
+pub struct Id(usize);
 impl Id {
     pub(crate) fn new() -> Self {
         // https://users.rust-lang.org/t/idiomatic-rust-way-to-generate-unique-id/33805

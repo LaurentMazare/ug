@@ -403,6 +403,7 @@ pub mod op {
 
     #[derive(Debug, Clone, PartialEq)]
     pub enum AstInner {
+        Id { src: crate::lower::Id },
         Load { src: ArgId, layout: Layout },
         Reduce { op: ReduceOp, arg: Ast, axis: usize },
         Unary { op: UnaryOp, arg: Ast },
@@ -495,7 +496,7 @@ pub mod op {
                     }
                     // TODO: Shape tweaks should be propagated.
                     AstInner::Broadcast { arg, .. } => visit(arg, ops),
-                    AstInner::Load { .. } | AstInner::Const(_) => {}
+                    AstInner::Id { .. } | AstInner::Load { .. } | AstInner::Const(_) => {}
                 }
             }
             let mut ops = vec![];
