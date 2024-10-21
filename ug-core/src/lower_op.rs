@@ -4,34 +4,35 @@ use anyhow::Result;
 use ssa::{DType, Instr as SsaI};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct AxisLen {
+pub struct AxisSize {
     pub axis: usize,
-    pub len: usize,
+    /// size is the number of worker processes on the specified axis.
+    pub size: usize,
 }
 
 // Default for bool is false.
 #[derive(Debug, Clone, Default)]
 pub struct Opts {
-    local: Option<AxisLen>,
-    global: Option<AxisLen>,
+    local: Option<AxisSize>,
+    global: Option<AxisSize>,
 }
 
 impl Opts {
-    pub fn with_global(mut self, axis: usize, len: usize) -> Self {
-        self.global = Some(AxisLen { axis, len });
+    pub fn with_global(mut self, axis: usize, size: usize) -> Self {
+        self.global = Some(AxisSize { axis, size });
         self
     }
 
-    pub fn with_local(mut self, axis: usize, len: usize) -> Self {
-        self.local = Some(AxisLen { axis, len });
+    pub fn with_local(mut self, axis: usize, size: usize) -> Self {
+        self.local = Some(AxisSize { axis, size });
         self
     }
 
-    pub fn global(&self) -> &Option<AxisLen> {
+    pub fn global(&self) -> &Option<AxisSize> {
         &self.global
     }
 
-    pub fn local(&self) -> &Option<AxisLen> {
+    pub fn local(&self) -> &Option<AxisSize> {
         &self.local
     }
 }
@@ -151,9 +152,12 @@ fn extract_const(ast: &Ast, axis: usize) -> Result<(Vec<(Id, Ast)>, Ast)> {
 }
 
 impl Ast {
+    // TODO: actually use opts.
+    #[allow(clippy::only_used_in_recursion)]
     fn lower(
         &self,
         idxs: &Indexes,
+        opts: &Opts,
         per_arg: &std::collections::HashMap<lang::ArgId, ssa::VarId>,
     ) -> Result<(Id, Block)> {
         use lang::op::AstInner as A;
@@ -177,7 +181,7 @@ impl Ast {
                     None => anyhow::bail!("unexpected axis for broadcast, {axis} {:?}", self.shape),
                     Some(v) => v.broadcast = true,
                 };
-                arg.lower(&Indexes(idxs), per_arg)?
+                arg.lower(&Indexes(idxs), opts, per_arg)?
             }
             A::Const(c) => {
                 let dst_i = Id::new();
@@ -185,7 +189,7 @@ impl Ast {
             }
             A::Unary { op, arg } => {
                 let dst_i = Id::new();
-                let (arg_i, arg_b) = arg.lower(idxs, per_arg)?;
+                let (arg_i, arg_b) = arg.lower(idxs, opts, per_arg)?;
                 let mut arg_b = arg_b.0;
                 arg_b.push((dst_i, SsaI::Unary { op: *op, arg: arg_i.to_a(), dtype }));
                 (dst_i, Block(arg_b))
@@ -197,7 +201,7 @@ impl Ast {
                 let (const_bits, arg) = extract_const(arg, *axis)?;
                 for (exp_id, const_bit) in const_bits.iter() {
                     let dtype = const_bit.dtype();
-                    let (dst_id, const_bit) = const_bit.lower(idxs, per_arg)?;
+                    let (dst_id, const_bit) = const_bit.lower(idxs, opts, per_arg)?;
                     block.0.extend_from_slice(const_bit.0.as_slice());
                     block.0.push((
                         *exp_id,
@@ -207,6 +211,10 @@ impl Ast {
 
                 let init_value = op.init_value(self.dtype)?;
                 let fold_op = op.fold_op();
+
+                // TODO: if opts.local is set and arg does not depend on the axis, we should
+                // compute the reduce in parallel and use shared memory or warp synchronization
+                // to exchange the result.
                 let define_acc = SsaI::DefineAcc(init_value);
                 block.0.push((dst_i, define_acc));
                 let reduce_len = match arg.shape.dims().get(*axis) {
@@ -217,7 +225,7 @@ impl Ast {
 
                 let mut reduce_idxs = idxs.clone();
                 reduce_idxs.0[*axis] = Index { id: r.id(), broadcast: false };
-                let (arg_i, arg_b) = arg.lower(&reduce_idxs, per_arg)?;
+                let (arg_i, arg_b) = arg.lower(&reduce_idxs, opts, per_arg)?;
                 block.0.extend_from_slice(&arg_b.0);
                 let fold_op = SsaI::Binary {
                     op: fold_op,
@@ -232,8 +240,8 @@ impl Ast {
             }
             A::Binary { op, lhs, rhs } => {
                 let dst_i = Id::new();
-                let (lhs_i, lhs_b) = lhs.lower(idxs, per_arg)?;
-                let (rhs_i, rhs_b) = rhs.lower(idxs, per_arg)?;
+                let (lhs_i, lhs_b) = lhs.lower(idxs, opts, per_arg)?;
+                let (rhs_i, rhs_b) = rhs.lower(idxs, opts, per_arg)?;
                 let op = SsaI::Binary { op: *op, dtype, lhs: lhs_i.to_a(), rhs: rhs_i.to_a() };
                 let instrs = [lhs_b.0.as_slice(), rhs_b.0.as_slice(), &[(dst_i, op)]].concat();
                 (dst_i, Block(instrs))
@@ -281,7 +289,7 @@ impl lang::op::Kernel {
             let (off_i, off_b) = layout.lower(&idxs)?;
             block.0.extend_from_slice(off_b.0.as_slice());
 
-            let (src_i, src_b) = value.lower(&idxs, &per_arg)?;
+            let (src_i, src_b) = value.lower(&idxs, opts, &per_arg)?;
             block.0.extend_from_slice(src_b.0.as_slice());
             let store = SsaI::Store {
                 dst: ptr_i,
