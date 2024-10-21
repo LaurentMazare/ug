@@ -69,7 +69,7 @@ impl lang::op::Layout {
                 }
                 let dim_id = block.mul(idx.id, stride as i32);
                 let new_id = match acc_id {
-                    Some(acc_id) => block.binop(ssa::BinaryOp::Add, dim_id, acc_id, DType::I32),
+                    Some(acc_id) => block.binary(ssa::BinaryOp::Add, dim_id, acc_id, DType::I32),
                     None => block.add(dim_id, off),
                 };
                 acc_id = Some(new_id)

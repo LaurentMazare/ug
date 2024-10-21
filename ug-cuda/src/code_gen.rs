@@ -160,7 +160,7 @@ pub fn gen<W: std::io::Write>(w: &mut W, func_name: &str, kernel: &ssa::Kernel) 
                 writeln!(w, "{indent}int {var_id} = threadIdx.x;")?
             }
             I::Special(ssa::Special::GridIdx) => writeln!(w, "{indent}int {var_id} = blockIdx.x;")?,
-            I::Barrier => writeln!(w, "{indent}__synchthreads();")?,
+            I::Barrier => writeln!(w, "{indent}__syncthreads();")?,
         }
     }
     writeln!(w, "}}")?;
