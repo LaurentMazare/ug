@@ -219,17 +219,14 @@ impl Ast {
                 reduce_idxs.0[*axis] = Index { id: r.id(), broadcast: false };
                 let (arg_i, arg_b) = arg.lower(&reduce_idxs, per_arg)?;
                 block.0.extend_from_slice(&arg_b.0);
-                let src_id = Id::new();
                 let fold_op = SsaI::Binary {
                     op: fold_op,
                     lhs: dst_i.to_a(),
                     rhs: arg_i.to_a(),
                     dtype: self.dtype,
                 };
-                block.0.push((src_id, fold_op));
-                block
-                    .0
-                    .push((Id::new(), SsaI::Assign { dst: dst_i.to_varid(), src: src_id.to_a() }));
+                let src_id = block.push(fold_op);
+                block.push(SsaI::Assign { dst: dst_i.to_varid(), src: src_id.to_a() });
                 block.end_range(r)?;
                 (dst_i, block)
             }
@@ -251,14 +248,11 @@ impl lang::op::Kernel {
     fn lower_b(&self, opts: &Opts) -> Result<Block> {
         let mut block = Block::empty();
         let mut per_arg = std::collections::HashMap::new();
-        let grid_id = Id::new();
-        block.0.push((grid_id, SsaI::Special(ssa::Special::GridIdx)));
-        let local_id = Id::new();
-        block.0.push((local_id, SsaI::Special(ssa::Special::LocalIdx)));
+        let grid_id = block.push(SsaI::Special(ssa::Special::GridIdx));
+        let local_id = block.push(SsaI::Special(ssa::Special::LocalIdx));
         for (index, arg) in self.args.iter().enumerate() {
-            let id = Id::new();
             let dtype = arg.dtype();
-            block.0.push((id, SsaI::DefineGlobal { index, dtype }));
+            let id = block.push(SsaI::DefineGlobal { index, dtype });
             per_arg.insert(arg.id(), id.to_varid());
         }
 
@@ -295,7 +289,7 @@ impl lang::op::Kernel {
                 value: src_i.to_a(),
                 dtype: value.dtype,
             };
-            block.0.push((Id::new(), store));
+            block.push(store);
             for r in ranges.into_iter().rev() {
                 block.end_range(r)?;
             }

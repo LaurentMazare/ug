@@ -7,6 +7,7 @@ use rand::Rng;
 enum Which {
     Exp,
     Softmax,
+    SsaSoftmax,
 }
 
 #[derive(clap::Parser, Debug)]
@@ -25,7 +26,8 @@ fn run_one(args: &Args, n_cols: usize) -> Result<()> {
     let mut rng = rand::thread_rng();
     let n_rows = args.n_rows;
     let ssa_kernel = match args.which {
-        Which::Exp => ug::samples::ssa::softmax(n_rows, n_cols)?,
+        Which::Exp => ug::samples::ssa::exp(n_cols)?,
+        Which::SsaSoftmax => ug::samples::ssa::softmax(n_rows, n_cols)?,
         Which::Softmax => {
             let kernel = ug::samples::op::softmax(n_rows, n_cols)?;
             println!("KERNEL\n{kernel:?}");
