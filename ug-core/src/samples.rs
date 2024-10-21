@@ -45,6 +45,26 @@ pub mod ssa {
         Kernel { instrs }
     }
 
+    pub fn exp(block_size: usize) -> Result<Kernel> {
+        let mut b = crate::lower::Block::empty();
+        let dtype = DType::F32;
+        let src_i = b.push(I::DefineGlobal { index: 0, dtype: DType::PtrF32 });
+        let dst_i = b.push(I::DefineGlobal { index: 1, dtype: DType::PtrF32 });
+        let g_i = b.push(I::Special(ssa::Special::GridIdx));
+        let l_i = b.push(I::Special(ssa::Special::LocalIdx));
+        let off_i = b.mul(g_i, block_size as i32);
+        let off_i = b.binop(BinaryOp::Add, off_i, l_i, DType::I32);
+        let load_i = b.push(I::Load { src: src_i.to_varid(), offset: off_i.to_a(), dtype });
+        let value_i = b.unary(ssa::UnaryOp::Exp, load_i, dtype);
+        b.push(I::Store {
+            dst: dst_i.to_varid(),
+            offset: off_i.to_a(),
+            value: value_i.to_a(),
+            dtype,
+        });
+        Ok(Kernel { instrs: b.relocate()? })
+    }
+
     pub fn softmax(_dim1: usize, dim2: usize) -> Result<Kernel> {
         let mut b = crate::lower::Block::empty();
         let dtype = DType::F32;

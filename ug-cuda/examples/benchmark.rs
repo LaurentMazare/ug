@@ -3,23 +3,46 @@
 use anyhow::Result;
 use rand::Rng;
 
-const N_ROWS: usize = 4096;
+#[derive(clap::ValueEnum, Clone, Debug)]
+enum Which {
+    Exp,
+    Softmax,
+}
 
-fn slow_softmax(n_rows: usize, n_cols: usize) -> Result<()> {
+#[derive(clap::Parser, Debug)]
+struct Args {
+    #[arg(short, long, default_value = "exp")]
+    which: Which,
+
+    #[arg(long, default_value_t = 4096)]
+    n_rows: usize,
+
+    #[arg(short, long)]
+    verbose: bool,
+}
+
+fn run_one(args: &Args, n_cols: usize) -> Result<()> {
     let mut rng = rand::thread_rng();
-    let kernel = ug::samples::op::softmax(n_rows, n_cols)?;
-    let lower_opts = ug::lower_op::Opts::default().with_global(0, n_rows).with_local(1, n_cols);
-    let ssa_kernel = kernel.lower(&lower_opts)?;
+    let n_rows = args.n_rows;
+    let ssa_kernel = match args.which {
+        Which::Exp => ug::samples::ssa::softmax(n_rows, n_cols)?,
+        Which::Softmax => {
+            let kernel = ug::samples::op::softmax(n_rows, n_cols)?;
+            println!("KERNEL\n{kernel:?}");
+            let lower_opts =
+                ug::lower_op::Opts::default().with_global(0, n_rows).with_local(1, n_cols);
+            kernel.lower(&lower_opts)?
+        }
+    };
     let mut buf = vec![];
-    ug_cuda::code_gen::gen(&mut buf, "dotprod", &ssa_kernel)?;
+    ug_cuda::code_gen::gen(&mut buf, "mykernel", &ssa_kernel)?;
     let cuda_code = String::from_utf8(buf)?;
-    if n_cols == 128 {
-        println!("KERNEL\n{kernel:?}");
+    if args.verbose {
         println!("SSA\n{ssa_kernel:?}");
         println!("CUDA\n{cuda_code}");
     }
     let device = ug_cuda::runtime::Device::new(0)?;
-    let func = device.compile_cu(&cuda_code, "foo", "dotprod")?;
+    let func = device.compile_cu(&cuda_code, "foo", "mykernel")?;
     let n_elements = n_rows * n_cols;
     let res = device.zeros(n_elements)?;
     let arg: Vec<f32> = (0..n_elements).map(|_| rng.gen()).collect();
@@ -60,8 +83,12 @@ fn slow_softmax(n_rows: usize, n_cols: usize) -> Result<()> {
 }
 
 fn main() -> Result<()> {
+    use clap::Parser;
+
+    let args = Args::parse();
+    println!("{args:?}");
     for n_cols in [128, 256, 512, 768, 1024, 1536, 2048, 3072, 4096] {
-        slow_softmax(N_ROWS, n_cols)?;
+        run_one(&args, n_cols)?;
     }
     Ok(())
 }

@@ -17,4 +17,5 @@ serde_json = { workspace = true }
 ug = { workspace = true }
 
 [dev-dependencies]
+clap = { workspace = true }
 rand = { workspace = true }
