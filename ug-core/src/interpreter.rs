@@ -192,6 +192,28 @@ pub fn eval_ssa<const N: usize>(
             Instr::DefineGlobal { index, dtype: _ } => (Value::Ptr(BufId::new(*index)), None),
             Instr::Const(Const::F32(v)) => (Value::F32(W::splat(*v)), None),
             Instr::Const(Const::I32(v)) => (Value::I32(W::splat(*v)), None),
+            Instr::If { cond, end_idx } => {
+                let cond = context.get(*cond)?;
+                let cond = cond.as_i32()?;
+                let mut all_jump = true;
+                let mut any_jump = false;
+                for i in 0..N {
+                    if cond.0[i] == 0 {
+                        any_jump = true
+                    } else {
+                        all_jump = false
+                    }
+                }
+                if all_jump != any_jump {
+                    anyhow::bail!("diverging threads in warp")
+                }
+                if all_jump {
+                    context.set(var_id, Value::None)?;
+                    (Value::None, Some(end_idx.as_usize() + 1))
+                } else {
+                    (Value::None, None)
+                }
+            }
             Instr::Range { lo, up, end_idx } => {
                 if current_idx >= context.values.len() {
                     anyhow::bail!("get out of bounds {current_idx}")
@@ -228,6 +250,7 @@ pub fn eval_ssa<const N: usize>(
                 context.set(*dst, value)?;
                 (value, None)
             }
+            Instr::EndIf => (Value::None, None),
             Instr::EndRange { start_idx } => (Value::None, Some(start_idx.as_usize())),
             Instr::Load { src, offset, dtype: _ } => {
                 let offset = context.get(*offset)?;

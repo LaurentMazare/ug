@@ -616,6 +616,8 @@ pub mod ssa {
         Load { src: VarId, offset: A, dtype: DType },
         Assign { dst: VarId, src: A },
         EndRange { start_idx: VarId },
+        If { cond: A, end_idx: VarId },
+        EndIf,
         Store { dst: VarId, offset: A, value: A, dtype: DType },
         Barrier,
     }
@@ -668,6 +670,8 @@ pub mod ssa {
                     | Instr::Special(_)
                     | Instr::Assign { .. }
                     | Instr::Const(_)
+                    | Instr::If { .. }
+                    | Instr::EndIf
                     | Instr::Barrier => {}
                 }
             }

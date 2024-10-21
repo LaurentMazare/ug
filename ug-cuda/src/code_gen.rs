@@ -111,6 +111,10 @@ pub fn gen<W: std::io::Write>(w: &mut W, func_name: &str, kernel: &ssa::Kernel) 
                     writeln!(w, "{indent}float {var_id} = {v};")?
                 }
             },
+            I::If { cond, end_idx: _ } => {
+                writeln!(w, "{indent}if ({}) {{", A(*cond),)?;
+                depth += 1;
+            }
             I::Range { lo, up, end_idx: _ } => {
                 writeln!(
                     w,
@@ -120,7 +124,7 @@ pub fn gen<W: std::io::Write>(w: &mut W, func_name: &str, kernel: &ssa::Kernel) 
                 )?;
                 depth += 1;
             }
-            I::EndRange { start_idx: _ } => {
+            I::EndIf | I::EndRange { start_idx: _ } => {
                 if depth == 0 {
                     anyhow::bail!("unmatched EndRange")
                 }

@@ -158,6 +158,11 @@ impl Block {
                     let value = get_a(*value)?;
                     SsaI::Store { dst, offset, value, dtype: *dtype }
                 }
+                SsaI::If { cond, end_idx } => {
+                    let cond = get_a(*cond)?;
+                    let end_idx = get_id(*end_idx)?;
+                    SsaI::If { cond, end_idx }
+                }
                 SsaI::Range { lo, up, end_idx } => {
                     let lo = get_a(*lo)?;
                     let up = get_a(*up)?;
@@ -193,6 +198,7 @@ impl Block {
                     SsaI::DefineGlobal { index: *index, dtype: *dtype }
                 }
                 SsaI::Barrier => SsaI::Barrier,
+                SsaI::EndIf => SsaI::EndIf,
                 SsaI::EndRange { start_idx } => {
                     let start_idx = get_id(*start_idx)?;
                     SsaI::EndRange { start_idx }
