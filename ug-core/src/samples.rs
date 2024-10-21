@@ -70,25 +70,26 @@ pub mod ssa {
         let dtype = DType::F32;
         let src_i = b.push(I::DefineGlobal { index: 0, dtype: DType::PtrF32 });
         let dst_i = b.push(I::DefineGlobal { index: 1, dtype: DType::PtrF32 });
-        let sto_i = b.push(I::DefineLocal { size: (2 * dim2), dtype: DType::PtrF32 });
+        let sto_i = b.push(I::DefineLocal { size: (2 * dim2), dtype: DType::PtrF32 }).to_varid();
         let g_i = b.push(I::Special(ssa::Special::GridIdx));
         let l_i = b.push(I::Special(ssa::Special::LocalIdx));
         let base_off_i = b.mul(g_i, dim2 as i32);
-        let off_i = b.binary(BinaryOp::Add, base_off_i, l_i, DType::I32);
-        let load_i = b.push(I::Load { src: src_i.to_varid(), offset: off_i.to_a(), dtype });
+        let global_off_i = b.binary(BinaryOp::Add, base_off_i, l_i, DType::I32);
+        let load_i = b.push(I::Load { src: src_i.to_varid(), offset: global_off_i.to_a(), dtype });
 
         // Compute the max value over dim2.
         // This implementation uses shared memory which is likely slower than using warp-reduce
         // primitives but these are harder to scale to more than 32 threads.
-        b.push(I::Store { dst: sto_i.to_varid(), offset: l_i.to_a(), value: load_i.to_a(), dtype });
+        b.push(I::Store { dst: sto_i, offset: l_i.to_a(), value: load_i.to_a(), dtype });
         b.push(I::Barrier);
         let mut offset = 1;
         let mut v_i = load_i;
         // This is only ok if dim2 is a power of 2.
         while offset < dim2 {
-            let off_i = b.add(off_i, offset as i32);
-            let m_i = b.push(I::Load { src: sto_i.to_varid(), offset: off_i.to_a(), dtype });
+            let off_i = b.add(l_i, offset as i32);
+            let m_i = b.push(I::Load { src: sto_i, offset: off_i.to_a(), dtype });
             v_i = b.binary(BinaryOp::Max, m_i, v_i, dtype);
+            b.push(I::Store { dst: sto_i, offset: l_i.to_a(), value: v_i.to_a(), dtype });
             b.push(I::Barrier);
             offset *= 2
         }
@@ -98,19 +99,15 @@ pub mod ssa {
         let value_i = b.unary(ssa::UnaryOp::Exp, value_i, dtype);
 
         // Compute the sum of the exps
-        b.push(I::Store {
-            dst: sto_i.to_varid(),
-            offset: l_i.to_a(),
-            value: value_i.to_a(),
-            dtype,
-        });
+        b.push(I::Store { dst: sto_i, offset: l_i.to_a(), value: value_i.to_a(), dtype });
         b.push(I::Barrier);
         let mut offset = 1;
         let mut v_i = value_i;
         while offset < dim2 {
-            let off_i = b.add(off_i, offset as i32);
-            let m_i = b.push(I::Load { src: sto_i.to_varid(), offset: off_i.to_a(), dtype });
+            let off_i = b.add(l_i, offset as i32);
+            let m_i = b.push(I::Load { src: sto_i, offset: off_i.to_a(), dtype });
             v_i = b.binary(BinaryOp::Add, m_i, v_i, dtype);
+            b.push(I::Store { dst: sto_i, offset: l_i.to_a(), value: v_i.to_a(), dtype });
             b.push(I::Barrier);
             offset *= 2
         }
@@ -120,7 +117,7 @@ pub mod ssa {
         let value_i = b.binary(BinaryOp::Div, value_i, sum_i, dtype);
         b.push(I::Store {
             dst: dst_i.to_varid(),
-            offset: off_i.to_a(),
+            offset: global_off_i.to_a(),
             value: value_i.to_a(),
             dtype,
         });
