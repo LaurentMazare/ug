@@ -30,7 +30,6 @@ fn run_one(args: &Args, n_cols: usize) -> Result<()> {
         Which::SsaSoftmax => ug::samples::ssa::softmax(n_rows, n_cols)?,
         Which::Softmax => {
             let kernel = ug::samples::op::softmax(n_rows, n_cols)?;
-            println!("KERNEL\n{kernel:?}");
             let lower_opts =
                 ug::lower_op::Opts::default().with_global(0, n_rows).with_local(1, n_cols);
             kernel.lower(&lower_opts)?
