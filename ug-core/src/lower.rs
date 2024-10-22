@@ -198,6 +198,10 @@ impl Block {
                     SsaI::DefineGlobal { index: *index, dtype: *dtype }
                 }
                 SsaI::Barrier => SsaI::Barrier,
+                SsaI::ReduceLocal { op, arg } => {
+                    let arg = get_a(*arg)?;
+                    SsaI::ReduceLocal { op: *op, arg }
+                }
                 SsaI::EndIf => SsaI::EndIf,
                 SsaI::EndRange { start_idx } => {
                     let start_idx = get_id(*start_idx)?;

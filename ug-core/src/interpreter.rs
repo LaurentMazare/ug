@@ -337,6 +337,30 @@ pub fn eval_ssa<const N: usize>(
             }
             Instr::Special(ssa::Special::GridIdx) => (Value::I32(W::splat(grid_idx as i32)), None),
             Instr::Barrier => (Value::None, None),
+            Instr::ReduceLocal { op, arg } => {
+                use crate::lang::ssa::ReduceOp as R;
+                let arg = context.get(*arg)?;
+                let v = match (op, &arg) {
+                    (R::Sum, Value::F32(v)) => Value::F32(W::splat(v.0.iter().sum::<f32>())),
+                    (R::Sum, Value::I32(v)) => Value::I32(W::splat(v.0.iter().sum::<i32>())),
+                    (R::Max, Value::F32(v)) => {
+                        Value::F32(W::splat(v.0.iter().cloned().fold(f32::NEG_INFINITY, f32::max)))
+                    }
+                    (R::Max, Value::I32(v)) => {
+                        Value::I32(W::splat(v.0.iter().cloned().max().unwrap_or(i32::MIN)))
+                    }
+                    (R::Min, Value::F32(v)) => {
+                        Value::F32(W::splat(v.0.iter().cloned().fold(f32::INFINITY, f32::min)))
+                    }
+                    (R::Min, Value::I32(v)) => {
+                        Value::I32(W::splat(v.0.iter().cloned().min().unwrap_or(i32::MAX)))
+                    }
+                    (R::Prod, Value::F32(v)) => Value::F32(W::splat(v.0.iter().product::<f32>())),
+                    (R::Prod, Value::I32(v)) => Value::I32(W::splat(v.0.iter().product::<i32>())),
+                    (_, _) => anyhow::bail!("dtype mismatch for {op:?} {arg:?}"),
+                };
+                (v, None)
+            }
             Instr::DefineLocal { size, dtype } => {
                 // We allocate a new buffer on each DefineLocal, this assumes that such calls are
                 // never made inside a loop otherwise the previous value should be used.

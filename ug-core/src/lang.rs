@@ -551,7 +551,7 @@ pub mod ssa {
     use anyhow::Result;
     use serde::{Deserialize, Serialize};
 
-    pub use super::{BinaryOp, Const, DType, UnaryOp};
+    pub use super::{BinaryOp, Const, DType, ReduceOp, UnaryOp};
 
     #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
     pub struct VarId(usize);
@@ -620,6 +620,9 @@ pub mod ssa {
         EndIf,
         Store { dst: VarId, offset: A, value: A, dtype: DType },
         Barrier,
+        // This is not part of the tinygrad SSA but is convenient to handle warp reduce without
+        // shared memory.
+        ReduceLocal { op: ReduceOp, arg: A },
     }
 
     #[derive(Clone, Serialize, Deserialize)]
@@ -672,7 +675,8 @@ pub mod ssa {
                     | Instr::Const(_)
                     | Instr::If { .. }
                     | Instr::EndIf
-                    | Instr::Barrier => {}
+                    | Instr::Barrier
+                    | Instr::ReduceLocal { .. } => {}
                 }
             }
             Ok(super::FlopsMem { flops, mem_in_bytes: mem })
