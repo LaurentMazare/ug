@@ -461,7 +461,7 @@ pub mod op {
         } else {
             lhs.dtype
         };
-        // TODO(laurent): check the shape, should broadcast be implicit or not?
+        // Broadcasting has to be done explicitely.
         if lhs.shape != rhs.shape {
             anyhow::bail!("shape mismatch in {op:?}, lhs: {:?}, rhs: {:?}", lhs.shape, rhs.shape)
         }
