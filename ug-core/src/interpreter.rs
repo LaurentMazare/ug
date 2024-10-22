@@ -337,7 +337,7 @@ pub fn eval_ssa<const N: usize>(
             }
             Instr::Special(ssa::Special::GridIdx) => (Value::I32(W::splat(grid_idx as i32)), None),
             Instr::Barrier => (Value::None, None),
-            Instr::ReduceLocal { op, arg } => {
+            Instr::ReduceLocal { op, arg, dtype: _ } => {
                 use crate::lang::ssa::ReduceOp as R;
                 let arg = context.get(*arg)?;
                 let v = match (op, &arg) {

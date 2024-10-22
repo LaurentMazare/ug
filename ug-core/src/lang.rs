@@ -622,7 +622,7 @@ pub mod ssa {
         Barrier,
         // This is not part of the tinygrad SSA but is convenient to handle warp reduce without
         // shared memory.
-        ReduceLocal { op: ReduceOp, arg: A },
+        ReduceLocal { op: ReduceOp, arg: A, dtype: DType },
     }
 
     #[derive(Clone, Serialize, Deserialize)]

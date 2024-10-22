@@ -165,7 +165,7 @@ pub fn gen<W: std::io::Write>(w: &mut W, func_name: &str, kernel: &ssa::Kernel) 
             }
             I::Special(ssa::Special::GridIdx) => writeln!(w, "{indent}int {var_id} = blockIdx.x;")?,
             I::Barrier => writeln!(w, "{indent}__syncthreads();")?,
-            I::ReduceLocal { op: _, arg: _ } => {
+            I::ReduceLocal { op: _, arg: _, dtype: _ } => {
                 anyhow::bail!("ReduceLocal is not implemented for the cuda backend")
             }
         }
