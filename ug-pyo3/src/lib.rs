@@ -172,11 +172,6 @@ mod op {
             Ok(Self(ast))
         }
 
-        fn prod(&self, axis: usize) -> PyResult<Self> {
-            let ast = op::reduce(op::ReduceOp::Prod, self.0.clone(), axis).map_err(w)?;
-            Ok(Self(ast))
-        }
-
         fn min(&self, axis: usize) -> PyResult<Self> {
             let ast = op::reduce(op::ReduceOp::Min, self.0.clone(), axis).map_err(w)?;
             Ok(Self(ast))

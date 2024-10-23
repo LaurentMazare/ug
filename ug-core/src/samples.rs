@@ -65,7 +65,7 @@ pub mod ssa {
         Ok(Kernel { instrs: b.relocate()? })
     }
 
-    pub fn softmax(_dim1: usize, dim2: usize) -> Result<Kernel> {
+    pub fn softmax_barrier(_dim1: usize, dim2: usize) -> Result<Kernel> {
         let mut b = crate::lower::Block::empty();
         let dtype = DType::F32;
         let src_i = b.push(I::DefineGlobal { index: 0, dtype: DType::PtrF32 });
@@ -122,6 +122,35 @@ pub mod ssa {
             dtype,
         });
         Ok(Kernel { instrs: b.relocate()? })
+    }
+
+    pub fn softmax_reduce(_dim1: usize, dim2: usize) -> Result<Kernel> {
+        let mut b = crate::lower::Block::empty();
+        let dtype = DType::F32;
+        let src_i = b.push(I::DefineGlobal { index: 0, dtype: DType::PtrF32 });
+        let dst_i = b.push(I::DefineGlobal { index: 1, dtype: DType::PtrF32 });
+        let g_i = b.push(I::Special(ssa::Special::GridIdx));
+        let l_i = b.push(I::Special(ssa::Special::LocalIdx));
+        let base_off_i = b.mul(g_i, dim2 as i32);
+        let global_off_i = b.binary(BinaryOp::Add, base_off_i, l_i, DType::I32);
+        let load_i = b.push(I::Load { src: src_i.to_varid(), offset: global_off_i.to_a(), dtype });
+        let max_i = b.push(I::ReduceLocal { op: ssa::ReduceOp::Max, arg: load_i.to_a(), dtype });
+        let value_i = b.binary(BinaryOp::Sub, load_i, max_i, dtype);
+        let value_i = b.unary(ssa::UnaryOp::Exp, value_i, dtype);
+        let sum_i = b.push(I::ReduceLocal { op: ssa::ReduceOp::Sum, arg: value_i.to_a(), dtype });
+        // Normalize by sum_exp
+        let value_i = b.binary(BinaryOp::Div, value_i, sum_i, dtype);
+        b.push(I::Store {
+            dst: dst_i.to_varid(),
+            offset: global_off_i.to_a(),
+            value: value_i.to_a(),
+            dtype,
+        });
+        Ok(Kernel { instrs: b.relocate()? })
+    }
+
+    pub fn softmax(dim1: usize, dim2: usize) -> Result<Kernel> {
+        softmax_barrier(dim1, dim2)
     }
 }
 

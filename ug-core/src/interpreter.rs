@@ -355,8 +355,6 @@ pub fn eval_ssa<const N: usize>(
                     (R::Min, Value::I32(v)) => {
                         Value::I32(W::splat(v.0.iter().cloned().min().unwrap_or(i32::MAX)))
                     }
-                    (R::Prod, Value::F32(v)) => Value::F32(W::splat(v.0.iter().product::<f32>())),
-                    (R::Prod, Value::I32(v)) => Value::I32(W::splat(v.0.iter().product::<i32>())),
                     (_, _) => anyhow::bail!("dtype mismatch for {op:?} {arg:?}"),
                 };
                 (v, None)
