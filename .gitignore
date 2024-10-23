@@ -16,3 +16,4 @@ gen.cu
 gen*.json
 __pycache__
 py_src/ug/*.so
+*.nsys-rep
