@@ -8,6 +8,7 @@ enum Which {
     Exp,
     Softmax,
     SsaSoftmax,
+    SsaSoftmaxReduce,
 }
 
 #[derive(clap::Parser, Debug)]
@@ -28,6 +29,7 @@ fn run_one(args: &Args, n_cols: usize) -> Result<()> {
     let ssa_kernel = match args.which {
         Which::Exp => ug::samples::ssa::exp(n_cols)?,
         Which::SsaSoftmax => ug::samples::ssa::softmax(n_rows, n_cols)?,
+        Which::SsaSoftmaxReduce => ug::samples::ssa::softmax_reduce(n_rows, n_cols)?,
         Which::Softmax => {
             let kernel = ug::samples::op::softmax(n_rows, n_cols)?;
             let lower_opts =
