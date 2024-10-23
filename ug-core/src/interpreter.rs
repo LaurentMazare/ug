@@ -314,7 +314,7 @@ pub fn eval_ssa<const N: usize>(
                 };
                 (v, None)
             }
-            Instr::Unary { op, arg, dtype: _ } => {
+            Instr::Unary { op, arg, dtype } => {
                 use crate::lang::ssa::UnaryOp as U;
                 let arg = context.get(*arg)?;
                 let v = match (op, &arg) {
@@ -324,6 +324,17 @@ pub fn eval_ssa<const N: usize>(
                     (U::Neg, _) => anyhow::bail!("dtype mismatch for {op:?} {arg:?}"),
                     (U::Exp, Value::F32(v)) => Value::F32(v.exp()),
                     (U::Exp, _) => anyhow::bail!("dtype mismatch for {op:?} {arg:?}"),
+                    (U::Cast, Value::F32(v)) => match dtype {
+                        ssa::DType::F32 => Value::F32(*v),
+                        ssa::DType::I32 => Value::I32(W(v.0.map(|v| v as i32))),
+                        _ => anyhow::bail!("dtype mismatch for {op:?} {arg:?} {dtype:?}"),
+                    },
+                    (U::Cast, Value::I32(v)) => match dtype {
+                        ssa::DType::I32 => Value::I32(*v),
+                        ssa::DType::F32 => Value::F32(W(v.0.map(|v| v as f32))),
+                        _ => anyhow::bail!("dtype mismatch for {op:?} {arg:?} {dtype:?}"),
+                    },
+                    (U::Cast, _) => anyhow::bail!("dtype mismatch for {op:?} {arg:?}"),
                 };
                 (v, None)
             }

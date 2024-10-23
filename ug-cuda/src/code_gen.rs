@@ -162,6 +162,12 @@ pub fn gen<W: std::io::Write>(w: &mut W, func_name: &str, kernel: &ssa::Kernel) 
                     ssa::UnaryOp::Exp => "__expf",
                     ssa::UnaryOp::Neg => "neg",
                     ssa::UnaryOp::Id => "",
+                    ssa::UnaryOp::Cast => match dtype {
+                        ssa::DType::F32 => "static_cast<float>",
+                        ssa::DType::I32 => "static_cast<int>",
+                        ssa::DType::PtrF32 => "static_cast<float*>",
+                        ssa::DType::PtrI32 => "static_cast<int*>",
+                    },
                 };
                 writeln!(w, "{indent}{} {var_id} = {op}({});", D(*dtype), A(*arg))?;
             }

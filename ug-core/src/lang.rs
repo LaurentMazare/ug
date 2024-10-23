@@ -13,6 +13,7 @@ pub enum UnaryOp {
     Id,
     Exp,
     Neg,
+    Cast,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
