@@ -58,6 +58,11 @@ impl std::fmt::Display for D {
 }
 
 pub fn gen<W: std::io::Write>(w: &mut W, func_name: &str, kernel: &ssa::Kernel) -> Result<()> {
+    let contains_reduce_local =
+        kernel.instrs.iter().any(|v| matches!(v, ssa::Instr::ReduceLocal { .. }));
+    if contains_reduce_local {
+        w.write(include_bytes!("reduce.cu"))?;
+    }
     let mut args = std::collections::HashMap::new();
     for (idx, instr) in kernel.instrs.iter().enumerate() {
         if let ssa::Instr::DefineGlobal { index, dtype } = instr {
@@ -165,8 +170,13 @@ pub fn gen<W: std::io::Write>(w: &mut W, func_name: &str, kernel: &ssa::Kernel) 
             }
             I::Special(ssa::Special::GridIdx) => writeln!(w, "{indent}int {var_id} = blockIdx.x;")?,
             I::Barrier => writeln!(w, "{indent}__syncthreads();")?,
-            I::ReduceLocal { op: _, arg: _, dtype: _ } => {
-                anyhow::bail!("ReduceLocal is not implemented for the cuda backend")
+            I::ReduceLocal { op, arg, dtype } => {
+                let op = match op {
+                    ssa::ReduceOp::Sum => "block_reduce_sum",
+                    ssa::ReduceOp::Min => "block_reduce_min",
+                    ssa::ReduceOp::Max => "block_reduce_max",
+                };
+                writeln!(w, "{indent}{} {var_id} = {op}({});", D(*dtype), A(*arg))?;
             }
         }
     }
