@@ -149,8 +149,6 @@ fn extract_const(ast: &Ast, axis: usize) -> Result<(Vec<(Id, Ast)>, Ast)> {
 }
 
 impl Ast {
-    // TODO: actually use opts.
-    #[allow(clippy::only_used_in_recursion)]
     fn lower(
         &self,
         idxs: &Indexes,
@@ -206,33 +204,40 @@ impl Ast {
                     ));
                 }
 
-                let init_value = op.init_value(self.dtype)?;
-                let fold_op = op.fold_op();
+                // TODO(laurent): generalize to other axis as long as the values in arg do not
+                // depend on the axis.
+                if opts.local.map_or(false, |v| v.axis == *axis) {
+                    let (arg_i, arg_b) = arg.lower(idxs, opts, per_arg)?;
+                    block.0.extend_from_slice(&arg_b.0);
+                    block.0.push((dst_i, SsaI::ReduceLocal { op: *op, arg: arg_i.to_a(), dtype }))
+                } else {
+                    let init_value = op.init_value(self.dtype)?;
+                    let fold_op = op.fold_op();
 
-                // TODO: if opts.local is set and arg does not depend on the axis, we should
-                // compute the reduce in parallel and use shared memory or warp synchronization
-                // to exchange the result.
-                let define_acc = SsaI::DefineAcc(init_value);
-                block.0.push((dst_i, define_acc));
-                let reduce_len = match arg.shape.dims().get(*axis) {
-                    None => anyhow::bail!("unexpected axis for reduce, {axis} {:?}", self.shape),
-                    Some(v) => *v,
-                };
-                let r = block.range(0, reduce_len as i32);
+                    let define_acc = SsaI::DefineAcc(init_value);
+                    block.0.push((dst_i, define_acc));
+                    let reduce_len = match arg.shape.dims().get(*axis) {
+                        None => {
+                            anyhow::bail!("unexpected axis for reduce, {axis} {:?}", self.shape)
+                        }
+                        Some(v) => *v,
+                    };
+                    let r = block.range(0, reduce_len as i32);
 
-                let mut reduce_idxs = idxs.clone();
-                reduce_idxs.0[*axis] = Index { id: r.id(), broadcast: false };
-                let (arg_i, arg_b) = arg.lower(&reduce_idxs, opts, per_arg)?;
-                block.0.extend_from_slice(&arg_b.0);
-                let fold_op = SsaI::Binary {
-                    op: fold_op,
-                    lhs: dst_i.to_a(),
-                    rhs: arg_i.to_a(),
-                    dtype: self.dtype,
-                };
-                let src_id = block.push(fold_op);
-                block.push(SsaI::Assign { dst: dst_i.to_varid(), src: src_id.to_a() });
-                block.end_range(r)?;
+                    let mut reduce_idxs = idxs.clone();
+                    reduce_idxs.0[*axis] = Index { id: r.id(), broadcast: false };
+                    let (arg_i, arg_b) = arg.lower(&reduce_idxs, opts, per_arg)?;
+                    block.0.extend_from_slice(&arg_b.0);
+                    let fold_op = SsaI::Binary {
+                        op: fold_op,
+                        lhs: dst_i.to_a(),
+                        rhs: arg_i.to_a(),
+                        dtype: self.dtype,
+                    };
+                    let src_id = block.push(fold_op);
+                    block.push(SsaI::Assign { dst: dst_i.to_varid(), src: src_id.to_a() });
+                    block.end_range(r)?;
+                }
                 (dst_i, block)
             }
             A::Binary { op, lhs, rhs } => {

@@ -61,7 +61,7 @@ pub fn gen<W: std::io::Write>(w: &mut W, func_name: &str, kernel: &ssa::Kernel) 
     let contains_reduce_local =
         kernel.instrs.iter().any(|v| matches!(v, ssa::Instr::ReduceLocal { .. }));
     if contains_reduce_local {
-        w.write(include_bytes!("reduce.cu"))?;
+        w.write_all(include_bytes!("reduce.cu"))?;
     }
     let mut args = std::collections::HashMap::new();
     for (idx, instr) in kernel.instrs.iter().enumerate() {
