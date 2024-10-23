@@ -60,3 +60,30 @@ fn softmax() -> Result<()> {
     );
     Ok(())
 }
+
+#[test]
+fn ssa_softmax() -> Result<()> {
+    const N_COLS: usize = 4;
+    const N_ROWS: usize = 2;
+    let ssa_kernel = ug::samples::ssa::softmax(N_ROWS, N_COLS)?;
+    let mut a = ug::interpreter::Buffer::F32(vec![0., 1., 2., 3., 2., 1., 2., 1.]);
+    let mut b = ug::interpreter::Buffer::F32(vec![0f32; N_ROWS * N_COLS]);
+    for group_idx in 0..N_ROWS {
+        ug::interpreter::eval_ssa::<N_COLS>(&ssa_kernel, vec![&mut a, &mut b], &[], group_idx)?;
+    }
+    let b = b.as_f32()?;
+    assert_eq!(
+        b,
+        [
+            0.032058604,
+            0.08714432,
+            0.23688284,
+            0.6439143,
+            0.3655293,
+            0.13447072,
+            0.3655293,
+            0.13447072
+        ]
+    );
+    Ok(())
+}

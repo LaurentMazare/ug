@@ -93,7 +93,7 @@ pub mod ssa {
             b.push(I::Barrier);
             offset *= 2
         }
-        let max_i = b.push(I::Load { src: src_i.to_varid(), offset: base_off_i.to_a(), dtype });
+        let max_i = b.push(I::Load { src: sto_i, offset: 0.into(), dtype });
 
         let value_i = b.binary(BinaryOp::Sub, load_i, max_i, dtype);
         let value_i = b.unary(ssa::UnaryOp::Exp, value_i, dtype);
@@ -111,7 +111,7 @@ pub mod ssa {
             b.push(I::Barrier);
             offset *= 2
         }
-        let sum_i = b.push(I::Load { src: src_i.to_varid(), offset: base_off_i.to_a(), dtype });
+        let sum_i = b.push(I::Load { src: sto_i, offset: 0.into(), dtype });
 
         // Normalize by sum_exp
         let value_i = b.binary(BinaryOp::Div, value_i, sum_i, dtype);
