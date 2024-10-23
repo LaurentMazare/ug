@@ -31,8 +31,8 @@ static __device__ __forceinline__ T block_reduce_sum(T x) {
     x = warp_reduce_sum(x);
     if (block_size > 32) {
         __shared__ T smem[32];
-        int warp_id = threadIdx.x / 32;
-        int lane_id = threadIdx.x % 32;
+        unsigned int warp_id = threadIdx.x / 32;
+        unsigned int lane_id = threadIdx.x % 32;
         if (lane_id == 0) {
             smem[warp_id] = x;
         }
@@ -49,8 +49,8 @@ static __device__ __forceinline__ T block_reduce_max(T x) {
     x = warp_reduce_max(x);
     if (block_size > 32) {
         __shared__ T smem[32];
-        int warp_id = threadIdx.x / 32;
-        int lane_id = threadIdx.x % 32;
+        unsigned int warp_id = threadIdx.x / 32;
+        unsigned int lane_id = threadIdx.x % 32;
         if (lane_id == 0) {
             smem[warp_id] = x;
         }
@@ -67,8 +67,8 @@ static __device__ __forceinline__ T block_reduce_min(T x) {
     x = warp_reduce_min(x);
     if (block_size > 32) {
         __shared__ T smem[32];
-        int warp_id = threadIdx.x / 32;
-        int lane_id = threadIdx.x % 32;
+        unsigned int warp_id = threadIdx.x / 32;
+        unsigned int lane_id = threadIdx.x % 32;
         if (lane_id == 0) {
             smem[warp_id] = x;
         }
