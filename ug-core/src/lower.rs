@@ -27,6 +27,12 @@ impl Id {
     }
 }
 
+impl From<Id> for ssa::A {
+    fn from(val: Id) -> Self {
+        val.to_a()
+    }
+}
+
 // ssa like instructions but with explicit dst
 #[derive(Debug)]
 pub(crate) struct Block(pub(crate) Vec<(Id, SsaI)>);
@@ -100,22 +106,27 @@ impl Block {
         id
     }
 
-    pub(crate) fn unary(&mut self, op: lang::UnaryOp, arg: Id, dtype: lang::DType) -> Id {
+    pub(crate) fn unary<I: Into<ssa::A>>(
+        &mut self,
+        op: lang::UnaryOp,
+        arg: I,
+        dtype: lang::DType,
+    ) -> Id {
         let id = Id::new();
-        let op = SsaI::Unary { op, arg: arg.to_a(), dtype };
+        let op = SsaI::Unary { op, arg: arg.into(), dtype };
         self.0.push((id, op));
         id
     }
 
-    pub(crate) fn binary(
+    pub(crate) fn binary<I1: Into<ssa::A>, I2: Into<ssa::A>>(
         &mut self,
         op: lang::BinaryOp,
-        lhs: Id,
-        rhs: Id,
+        lhs: I1,
+        rhs: I2,
         dtype: lang::DType,
     ) -> Id {
         let id = Id::new();
-        let op = SsaI::Binary { op, lhs: lhs.to_a(), rhs: rhs.to_a(), dtype };
+        let op = SsaI::Binary { op, lhs: lhs.into(), rhs: rhs.into(), dtype };
         self.0.push((id, op));
         id
     }
