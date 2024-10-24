@@ -26,15 +26,24 @@ struct Args {
 fn run_one(args: &Args, n_cols: usize) -> Result<()> {
     let mut rng = rand::thread_rng();
     let n_rows = args.n_rows;
-    let ssa_kernel = match args.which {
-        Which::Exp => ug::samples::ssa::exp(n_cols)?,
-        Which::SsaSoftmax => ug::samples::ssa::softmax(n_rows, n_cols)?,
-        Which::SsaSoftmaxReduce => ug::samples::ssa::softmax_reduce(n_rows, n_cols)?,
+    let (ssa_kernel, block_dim) = match args.which {
+        Which::Exp => (ug::samples::ssa::exp(n_cols)?, n_cols),
+        Which::SsaSoftmax => (ug::samples::ssa::softmax(n_rows, n_cols)?, n_cols),
+        Which::SsaSoftmaxReduce => {
+            let bs = if n_cols <= 1024 {
+                n_cols
+            } else if n_cols % 1024 != 0 {
+                512
+            } else {
+                1024
+            };
+            (ug::samples::ssa::softmax_block(n_rows, n_cols, bs)?, bs)
+        }
         Which::Softmax => {
             let kernel = ug::samples::op::softmax(n_rows, n_cols)?;
             let lower_opts =
                 ug::lower_op::Opts::default().with_global(0, n_rows).with_local(1, n_cols);
-            kernel.lower(&lower_opts)?
+            (kernel.lower(&lower_opts)?, n_cols)
         }
     };
     let mut buf = vec![];
@@ -57,7 +66,7 @@ fn run_one(args: &Args, n_cols: usize) -> Result<()> {
                 res.slice(),
                 cudarc::driver::LaunchConfig {
                     grid_dim: (n_rows as u32, 1, 1),
-                    block_dim: (n_cols as u32, 1, 1),
+                    block_dim: (block_dim as u32, 1, 1),
                     shared_mem_bytes: 0,
                 },
             )?

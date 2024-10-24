@@ -149,6 +149,51 @@ pub mod ssa {
         Ok(Kernel { instrs: b.relocate()? })
     }
 
+    pub fn softmax_block(_dim1: usize, dim2: usize, block_size: usize) -> Result<Kernel> {
+        if dim2 % block_size != 0 {
+            anyhow::bail!("last-dim {dim2} must be divisible by block size {block_size}")
+        }
+        let per_block = dim2 / block_size;
+        let mut b = crate::lower::Block::empty();
+        let dtype = DType::F32;
+        let src_i = b.push(I::DefineGlobal { index: 0, dtype: DType::PtrF32 });
+        let dst_i = b.push(I::DefineGlobal { index: 1, dtype: DType::PtrF32 });
+        let g_i = b.push(I::Special(ssa::Special::GridIdx));
+        let l_i = b.push(I::Special(ssa::Special::LocalIdx));
+        let base_off_i = b.mul(g_i, dim2 as i32);
+        let global_off_i = b.binary(BinaryOp::Add, base_off_i, l_i, DType::I32);
+
+        let mut load_is = Vec::with_capacity(per_block);
+
+        let mut max_i = b.push(I::Const(Const::F32(f32::NEG_INFINITY)));
+        for i in (0..dim2).step_by(block_size) {
+            let offset = b.add(global_off_i, i as i32).to_a();
+            let load_i = b.push(I::Load { src: src_i.to_varid(), offset, dtype });
+            max_i = b.binary(BinaryOp::Max, max_i, load_i, dtype);
+            load_is.push(load_i)
+        }
+        let max_i = b.push(I::ReduceLocal { op: ssa::ReduceOp::Max, arg: max_i.to_a(), dtype });
+
+        let mut value_is = Vec::with_capacity(per_block);
+        let mut sum_i = b.push(I::Const(Const::I32(0)));
+        for load_i in load_is.into_iter() {
+            let value_i = b.binary(BinaryOp::Sub, load_i, max_i, dtype);
+            let value_i = b.unary(ssa::UnaryOp::Exp, value_i, dtype);
+            sum_i = b.binary(BinaryOp::Add, value_i, sum_i, dtype);
+            value_is.push(value_i);
+        }
+        let sum_i = b.push(I::ReduceLocal { op: ssa::ReduceOp::Sum, arg: sum_i.to_a(), dtype });
+
+        for (i, value_i) in value_is.into_iter().enumerate() {
+            let i = i * block_size;
+            let offset = b.add(global_off_i, i as i32).to_a();
+            // Normalize by sum_exp
+            let value_i = b.binary(BinaryOp::Div, value_i, sum_i, dtype);
+            b.push(I::Store { dst: dst_i.to_varid(), offset, value: value_i.to_a(), dtype });
+        }
+        Ok(Kernel { instrs: b.relocate()? })
+    }
+
     pub fn softmax(dim1: usize, dim2: usize) -> Result<Kernel> {
         softmax_barrier(dim1, dim2)
     }
