@@ -84,15 +84,21 @@ impl lang::op::Layout {
 impl lang::op::ReduceOp {
     fn init_value(&self, dtype: DType) -> Result<ssa::Const> {
         let value = match (self, dtype) {
+            (Self::Sum, DType::BF16) => ssa::Const::BF16(half::bf16::ZERO),
+            (Self::Sum, DType::F16) => ssa::Const::F16(half::f16::ZERO),
             (Self::Sum, DType::F32) => ssa::Const::F32(0f32),
             (Self::Sum, DType::I32) => ssa::Const::I32(0i32),
+            (Self::Sum, DType::I64) => ssa::Const::I64(0i64),
+            (Self::Min, DType::BF16) => ssa::Const::BF16(half::bf16::INFINITY),
+            (Self::Min, DType::F16) => ssa::Const::F16(half::f16::INFINITY),
             (Self::Min, DType::F32) => ssa::Const::F32(f32::INFINITY),
             (Self::Min, DType::I32) => ssa::Const::I32(i32::MAX),
+            (Self::Min, DType::I64) => ssa::Const::I64(i64::MAX),
+            (Self::Max, DType::BF16) => ssa::Const::BF16(half::bf16::NEG_INFINITY),
+            (Self::Max, DType::F16) => ssa::Const::F16(half::f16::NEG_INFINITY),
             (Self::Max, DType::F32) => ssa::Const::F32(f32::NEG_INFINITY),
             (Self::Max, DType::I32) => ssa::Const::I32(i32::MIN),
-            (_, DType::PtrF32) | (_, DType::PtrI32) => {
-                anyhow::bail!("incorrect dtype for reduce {dtype:?}")
-            }
+            (Self::Max, DType::I64) => ssa::Const::I64(i64::MIN),
         };
         Ok(value)
     }
@@ -261,7 +267,10 @@ impl lang::op::Kernel {
         let grid_id = block.push(SsaI::Special(ssa::Special::GridIdx));
         let local_id = block.push(SsaI::Special(ssa::Special::LocalIdx));
         for (index, arg) in self.args.iter().enumerate() {
-            let dtype = arg.dtype();
+            let dtype = match arg.type_() {
+                ssa::Type::Ptr(v) => v,
+                ssa::Type::Value(_) => anyhow::bail!("non-pointer arguments are not supported yet"),
+            };
             let id = block.push(SsaI::DefineGlobal { index, dtype });
             per_arg.insert(arg.id(), id.to_varid());
         }

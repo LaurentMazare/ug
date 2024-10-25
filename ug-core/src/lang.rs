@@ -1,14 +1,15 @@
-use serde::{Deserialize, Serialize};
+pub use crate::DType;
+use half::{bf16, f16};
 use std::sync::Arc;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ReduceOp {
     Sum,
     Max,
     Min,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum UnaryOp {
     Id,
     Exp,
@@ -16,7 +17,7 @@ pub enum UnaryOp {
     Cast,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum BinaryOp {
     Add,
     Sub,
@@ -26,26 +27,33 @@ pub enum BinaryOp {
     Max,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-pub enum DType {
-    PtrF32,
-    PtrI32,
-    F32,
-    I32,
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Type {
+    Value(DType),
+    Ptr(DType),
 }
 
-impl DType {
-    pub fn bytes(&self) -> usize {
+impl From<DType> for Type {
+    fn from(value: DType) -> Self {
+        Self::Value(value)
+    }
+}
+
+impl Type {
+    pub fn size_in_bytes(&self) -> usize {
         match self {
-            Self::PtrF32 | Self::PtrI32 => 8,
-            Self::F32 | Self::I32 => 4,
+            Self::Ptr(_) => 8,
+            Self::Value(v) => v.size_in_bytes(),
         }
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Const {
     I32(i32),
+    I64(i64),
+    BF16(bf16),
+    F16(f16),
     F32(f32),
 }
 
@@ -62,16 +70,19 @@ impl From<f32> for Const {
 }
 
 impl Const {
-    fn dtype(&self) -> DType {
+    pub fn dtype(&self) -> DType {
         match self {
             Self::I32(_) => DType::I32,
+            Self::I64(_) => DType::I64,
+            Self::BF16(_) => DType::BF16,
+            Self::F16(_) => DType::F16,
             Self::F32(_) => DType::F32,
         }
     }
 }
 
 /// Unique identifier for arguments.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ArgId(usize);
 
 impl ArgId {
@@ -88,7 +99,7 @@ impl ArgId {
 }
 
 /// Unique identifier for nodes.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct NodeId(usize);
 
 impl NodeId {
@@ -105,7 +116,7 @@ impl NodeId {
 }
 
 /// Unique identifier for index nodes.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct IndexNodeId(usize);
 
 impl IndexNodeId {
@@ -121,11 +132,26 @@ impl IndexNodeId {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ScalarConst {
     Ptr(u64),
     I32(i32),
+    I64(i64),
+    BF16(bf16),
+    F16(f16),
     F32(f32),
+}
+
+impl From<bf16> for ScalarConst {
+    fn from(value: bf16) -> Self {
+        Self::BF16(value)
+    }
+}
+
+impl From<f16> for ScalarConst {
+    fn from(value: f16) -> Self {
+        Self::F16(value)
+    }
 }
 
 impl From<f32> for ScalarConst {
@@ -140,10 +166,16 @@ impl From<i32> for ScalarConst {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+impl From<i64> for ScalarConst {
+    fn from(value: i64) -> Self {
+        Self::I64(value)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Arg {
     id: ArgId,
-    dtype: DType,
+    type_: Type,
 }
 
 impl PartialOrd for Arg {
@@ -159,17 +191,22 @@ impl Ord for Arg {
 }
 
 impl Arg {
-    pub fn new(dtype: DType) -> Self {
+    pub fn value(dtype: DType) -> Self {
         let id = ArgId::new();
-        Self { id, dtype }
+        Self { id, type_: Type::Value(dtype) }
+    }
+
+    pub fn ptr(dtype: DType) -> Self {
+        let id = ArgId::new();
+        Self { id, type_: Type::Ptr(dtype) }
     }
 
     pub fn id(&self) -> ArgId {
         self.id
     }
 
-    pub fn dtype(&self) -> DType {
-        self.dtype
+    pub fn type_(&self) -> Type {
+        self.type_
     }
 }
 
@@ -549,11 +586,11 @@ pub mod op {
 // https://github.com/tinygrad/tinygrad/blob/13846930cd43b1cfd8f7bb2967529f08c08cb6d6/tinygrad/ops.py#L98
 pub mod ssa {
     use anyhow::Result;
-    use serde::{Deserialize, Serialize};
 
-    pub use super::{BinaryOp, Const, DType, ReduceOp, UnaryOp};
+    pub use super::{BinaryOp, Const, ReduceOp, Type, UnaryOp};
+    pub use crate::DType;
 
-    #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub struct VarId(usize);
 
     impl VarId {
@@ -571,13 +608,13 @@ pub mod ssa {
         }
     }
 
-    #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Copy, PartialEq)]
     pub enum Special {
         LocalIdx,
         GridIdx,
     }
 
-    #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Copy, PartialEq)]
     pub enum A {
         Var(VarId),
         Const(Const),
@@ -601,7 +638,7 @@ pub mod ssa {
         }
     }
 
-    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+    #[derive(Debug, Clone, PartialEq)]
     /// The loop start_idx and end_idx are using VarIds as these are derived from line numbers in
     /// the final SSA.
     pub enum Instr {
@@ -625,7 +662,7 @@ pub mod ssa {
         ReduceLocal { op: ReduceOp, arg: A, dtype: DType },
     }
 
-    #[derive(Clone, Serialize, Deserialize)]
+    #[derive(Clone)]
     pub struct Kernel {
         pub instrs: Vec<Instr>,
     }
@@ -640,23 +677,31 @@ pub mod ssa {
                 match instr {
                     Instr::Load { src: _, offset: _, dtype }
                     | Instr::Store { dst: _, offset: _, value: _, dtype } => {
-                        mem += mult * dtype.bytes()
+                        mem += mult * dtype.size_in_bytes()
                     }
                     Instr::Range { lo, up, end_idx: _ } => {
                         mults.push(mult);
                         let lo = match lo {
-                            A::Const(Const::I32(lo)) => *lo,
-                            A::Const(Const::F32(_)) => anyhow::bail!("range lo is not a const i32"),
+                            A::Const(Const::I64(lo)) => *lo,
+                            A::Const(Const::I32(lo)) => *lo as i64,
+                            A::Const(_) => {
+                                anyhow::bail!("range lo is not a const i32/i64")
+                            }
                             A::Var(lo) => match self.instrs[lo.0] {
-                                Instr::Const(Const::I32(lo)) => lo,
+                                Instr::Const(Const::I64(lo)) => lo,
+                                Instr::Const(Const::I32(lo)) => lo as i64,
                                 _ => anyhow::bail!("range lo is not a const"),
                             },
                         };
                         let up = match up {
-                            A::Const(Const::I32(up)) => *up,
-                            A::Const(Const::F32(_)) => anyhow::bail!("range up is not a const i32"),
+                            A::Const(Const::I32(up)) => *up as i64,
+                            A::Const(Const::I64(up)) => *up,
+                            A::Const(_) => {
+                                anyhow::bail!("range up is not a const i32/i64")
+                            }
                             A::Var(up) => match self.instrs[up.0] {
-                                Instr::Const(Const::I32(up)) => up,
+                                Instr::Const(Const::I32(up)) => up as i64,
+                                Instr::Const(Const::I64(up)) => up,
                                 _ => anyhow::bail!("range lo is not a const"),
                             },
                         };

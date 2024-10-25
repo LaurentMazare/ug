@@ -247,8 +247,11 @@ impl lang::ExprNode {
             }
             E::ScalarConst(c) => {
                 let instr = match c {
-                    lang::ScalarConst::I32(v) => SsaI::Const(ssa::Const::I32(*v)),
+                    lang::ScalarConst::BF16(v) => SsaI::Const(ssa::Const::BF16(*v)),
+                    lang::ScalarConst::F16(v) => SsaI::Const(ssa::Const::F16(*v)),
                     lang::ScalarConst::F32(v) => SsaI::Const(ssa::Const::F32(*v)),
+                    lang::ScalarConst::I32(v) => SsaI::Const(ssa::Const::I32(*v)),
+                    lang::ScalarConst::I64(v) => SsaI::Const(ssa::Const::I64(*v)),
                     lang::ScalarConst::Ptr(_) => anyhow::bail!("const ptr are not supported"),
                 };
                 vec![(dst_id, instr)]
@@ -386,7 +389,10 @@ impl lang::Kernel {
         let mut per_arg = std::collections::HashMap::new();
         for (index, arg) in self.args.iter().enumerate() {
             let id = Id::new();
-            let dtype = arg.dtype();
+            let dtype = match arg.type_() {
+                ssa::Type::Ptr(v) => v,
+                ssa::Type::Value(_) => anyhow::bail!("non-pointer arguments are not supported yet"),
+            };
             instrs.push((id, SsaI::DefineGlobal { index, dtype }));
             per_arg.insert(arg.id(), id.to_varid());
         }

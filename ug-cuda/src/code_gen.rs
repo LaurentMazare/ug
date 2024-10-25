@@ -11,23 +11,30 @@ impl std::fmt::Display for V {
 
 struct C(ssa::Const);
 
+fn fmt_f32(v: f32, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    use std::num::FpCategory;
+    match v.classify() {
+        // Using the INFINITY / NAN macros would feel a bit better but they don't
+        // seem available and I haven't find out how to include<cmath>.
+        FpCategory::Nan => write!(f, "0. / 0."),
+        FpCategory::Infinite if v > 0. => write!(f, "1. / 0."),
+        FpCategory::Infinite => write!(f, "-1. / 0."),
+        FpCategory::Zero | FpCategory::Normal | FpCategory::Subnormal => {
+            // We use the debug trait rather than display for floats as the outcome
+            // on f32::MIN would not round trip properly with display.
+            write!(f, "{v:?}")
+        }
+    }
+}
+
 impl std::fmt::Display for C {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use std::num::FpCategory;
         match self.0 {
+            ssa::Const::BF16(v) => fmt_f32(v.into(), f),
+            ssa::Const::F16(v) => fmt_f32(v.into(), f),
+            ssa::Const::F32(v) => fmt_f32(v, f),
             ssa::Const::I32(v) => write!(f, "{v}"),
-            ssa::Const::F32(v) => match v.classify() {
-                // Using the INFINITY / NAN macros would feel a bit better but they don't
-                // seem available and I haven't find out how to include<cmath>.
-                FpCategory::Nan => write!(f, "0. / 0."),
-                FpCategory::Infinite if v > 0. => write!(f, "1. / 0."),
-                FpCategory::Infinite => write!(f, "-1. / 0."),
-                FpCategory::Zero | FpCategory::Normal | FpCategory::Subnormal => {
-                    // We use the debug trait rather than display for floats as the outcome
-                    // on f32::MIN would not round trip properly with display.
-                    write!(f, "{v:?}")
-                }
-            },
+            ssa::Const::I64(v) => write!(f, "{v}"),
         }
     }
 }
@@ -48,10 +55,11 @@ struct D(ssa::DType);
 impl std::fmt::Display for D {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let dtype = match self.0 {
+            ssa::DType::BF16 => "__nv_bfloat16",
+            ssa::DType::F16 => "__half",
             ssa::DType::F32 => "float",
             ssa::DType::I32 => "int",
-            ssa::DType::PtrF32 => "float*",
-            ssa::DType::PtrI32 => "int*",
+            ssa::DType::I64 => "long long",
         };
         f.write_str(dtype)
     }
@@ -78,7 +86,7 @@ pub fn gen<W: std::io::Write>(w: &mut W, func_name: &str, kernel: &ssa::Kernel) 
         }
         let is_last = arg_idx == args.len() - 1;
         let delim = if is_last { "" } else { "," };
-        writeln!(w, "  {} {}{delim}", D(dtype), V(ssa::VarId::new(var_id)))?;
+        writeln!(w, "  {}* {}{delim}", D(dtype), V(ssa::VarId::new(var_id)))?;
     }
     writeln!(w, ") {{")?;
 
@@ -89,33 +97,13 @@ pub fn gen<W: std::io::Write>(w: &mut W, func_name: &str, kernel: &ssa::Kernel) 
         let indent = " ".repeat(2 * depth + 2);
         match instr {
             I::DefineGlobal { index: _, dtype: _ } => {}
-            I::DefineLocal { dtype, size } => match dtype {
+            I::DefineLocal { dtype, size } => {
                 // TODO(laurent): should we enforce the alignment in some cases?
-                ssa::DType::PtrI32 => writeln!(w, "{indent}__shared__ int {var_id}[{size}];")?,
-                ssa::DType::PtrF32 => writeln!(w, "{indent}__shared__ float {var_id}[{size}];")?,
-                ssa::DType::F32 | ssa::DType::I32 => {
-                    anyhow::bail!("unsupported dtype for DefineLocal {dtype:?}")
-                }
-            },
-            I::DefineAcc(cst) | I::Const(cst) => match cst {
-                ssa::Const::I32(v) => writeln!(w, "{indent}int {var_id} = {v};")?,
-                ssa::Const::F32(v) => {
-                    use std::num::FpCategory;
-                    let v = match v.classify() {
-                        // Using the INFINITY / NAN macros would feel a bit better but they don't
-                        // seem available and I haven't find out how to include<cmath>.
-                        FpCategory::Nan => "0. / 0.".to_string(),
-                        FpCategory::Infinite if *v > 0. => "1. / 0.".to_string(),
-                        FpCategory::Infinite => "-1. / 0.".to_string(),
-                        FpCategory::Zero | FpCategory::Normal | FpCategory::Subnormal => {
-                            // We use the debug trait rather than display for floats as the outcome
-                            // on f32::MIN would not round trip properly with display.
-                            format!("{v:?}")
-                        }
-                    };
-                    writeln!(w, "{indent}float {var_id} = {v};")?
-                }
-            },
+                writeln!(w, "{indent}__shared__ {} {var_id}[{size}];", D(*dtype))?
+            }
+            I::DefineAcc(cst) | I::Const(cst) => {
+                writeln!(w, "{indent}{} {var_id} = {};", D(cst.dtype()), C(*cst))?
+            }
             I::If { cond, end_idx: _ } => {
                 writeln!(w, "{indent}if ({}) {{", A(*cond),)?;
                 depth += 1;
@@ -163,10 +151,11 @@ pub fn gen<W: std::io::Write>(w: &mut W, func_name: &str, kernel: &ssa::Kernel) 
                     ssa::UnaryOp::Neg => "neg",
                     ssa::UnaryOp::Id => "",
                     ssa::UnaryOp::Cast => match dtype {
+                        ssa::DType::BF16 => "static_cast<__nv_bfloat16>",
+                        ssa::DType::F16 => "static_cast<__half>",
                         ssa::DType::F32 => "static_cast<float>",
                         ssa::DType::I32 => "static_cast<int>",
-                        ssa::DType::PtrF32 => "static_cast<float*>",
-                        ssa::DType::PtrI32 => "static_cast<int*>",
+                        ssa::DType::I64 => "static_cast<long long>",
                     },
                 };
                 writeln!(w, "{indent}{} {var_id} = {op}({});", D(*dtype), A(*arg))?;

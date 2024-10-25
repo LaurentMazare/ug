@@ -1,6 +1,6 @@
 use crate::lang::ssa::{self, Const, Instr, Kernel, VarId};
 use anyhow::Result;
-use serde::{Deserialize, Serialize};
+use half::{bf16, f16};
 
 mod buffer {
     use serde::{Deserialize, Serialize};
@@ -89,15 +89,21 @@ use buffer::Id as BufId;
 pub enum Value<const N: usize> {
     Ptr(BufId),
     LocalPtr(BufId),
-    I32(W<i32, N>),
+    BF16(W<bf16, N>),
+    F16(W<f16, N>),
     F32(W<f32, N>),
+    I32(W<i32, N>),
+    I64(W<i64, N>),
     None,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub enum Buffer {
+    BF16(Vec<bf16>),
+    F16(Vec<f16>),
     F32(Vec<f32>),
     I32(Vec<i32>),
+    I64(Vec<i64>),
 }
 
 impl Buffer {
@@ -170,8 +176,11 @@ impl<'a, const N: usize> Context<'a, N> {
     fn get(&self, a: ssa::A) -> Result<Value<N>> {
         let value = match a {
             ssa::A::Var(id) => self.get_id(id)?,
+            ssa::A::Const(Const::BF16(v)) => Value::BF16(W::splat(v)),
+            ssa::A::Const(Const::F16(v)) => Value::F16(W::splat(v)),
             ssa::A::Const(Const::F32(v)) => Value::F32(W::splat(v)),
             ssa::A::Const(Const::I32(v)) => Value::I32(W::splat(v)),
+            ssa::A::Const(Const::I64(v)) => Value::I64(W::splat(v)),
         };
         Ok(value)
     }
@@ -190,8 +199,11 @@ pub fn eval_ssa<const N: usize>(
         let var_id = VarId::new(current_idx);
         let (value, jump_idx) = match instr {
             Instr::DefineGlobal { index, dtype: _ } => (Value::Ptr(BufId::new(*index)), None),
+            Instr::Const(Const::BF16(v)) => (Value::BF16(W::splat(*v)), None),
+            Instr::Const(Const::F16(v)) => (Value::F16(W::splat(*v)), None),
             Instr::Const(Const::F32(v)) => (Value::F32(W::splat(*v)), None),
             Instr::Const(Const::I32(v)) => (Value::I32(W::splat(*v)), None),
+            Instr::Const(Const::I64(v)) => (Value::I64(W::splat(*v)), None),
             Instr::If { cond, end_idx } => {
                 let cond = context.get(*cond)?;
                 let cond = cond.as_i32()?;
@@ -261,8 +273,11 @@ pub fn eval_ssa<const N: usize>(
                     _ => anyhow::bail!("unexpected dtype for src in load {src:?}"),
                 };
                 let value = match buffer {
+                    Buffer::BF16(v) => Value::BF16(W(offset.0.map(|o| v[o as usize]))),
+                    Buffer::F16(v) => Value::F16(W(offset.0.map(|o| v[o as usize]))),
                     Buffer::F32(v) => Value::F32(W(offset.0.map(|o| v[o as usize]))),
                     Buffer::I32(v) => Value::I32(W(offset.0.map(|o| v[o as usize]))),
+                    Buffer::I64(v) => Value::I64(W(offset.0.map(|o| v[o as usize]))),
                 };
                 (value, None)
             }
@@ -341,8 +356,11 @@ pub fn eval_ssa<const N: usize>(
             // DefineAcc is handled in the same way as Const, the only difference is that Assign
             // can modify it. This isn't even checked for in this interpreter, all the vars can be
             // assigned but optimizations/code generation might rely on it.
+            Instr::DefineAcc(Const::BF16(v)) => (Value::BF16(W::splat(*v)), None),
+            Instr::DefineAcc(Const::F16(v)) => (Value::F16(W::splat(*v)), None),
             Instr::DefineAcc(Const::F32(v)) => (Value::F32(W::splat(*v)), None),
             Instr::DefineAcc(Const::I32(v)) => (Value::I32(W::splat(*v)), None),
+            Instr::DefineAcc(Const::I64(v)) => (Value::I64(W::splat(*v)), None),
             Instr::Special(ssa::Special::LocalIdx) => {
                 (Value::I32(W(std::array::from_fn(|i| i as i32))), None)
             }
@@ -375,11 +393,11 @@ pub fn eval_ssa<const N: usize>(
                 // never made inside a loop otherwise the previous value should be used.
                 let buf_id = context.local_buffers.len();
                 let buf = match dtype {
-                    ssa::DType::PtrI32 => Buffer::I32(vec![0i32; *size]),
-                    ssa::DType::PtrF32 => Buffer::F32(vec![0f32; *size]),
-                    ssa::DType::I32 | ssa::DType::F32 => {
-                        anyhow::bail!("unsupported dtype for DefineLocal {dtype:?}")
-                    }
+                    ssa::DType::BF16 => Buffer::BF16(vec![bf16::ZERO; *size]),
+                    ssa::DType::F16 => Buffer::F16(vec![f16::ZERO; *size]),
+                    ssa::DType::F32 => Buffer::F32(vec![0f32; *size]),
+                    ssa::DType::I32 => Buffer::I32(vec![0i32; *size]),
+                    ssa::DType::I64 => Buffer::I64(vec![0i64; *size]),
                 };
                 context.local_buffers.push(buf);
                 (Value::LocalPtr(BufId::new(buf_id)), None)

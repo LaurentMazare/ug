@@ -9,9 +9,9 @@ pub mod ssa {
         let i32 = |i| A::Const(Const::I32(i));
         let dtype = DType::I32;
         let instrs = vec![
-            /* 0 */ I::DefineGlobal { index: 0, dtype: DType::PtrI32 },
-            /* 1 */ I::DefineGlobal { index: 1, dtype: DType::PtrI32 },
-            /* 2 */ I::DefineGlobal { index: 2, dtype: DType::PtrI32 },
+            /* 0 */ I::DefineGlobal { index: 0, dtype: DType::I32 },
+            /* 1 */ I::DefineGlobal { index: 1, dtype: DType::I32 },
+            /* 2 */ I::DefineGlobal { index: 2, dtype: DType::I32 },
             /* 3 */ I::Range { lo: i32(0), up: i32(vec_len as i32), end_idx: v(8) },
             /* 4 */ I::Load { src: v(1), offset: a(3), dtype },
             /* 5 */ I::Load { src: v(2), offset: a(3), dtype },
@@ -27,9 +27,9 @@ pub mod ssa {
         let a = |i| A::Var(VarId::new(i));
         let dtype = DType::F32;
         let instrs = vec![
-            /* 0 */ I::DefineGlobal { index: 0, dtype: DType::PtrF32 },
-            /* 1 */ I::DefineGlobal { index: 1, dtype: DType::PtrF32 },
-            /* 2 */ I::DefineGlobal { index: 2, dtype: DType::PtrF32 },
+            /* 0 */ I::DefineGlobal { index: 0, dtype: DType::F32 },
+            /* 1 */ I::DefineGlobal { index: 1, dtype: DType::F32 },
+            /* 2 */ I::DefineGlobal { index: 2, dtype: DType::F32 },
             /* 3 */ I::Const(Const::I32(0)),
             /* 4 */ I::Const(Const::I32(vec_len as i32)),
             /* 5 */ I::DefineAcc(Const::F32(0.)),
@@ -48,8 +48,8 @@ pub mod ssa {
     pub fn exp(block_size: usize) -> Result<Kernel> {
         let mut b = crate::lower::Block::empty();
         let dtype = DType::F32;
-        let src_i = b.push(I::DefineGlobal { index: 0, dtype: DType::PtrF32 });
-        let dst_i = b.push(I::DefineGlobal { index: 1, dtype: DType::PtrF32 });
+        let src_i = b.push(I::DefineGlobal { index: 0, dtype: DType::F32 });
+        let dst_i = b.push(I::DefineGlobal { index: 1, dtype: DType::F32 });
         let g_i = b.push(I::Special(ssa::Special::GridIdx));
         let l_i = b.push(I::Special(ssa::Special::LocalIdx));
         let off_i = b.mul(g_i, block_size as i32);
@@ -68,9 +68,9 @@ pub mod ssa {
     pub fn softmax_barrier(_dim1: usize, dim2: usize) -> Result<Kernel> {
         let mut b = crate::lower::Block::empty();
         let dtype = DType::F32;
-        let src_i = b.push(I::DefineGlobal { index: 0, dtype: DType::PtrF32 });
-        let dst_i = b.push(I::DefineGlobal { index: 1, dtype: DType::PtrF32 });
-        let sto_i = b.push(I::DefineLocal { size: (2 * dim2), dtype: DType::PtrF32 }).to_varid();
+        let src_i = b.push(I::DefineGlobal { index: 0, dtype: DType::F32 });
+        let dst_i = b.push(I::DefineGlobal { index: 1, dtype: DType::F32 });
+        let sto_i = b.push(I::DefineLocal { size: (2 * dim2), dtype: DType::F32 }).to_varid();
         let g_i = b.push(I::Special(ssa::Special::GridIdx));
         let l_i = b.push(I::Special(ssa::Special::LocalIdx));
         let base_off_i = b.mul(g_i, dim2 as i32);
@@ -127,8 +127,8 @@ pub mod ssa {
     pub fn softmax_reduce(_dim1: usize, dim2: usize) -> Result<Kernel> {
         let mut b = crate::lower::Block::empty();
         let dtype = DType::F32;
-        let src_i = b.push(I::DefineGlobal { index: 0, dtype: DType::PtrF32 });
-        let dst_i = b.push(I::DefineGlobal { index: 1, dtype: DType::PtrF32 });
+        let src_i = b.push(I::DefineGlobal { index: 0, dtype: DType::F32 });
+        let dst_i = b.push(I::DefineGlobal { index: 1, dtype: DType::F32 });
         let g_i = b.push(I::Special(ssa::Special::GridIdx));
         let l_i = b.push(I::Special(ssa::Special::LocalIdx));
         let base_off_i = b.mul(g_i, dim2 as i32);
@@ -156,8 +156,8 @@ pub mod ssa {
         let per_block = dim2 / block_size;
         let mut b = crate::lower::Block::empty();
         let dtype = DType::F32;
-        let src_i = b.push(I::DefineGlobal { index: 0, dtype: DType::PtrF32 });
-        let dst_i = b.push(I::DefineGlobal { index: 1, dtype: DType::PtrF32 });
+        let src_i = b.push(I::DefineGlobal { index: 0, dtype: DType::F32 });
+        let dst_i = b.push(I::DefineGlobal { index: 1, dtype: DType::F32 });
         let g_i = b.push(I::Special(ssa::Special::GridIdx));
         let l_i = b.push(I::Special(ssa::Special::LocalIdx));
         let base_off_i = b.mul(g_i, dim2 as i32);
@@ -205,8 +205,8 @@ pub mod op {
 
     pub fn softmax(dim1: usize, dim2: usize) -> Result<Kernel> {
         let layout = Layout::from_shape(&[dim1, dim2]);
-        let src_ptr = Arg::new(DType::PtrF32);
-        let dst_ptr = Arg::new(DType::PtrF32);
+        let src_ptr = Arg::ptr(DType::F32);
+        let dst_ptr = Arg::ptr(DType::F32);
         let src = op::load(src_ptr.id(), layout.clone(), DType::F32)?;
         let src_max = op::reduce(op::ReduceOp::Max, src.clone(), 1)?;
         let src_max = op::broadcast(src_max, 1, dim2)?;
@@ -225,9 +225,9 @@ pub mod op {
 use crate::lang::{Arg, DType, ExprNode as E, IndexExprNode as I, Kernel, Ops};
 
 pub fn simple_add(block_size: usize) -> Kernel {
-    let lhs_ptr = Arg::new(DType::PtrF32);
-    let rhs_ptr = Arg::new(DType::PtrF32);
-    let dst_ptr = Arg::new(DType::PtrF32);
+    let lhs_ptr = Arg::ptr(DType::F32);
+    let rhs_ptr = Arg::ptr(DType::F32);
+    let dst_ptr = Arg::ptr(DType::F32);
     let offset = I::mul(&I::program_id(), &I::cst(block_size));
     let stride = I::cst(1);
     let len = I::cst(block_size);

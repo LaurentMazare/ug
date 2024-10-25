@@ -82,16 +82,20 @@ impl DType {
         Self(ug::lang::DType::F32)
     }
     #[classattr]
+    fn i64() -> Self {
+        Self(ug::lang::DType::I64)
+    }
+    #[classattr]
     fn i32() -> Self {
         Self(ug::lang::DType::I32)
     }
     #[classattr]
-    fn ptr_f32() -> Self {
-        Self(ug::lang::DType::PtrF32)
+    fn bf16() -> Self {
+        Self(ug::lang::DType::BF16)
     }
     #[classattr]
-    fn ptr_i32() -> Self {
-        Self(ug::lang::DType::PtrI32)
+    fn f16() -> Self {
+        Self(ug::lang::DType::F16)
     }
 }
 
@@ -107,18 +111,33 @@ mod op {
     #[pymethods]
     impl Arg {
         #[staticmethod]
+        fn ptr_bf16() -> Self {
+            Self(ug::lang::Arg::ptr(ug::DType::BF16))
+        }
+
+        #[staticmethod]
+        fn ptr_f16() -> Self {
+            Self(ug::lang::Arg::ptr(ug::DType::F16))
+        }
+
+        #[staticmethod]
         fn ptr_f32() -> Self {
-            Self(ug::lang::Arg::new(ug::lang::DType::PtrF32))
+            Self(ug::lang::Arg::ptr(ug::DType::F32))
         }
 
         #[staticmethod]
         fn ptr_i32() -> Self {
-            Self(ug::lang::Arg::new(ug::lang::DType::PtrI32))
+            Self(ug::lang::Arg::ptr(ug::DType::I32))
+        }
+
+        #[staticmethod]
+        fn f32() -> Self {
+            Self(ug::lang::Arg::value(ug::lang::DType::F32))
         }
 
         #[staticmethod]
         fn i32() -> Self {
-            Self(ug::lang::Arg::new(ug::lang::DType::I32))
+            Self(ug::lang::Arg::value(ug::lang::DType::I32))
         }
 
         fn __str__(&self) -> String {
@@ -190,12 +209,10 @@ mod op {
 
     #[pyfunction]
     pub fn load(arg: Arg, shape: Vec<usize>) -> PyResult<Ast> {
-        use ug::lang::DType;
         let layout = op::Layout::from_shape(shape);
-        let dtype = match arg.0.dtype() {
-            DType::PtrF32 => DType::F32,
-            DType::PtrI32 => DType::I32,
-            DType::F32 | DType::I32 => py_bail!("unexpected dtype for load {:?}", arg.0),
+        let dtype = match arg.0.type_() {
+            ug::lang::Type::Ptr(v) => v,
+            ug::lang::Type::Value(_) => py_bail!("unexpected dtype for load {:?}", arg.0),
         };
         let st = op::load(arg.0.id(), layout, dtype).map_err(w)?;
         Ok(Ast(st))
@@ -442,17 +459,17 @@ struct Arg(ug::lang::Arg);
 impl Arg {
     #[staticmethod]
     fn ptr_f32() -> Self {
-        Self(ug::lang::Arg::new(ug::lang::DType::PtrF32))
+        Self(ug::lang::Arg::ptr(ug::DType::F32))
     }
 
     #[staticmethod]
     fn ptr_i32() -> Self {
-        Self(ug::lang::Arg::new(ug::lang::DType::PtrI32))
+        Self(ug::lang::Arg::ptr(ug::DType::I32))
     }
 
     #[staticmethod]
     fn i32() -> Self {
-        Self(ug::lang::Arg::new(ug::lang::DType::I32))
+        Self(ug::lang::Arg::value(ug::DType::I32))
     }
 
     fn __str__(&self) -> String {

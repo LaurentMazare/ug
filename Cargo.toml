@@ -7,7 +7,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.0.1"
+version = "0.0.2"
 edition = "2021"
 description = "Micro compiler for tensor operations."
 repository = "https://github.com/LaurentMazare/ug"
@@ -21,8 +21,8 @@ clap = { version = "4.5.20", features = ["derive"] }
 cudarc = { version = "0.12.1", features = ["f16", "cuda-version-from-build-system"] }
 half = { version = "2.3.1", features = ["num-traits", "use-intrinsics", "rand_distr"] }
 num = "0.4.3"
-ug = { path = "./ug-core", version = "0.0.1" }
-ug-cuda = { path = "./ug-cuda", version = "0.0.1" }
+ug = { path = "./ug-core", version = "0.0.2" }
+ug-cuda = { path = "./ug-cuda", version = "0.0.2" }
 rand = "0.8.5"
 serde = { version = "1.0.198", features = ["derive"] }
 serde_json = "1.0.116"
