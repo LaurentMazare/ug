@@ -245,17 +245,7 @@ impl lang::ExprNode {
                 src_b.push((dst_id, instr));
                 src_b
             }
-            E::ScalarConst(c) => {
-                let instr = match c {
-                    lang::ScalarConst::BF16(v) => SsaI::Const(ssa::Const::BF16(*v)),
-                    lang::ScalarConst::F16(v) => SsaI::Const(ssa::Const::F16(*v)),
-                    lang::ScalarConst::F32(v) => SsaI::Const(ssa::Const::F32(*v)),
-                    lang::ScalarConst::I32(v) => SsaI::Const(ssa::Const::I32(*v)),
-                    lang::ScalarConst::I64(v) => SsaI::Const(ssa::Const::I64(*v)),
-                    lang::ScalarConst::Ptr(_) => anyhow::bail!("const ptr are not supported"),
-                };
-                vec![(dst_id, instr)]
-            }
+            E::Const(c) => vec![(dst_id, SsaI::Const(*c))],
             E::Range(_, _) => anyhow::bail!("TODO range is not supported yet"),
             E::Unary(op, arg) => {
                 let (arg_id, arg_b) = arg.lower(range_id, per_arg)?;

@@ -132,41 +132,19 @@ impl IndexNodeId {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum ScalarConst {
-    Ptr(u64),
-    I32(i32),
-    I64(i64),
-    BF16(bf16),
-    F16(f16),
-    F32(f32),
-}
-
-impl From<bf16> for ScalarConst {
+impl From<bf16> for Const {
     fn from(value: bf16) -> Self {
         Self::BF16(value)
     }
 }
 
-impl From<f16> for ScalarConst {
+impl From<f16> for Const {
     fn from(value: f16) -> Self {
         Self::F16(value)
     }
 }
 
-impl From<f32> for ScalarConst {
-    fn from(value: f32) -> Self {
-        Self::F32(value)
-    }
-}
-
-impl From<i32> for ScalarConst {
-    fn from(value: i32) -> Self {
-        Self::I32(value)
-    }
-}
-
-impl From<i64> for ScalarConst {
+impl From<i64> for Const {
     fn from(value: i64) -> Self {
         Self::I64(value)
     }
@@ -300,7 +278,7 @@ impl StridedSlice {
 
 #[derive(Debug, Clone)]
 pub enum Expr {
-    ScalarConst(ScalarConst),
+    Const(Const),
     Range(usize, usize),
     Load(StridedSlice),
     Unary(UnaryOp, ExprNode),
@@ -320,8 +298,8 @@ impl ExprNode {
         Self { inner: Arc::new(inner) }
     }
 
-    pub fn cst<C: Into<ScalarConst>>(c: C) -> Self {
-        Self::from_expr(Expr::ScalarConst(c.into()))
+    pub fn cst<C: Into<Const>>(c: C) -> Self {
+        Self::from_expr(Expr::Const(c.into()))
     }
 
     pub fn load(
@@ -365,7 +343,7 @@ impl ExprNode {
                 rhs.all_args(args);
             }
             Expr::Unary(_, e) => e.all_args(args),
-            Expr::Range(..) | Expr::ScalarConst(_) => {}
+            Expr::Range(..) | Expr::Const(_) => {}
         }
     }
 }
