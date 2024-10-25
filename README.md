@@ -1,3 +1,3 @@
 # ug
 
-Experiments around compiling tensor ops for cuda.
+Experiments around compiling tensor ops for cuda/metal/...

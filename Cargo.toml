@@ -2,6 +2,7 @@
 members = [
   "ug-core",
   "ug-cuda",
+  "ug-metal",
   "ug-pyo3",
 ]
 resolver = "2"
@@ -20,6 +21,7 @@ anyhow = { version = "1", features = ["backtrace"] }
 clap = { version = "4.5.20", features = ["derive"] }
 cudarc = { version = "0.12.1", features = ["f16", "cuda-version-from-build-system"] }
 half = { version = "2.3.1", features = ["num-traits", "use-intrinsics", "rand_distr"] }
+metal = "0.27.0"
 num = "0.4.3"
 ug = { path = "./ug-core", version = "0.0.2" }
 ug-cuda = { path = "./ug-cuda", version = "0.0.2" }

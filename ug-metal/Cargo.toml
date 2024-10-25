@@ -1,0 +1,21 @@
+[package]
+name = "ug-metal"
+version.workspace = true
+edition.workspace = true
+description.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+license.workspace = true
+
+[dependencies]
+metal = { workspace = true }
+half = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+ug = { workspace = true }
+
+[dev-dependencies]
+clap = { workspace = true }
+rand = { workspace = true }
