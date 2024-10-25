@@ -1,5 +1,5 @@
-use anyhow::Result;
 use ug::lang::ssa;
+use ug::Result;
 
 struct V(ssa::VarId);
 
@@ -82,7 +82,7 @@ pub fn gen<W: std::io::Write>(w: &mut W, func_name: &str, kernel: &ssa::Kernel) 
     writeln!(w, "extern \"C\" __global__ void {func_name}(")?;
     for (arg_idx2, &(var_id, (arg_idx, dtype))) in args.iter().enumerate() {
         if arg_idx != arg_idx2 {
-            anyhow::bail!("unexpected arguments in kernel {args:?}")
+            ug::bail!("unexpected arguments in kernel {args:?}")
         }
         let is_last = arg_idx == args.len() - 1;
         let delim = if is_last { "" } else { "," };
@@ -119,7 +119,7 @@ pub fn gen<W: std::io::Write>(w: &mut W, func_name: &str, kernel: &ssa::Kernel) 
             }
             I::EndIf | I::EndRange { start_idx: _ } => {
                 if depth == 0 {
-                    anyhow::bail!("unmatched EndRange")
+                    ug::bail!("unmatched EndRange")
                 }
                 depth -= 1;
                 let indent = " ".repeat(2 * depth + 2);
@@ -177,7 +177,7 @@ pub fn gen<W: std::io::Write>(w: &mut W, func_name: &str, kernel: &ssa::Kernel) 
     }
     writeln!(w, "}}")?;
     if depth > 0 {
-        anyhow::bail!("unmatched Range")
+        ug::bail!("unmatched Range")
     }
     Ok(())
 }

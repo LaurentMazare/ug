@@ -1,7 +1,7 @@
 pub mod ssa {
     use crate::lang::ssa;
     use crate::lang::ssa::{BinaryOp, Const, DType, Instr as I, Kernel, VarId, A};
-    use anyhow::Result;
+    use crate::Result;
 
     pub fn simple_add(vec_len: usize) -> Kernel {
         let v = VarId::new;
@@ -67,7 +67,7 @@ pub mod ssa {
 
     pub fn exp_block(dim2: usize, block_size: usize) -> Result<Kernel> {
         if dim2 % block_size != 0 {
-            anyhow::bail!("last-dim {dim2} must be divisible by block size {block_size}")
+            crate::bail!("last-dim {dim2} must be divisible by block size {block_size}")
         }
 
         let mut b = crate::lower::Block::empty();
@@ -179,7 +179,7 @@ pub mod ssa {
 
     pub fn softmax_block(_dim1: usize, dim2: usize, block_size: usize) -> Result<Kernel> {
         if dim2 % block_size != 0 {
-            anyhow::bail!("last-dim {dim2} must be divisible by block size {block_size}")
+            crate::bail!("last-dim {dim2} must be divisible by block size {block_size}")
         }
         let per_block = dim2 / block_size;
         let mut b = crate::lower::Block::empty();
@@ -229,7 +229,7 @@ pub mod ssa {
 
 pub mod op {
     use crate::lang::op::{self, Arg, DType, Kernel, Layout};
-    use anyhow::Result;
+    use crate::Result;
 
     pub fn softmax(dim1: usize, dim2: usize) -> Result<Kernel> {
         let layout = Layout::from_shape(&[dim1, dim2]);
@@ -252,7 +252,7 @@ pub mod op {
 
 use crate::lang::{Arg, DType, ExprNode as E, IndexExprNode as I, Kernel, Ops};
 
-pub fn simple_add(block_size: usize) -> anyhow::Result<Kernel> {
+pub fn simple_add(block_size: usize) -> crate::Result<Kernel> {
     let lhs_ptr = Arg::ptr(DType::F32);
     let rhs_ptr = Arg::ptr(DType::F32);
     let dst_ptr = Arg::ptr(DType::F32);

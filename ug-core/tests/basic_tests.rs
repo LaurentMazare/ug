@@ -1,4 +1,4 @@
-use anyhow::Result;
+use ug::Result;
 
 #[test]
 fn eval_add() -> Result<()> {

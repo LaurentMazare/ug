@@ -1,5 +1,5 @@
 use crate::lang::{self, ssa};
-use anyhow::{Context, Result};
+use crate::Result;
 use ssa::Instr as SsaI;
 
 // ssa::Instr are indexed based on their line number which is not convenient when
@@ -149,18 +149,16 @@ impl Block {
         }
         let mut instrs = vec![];
         for (_, instr) in self.0.iter() {
-            let get_id = |id: ssa::VarId| {
-                per_id
-                    .get(&Id::from_varid(id))
-                    .copied()
-                    .with_context(|| format!("id not found {id:?}"))
+            let get_id = |id: ssa::VarId| match per_id.get(&Id::from_varid(id)) {
+                Some(v) => Ok(*v),
+                None => crate::bail!("id not found {id:?}"),
             };
             let get_a = |a: ssa::A| {
                 let a = match a {
                     ssa::A::Var(v) => ssa::A::Var(get_id(v)?),
                     ssa::A::Const(c) => ssa::A::Const(c),
                 };
-                Ok::<_, anyhow::Error>(a)
+                Ok::<_, crate::Error>(a)
             };
             let instr = match instr {
                 SsaI::Store { dst, offset, value, dtype } => {
@@ -243,7 +241,7 @@ impl lang::ExprNode {
                 src_b
             }
             E::Const(c) => vec![(dst_id, SsaI::Const(*c))],
-            E::Range(_, _) => anyhow::bail!("TODO range is not supported yet"),
+            E::Range(_, _) => crate::bail!("TODO range is not supported yet"),
             E::Unary(op, arg) => {
                 let (arg_id, arg_b) = arg.lower(range_id, per_arg)?;
                 let instr = SsaI::Unary { op: *op, arg: arg_id.to_a(), dtype };
@@ -271,7 +269,7 @@ impl lang::StridedSlice {
         let (off_i, off_b) = self.offset().lower()?;
         let (stride_i, stride_b) = self.stride().lower()?;
         let ptr_i = match per_arg.get(&self.ptr().id()) {
-            None => anyhow::bail!("unknown arg {:?}", self.ptr().id()),
+            None => crate::bail!("unknown arg {:?}", self.ptr().id()),
             Some(id) => *id,
         };
         // TODO(laurent): remove this when we have some proper optimization pass.
@@ -369,7 +367,7 @@ impl lang::Kernel {
             let id = Id::new();
             let dtype = match arg.type_() {
                 ssa::Type::Ptr(v) => v,
-                ssa::Type::Value(_) => anyhow::bail!("non-pointer arguments are not supported yet"),
+                ssa::Type::Value(_) => crate::bail!("non-pointer arguments are not supported yet"),
             };
             instrs.push((id, SsaI::DefineGlobal { index, dtype }));
             per_arg.insert(arg.id(), id.to_varid());

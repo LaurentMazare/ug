@@ -1,7 +1,7 @@
 // This benchmark has a setup similar to the triton benchmark:
 // https://triton-lang.org/main/getting-started/tutorials/02-fused-softmax.html
-use anyhow::Result;
 use rand::Rng;
+use ug::Result;
 
 #[derive(clap::ValueEnum, Clone, Debug)]
 enum Which {
@@ -83,7 +83,7 @@ fn run_one(args: &Args, n_cols: usize) -> Result<()> {
             )?
         }
         device.synchronize()?;
-        Ok::<_, anyhow::Error>(())
+        Ok::<_, ug::Error>(())
     };
     println!("warmup {:?}", ssa_kernel.flops_mem_per_thread()?);
     run()?;

@@ -1,4 +1,4 @@
-use anyhow::Result;
+use ug::Result;
 
 fn eval_add() -> Result<()> {
     let kernel = ug::samples::ssa::simple_add(2);

@@ -1,6 +1,6 @@
 use crate::lang::{self, op::Ast, ssa};
 use crate::lower::{Block, Id};
-use anyhow::Result;
+use crate::Result;
 use ssa::{DType, Instr as SsaI};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -50,11 +50,7 @@ impl lang::op::Layout {
     fn lower(&self, idxs: &Indexes) -> Result<(Id, Block)> {
         let strides = self.strides();
         if idxs.0.len() != strides.len() {
-            anyhow::bail!(
-                "len mismatch between strides {} and idxs {}",
-                strides.len(),
-                idxs.0.len()
-            )
+            crate::bail!("len mismatch between strides {} and idxs {}", strides.len(), idxs.0.len())
         }
         let off = self.offset() as i32;
         if idxs.0.iter().filter(|v| !v.broadcast).count() == 0 {
@@ -167,7 +163,7 @@ impl Ast {
             A::Load { src, layout } => {
                 let dst_i = Id::new();
                 let ptr_i = match per_arg.get(src) {
-                    None => anyhow::bail!("unknown arg {src:?}"),
+                    None => crate::bail!("unknown arg {src:?}"),
                     Some(id) => *id,
                 };
                 let (off_i, off_b) = layout.lower(idxs)?;
@@ -179,7 +175,7 @@ impl Ast {
             A::Broadcast { arg, axis, dim_len: _ } => {
                 let mut idxs = idxs.0.to_vec();
                 match idxs.get_mut(*axis) {
-                    None => anyhow::bail!("unexpected axis for broadcast, {axis} {:?}", self.shape),
+                    None => crate::bail!("unexpected axis for broadcast, {axis} {:?}", self.shape),
                     Some(v) => v.broadcast = true,
                 };
                 arg.lower(&Indexes(idxs), opts, per_arg)?
@@ -224,7 +220,7 @@ impl Ast {
                     block.0.push((dst_i, define_acc));
                     let reduce_len = match arg.shape.dims().get(*axis) {
                         None => {
-                            anyhow::bail!("unexpected axis for reduce, {axis} {:?}", self.shape)
+                            crate::bail!("unexpected axis for reduce, {axis} {:?}", self.shape)
                         }
                         Some(v) => *v,
                     };
@@ -269,7 +265,7 @@ impl lang::op::Kernel {
         for (index, arg) in self.args.iter().enumerate() {
             let dtype = match arg.type_() {
                 ssa::Type::Ptr(v) => v,
-                ssa::Type::Value(_) => anyhow::bail!("non-pointer arguments are not supported yet"),
+                ssa::Type::Value(_) => crate::bail!("non-pointer arguments are not supported yet"),
             };
             let id = block.push(SsaI::DefineGlobal { index, dtype });
             per_arg.insert(arg.id(), id.to_varid());
@@ -277,7 +273,7 @@ impl lang::op::Kernel {
 
         for lang::op::Store { dst, layout, value } in self.ops.iter() {
             let ptr_i = match per_arg.get(dst) {
-                None => anyhow::bail!("unknown arg {dst:?}"),
+                None => crate::bail!("unknown arg {dst:?}"),
                 Some(id) => *id,
             };
             let mut ranges = Vec::with_capacity(layout.rank());

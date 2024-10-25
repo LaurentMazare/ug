@@ -9,8 +9,8 @@ categories.workspace = true
 license.workspace = true
 
 [dependencies]
-anyhow = { workspace = true }
 half = { workspace = true }
 num = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+thiserror = { workspace = true }

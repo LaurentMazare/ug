@@ -1,5 +1,5 @@
 pub use crate::DType;
-use anyhow::Result;
+use crate::Result;
 use half::{bf16, f16};
 use std::sync::Arc;
 
@@ -317,7 +317,7 @@ impl ExprNode {
     ) -> Result<Self> {
         let dtype = match ptr.type_() {
             ssa::Type::Ptr(v) => v,
-            ssa::Type::Value(_) => anyhow::bail!("non-pointer arguments are not supported yet"),
+            ssa::Type::Value(_) => crate::bail!("non-pointer arguments are not supported yet"),
         };
         let ss = StridedSlice {
             ptr: *ptr,
@@ -420,8 +420,8 @@ pub struct FlopsMem {
 // AST version of the SSA ops
 pub mod op {
     pub use super::{Arg, ArgId, BinaryOp, Const, DType, ReduceOp, UnaryOp};
+    use crate::Result;
     pub use crate::{Layout, Shape};
-    use anyhow::Result;
     use std::sync::Arc;
 
     #[derive(Debug, Clone, PartialEq)]
@@ -455,10 +455,10 @@ pub mod op {
         let dtype = arg.dtype;
         let mut dims = arg.shape.dims().to_vec();
         match dims.get(axis) {
-            None => anyhow::bail!("unexpected axis for reduce, {axis} {dims:?}"),
+            None => crate::bail!("unexpected axis for reduce, {axis} {dims:?}"),
             Some(1) => (),
             Some(_) => {
-                anyhow::bail!("expected a len of 1 on the broadcasted dim {axis} {dims:?}")
+                crate::bail!("expected a len of 1 on the broadcasted dim {axis} {dims:?}")
             }
         };
         dims[axis] = dim_len;
@@ -477,7 +477,7 @@ pub mod op {
         let dtype = arg.dtype;
         let mut shape = arg.shape.dims().to_vec();
         if axis >= shape.len() {
-            anyhow::bail!("no axis {axis} in shape {shape:?}")
+            crate::bail!("no axis {axis} in shape {shape:?}")
         }
         shape[axis] = 1; // keepdim by default.
         let inner = AstInner::Reduce { op, arg, axis };
@@ -486,13 +486,13 @@ pub mod op {
 
     pub fn binary(op: BinaryOp, lhs: Ast, rhs: Ast) -> Result<Ast> {
         let dtype = if lhs.dtype != rhs.dtype {
-            anyhow::bail!("dtype mismatch in {op:?}, lhs: {:?}, rhs: {:?}", lhs.dtype, rhs.dtype)
+            crate::bail!("dtype mismatch in {op:?}, lhs: {:?}, rhs: {:?}", lhs.dtype, rhs.dtype)
         } else {
             lhs.dtype
         };
         // Broadcasting has to be done explicitely.
         if lhs.shape != rhs.shape {
-            anyhow::bail!("shape mismatch in {op:?}, lhs: {:?}, rhs: {:?}", lhs.shape, rhs.shape)
+            crate::bail!("shape mismatch in {op:?}, lhs: {:?}, rhs: {:?}", lhs.shape, rhs.shape)
         }
         let shape = lhs.shape.clone();
         let inner = AstInner::Binary { op, lhs, rhs };
@@ -577,7 +577,7 @@ pub mod op {
 // This is currently close to the UOps setup from tinygrad:
 // https://github.com/tinygrad/tinygrad/blob/13846930cd43b1cfd8f7bb2967529f08c08cb6d6/tinygrad/ops.py#L98
 pub mod ssa {
-    use anyhow::Result;
+    use crate::Result;
 
     pub use super::{BinaryOp, Const, ReduceOp, Type, UnaryOp};
     pub use crate::DType;
@@ -695,30 +695,30 @@ pub mod ssa {
                             A::Const(Const::I64(lo)) => *lo,
                             A::Const(Const::I32(lo)) => *lo as i64,
                             A::Const(_) => {
-                                anyhow::bail!("range lo is not a const i32/i64")
+                                crate::bail!("range lo is not a const i32/i64")
                             }
                             A::Var(lo) => match self.instrs[lo.0] {
                                 Instr::Const(Const::I64(lo)) => lo,
                                 Instr::Const(Const::I32(lo)) => lo as i64,
-                                _ => anyhow::bail!("range lo is not a const"),
+                                _ => crate::bail!("range lo is not a const"),
                             },
                         };
                         let up = match up {
                             A::Const(Const::I32(up)) => *up as i64,
                             A::Const(Const::I64(up)) => *up,
                             A::Const(_) => {
-                                anyhow::bail!("range up is not a const i32/i64")
+                                crate::bail!("range up is not a const i32/i64")
                             }
                             A::Var(up) => match self.instrs[up.0] {
                                 Instr::Const(Const::I32(up)) => up as i64,
                                 Instr::Const(Const::I64(up)) => up,
-                                _ => anyhow::bail!("range lo is not a const"),
+                                _ => crate::bail!("range lo is not a const"),
                             },
                         };
                         mult *= (up - lo).max(0) as usize;
                     }
                     Instr::EndRange { .. } => match mults.pop() {
-                        None => anyhow::bail!("unexpected EndRange"),
+                        None => crate::bail!("unexpected EndRange"),
                         Some(m) => mult = m,
                     },
                     Instr::Unary { .. } | Instr::Binary { .. } => flops += mult,

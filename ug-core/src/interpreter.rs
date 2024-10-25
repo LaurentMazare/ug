@@ -1,5 +1,5 @@
 use crate::lang::ssa::{self, Const, Instr, Kernel, VarId};
-use anyhow::Result;
+use crate::Result;
 use half::{bf16, f16};
 
 mod buffer {
@@ -110,14 +110,14 @@ impl Buffer {
     pub fn as_f32(&self) -> Result<&[f32]> {
         match self {
             Self::F32(data) => Ok(data.as_slice()),
-            _ => anyhow::bail!("unexpected buffer type"),
+            _ => crate::bail!("unexpected buffer type"),
         }
     }
 
     pub fn as_i32(&self) -> Result<&[i32]> {
         match self {
             Self::I32(data) => Ok(data.as_slice()),
-            _ => anyhow::bail!("unexpected buffer type"),
+            _ => crate::bail!("unexpected buffer type"),
         }
     }
 }
@@ -131,7 +131,7 @@ impl<const N: usize> Value<N> {
         if let Self::I32(v) = self {
             Ok(v)
         } else {
-            anyhow::bail!("not an i32 {self:?}")
+            crate::bail!("not an i32 {self:?}")
         }
     }
 
@@ -139,7 +139,7 @@ impl<const N: usize> Value<N> {
         if let Self::F32(v) = self {
             Ok(v)
         } else {
-            anyhow::bail!("not a f32 {self:?}")
+            crate::bail!("not a f32 {self:?}")
         }
     }
 }
@@ -159,7 +159,7 @@ impl<'a, const N: usize> Context<'a, N> {
     fn set(&mut self, id: VarId, value: Value<N>) -> Result<()> {
         let id = id.as_usize();
         match self.values.get_mut(id) {
-            None => anyhow::bail!("set out of bound {id}"),
+            None => crate::bail!("set out of bound {id}"),
             Some(dst) => *dst = value,
         }
         Ok(())
@@ -168,7 +168,7 @@ impl<'a, const N: usize> Context<'a, N> {
     fn get_id(&self, id: VarId) -> Result<Value<N>> {
         let id = id.as_usize();
         match self.values.get(id) {
-            None => anyhow::bail!("get out of bound {id:?}"),
+            None => crate::bail!("get out of bound {id:?}"),
             Some(dst) => Ok(*dst),
         }
     }
@@ -217,7 +217,7 @@ pub fn eval_ssa<const N: usize>(
                     }
                 }
                 if all_jump != any_jump {
-                    anyhow::bail!("diverging threads in warp")
+                    crate::bail!("diverging threads in warp")
                 }
                 if all_jump {
                     context.set(var_id, Value::None)?;
@@ -228,7 +228,7 @@ pub fn eval_ssa<const N: usize>(
             }
             Instr::Range { lo, up, end_idx } => {
                 if current_idx >= context.values.len() {
-                    anyhow::bail!("get out of bounds {current_idx}")
+                    crate::bail!("get out of bounds {current_idx}")
                 }
                 if context.values[current_idx].is_none() {
                     (context.get(*lo)?, None)
@@ -246,7 +246,7 @@ pub fn eval_ssa<const N: usize>(
                         }
                     }
                     if all_jump != any_jump {
-                        anyhow::bail!("diverging threads in warp")
+                        crate::bail!("diverging threads in warp")
                     }
                     if all_jump {
                         // Re-initialize to lo in case the loop is taken another time.
@@ -270,7 +270,7 @@ pub fn eval_ssa<const N: usize>(
                 let buffer = match context.get_id(*src)? {
                     Value::Ptr(idx) => context.buffers[idx.as_usize()],
                     Value::LocalPtr(idx) => &context.local_buffers[idx.as_usize()],
-                    _ => anyhow::bail!("unexpected dtype for src in load {src:?}"),
+                    _ => crate::bail!("unexpected dtype for src in load {src:?}"),
                 };
                 let value = match buffer {
                     Buffer::BF16(v) => Value::BF16(W(offset.0.map(|o| v[o as usize]))),
@@ -290,7 +290,7 @@ pub fn eval_ssa<const N: usize>(
                         context.buffers.get_mut(idx.as_usize()).map(|v| v as &mut Buffer)
                     }
                     Value::LocalPtr(idx) => context.local_buffers.get_mut(idx.as_usize()),
-                    _ => anyhow::bail!("unexpected dtype for src in store {dst:?}"),
+                    _ => crate::bail!("unexpected dtype for src in store {dst:?}"),
                 };
                 match (buffer, value) {
                     (Some(Buffer::F32(vs)), Value::F32(v)) => {
@@ -299,7 +299,7 @@ pub fn eval_ssa<const N: usize>(
                     (Some(Buffer::I32(vs)), Value::I32(v)) => {
                         offset.0.iter().zip(v.0.iter()).for_each(|(o, v)| vs[*o as usize] = *v)
                     }
-                    (_, v) => anyhow::bail!("unexpected dtype for value in store {v:?}"),
+                    (_, v) => crate::bail!("unexpected dtype for value in store {v:?}"),
                 };
                 (value, None)
             }
@@ -310,22 +310,22 @@ pub fn eval_ssa<const N: usize>(
                 let v = match (op, &lhs, &rhs) {
                     (B::Add, Value::F32(v1), Value::F32(v2)) => Value::F32(v1.add(v2)),
                     (B::Add, Value::I32(v1), Value::I32(v2)) => Value::I32(v1.add(v2)),
-                    (B::Add, _, _) => anyhow::bail!("dtype mismatch for {op:?}"),
+                    (B::Add, _, _) => crate::bail!("dtype mismatch for {op:?}"),
                     (B::Mul, Value::F32(v1), Value::F32(v2)) => Value::F32(v1.mul(v2)),
                     (B::Mul, Value::I32(v1), Value::I32(v2)) => Value::I32(v1.mul(v2)),
-                    (B::Mul, _, _) => anyhow::bail!("dtype mismatch for {op:?}"),
+                    (B::Mul, _, _) => crate::bail!("dtype mismatch for {op:?}"),
                     (B::Sub, Value::F32(v1), Value::F32(v2)) => Value::F32(v1.sub(v2)),
                     (B::Sub, Value::I32(v1), Value::I32(v2)) => Value::I32(v1.sub(v2)),
-                    (B::Sub, _, _) => anyhow::bail!("dtype mismatch for {op:?}"),
+                    (B::Sub, _, _) => crate::bail!("dtype mismatch for {op:?}"),
                     (B::Div, Value::F32(v1), Value::F32(v2)) => Value::F32(v1.div(v2)),
                     (B::Div, Value::I32(v1), Value::I32(v2)) => Value::I32(v1.div(v2)),
-                    (B::Div, _, _) => anyhow::bail!("dtype mismatch for {op:?}"),
+                    (B::Div, _, _) => crate::bail!("dtype mismatch for {op:?}"),
                     (B::Max, Value::F32(v1), Value::F32(v2)) => Value::F32(v1.max(v2)),
                     (B::Max, Value::I32(v1), Value::I32(v2)) => Value::I32(v1.max(v2)),
-                    (B::Max, _, _) => anyhow::bail!("dtype mismatch for {op:?}"),
+                    (B::Max, _, _) => crate::bail!("dtype mismatch for {op:?}"),
                     (B::Min, Value::F32(v1), Value::F32(v2)) => Value::F32(v1.min(v2)),
                     (B::Min, Value::I32(v1), Value::I32(v2)) => Value::I32(v1.min(v2)),
-                    (B::Min, _, _) => anyhow::bail!("dtype mismatch for {op:?}"),
+                    (B::Min, _, _) => crate::bail!("dtype mismatch for {op:?}"),
                 };
                 (v, None)
             }
@@ -336,20 +336,20 @@ pub fn eval_ssa<const N: usize>(
                     (U::Id, _) => arg,
                     (U::Neg, Value::F32(v)) => Value::F32(v.neg()),
                     (U::Neg, Value::I32(v)) => Value::I32(v.neg()),
-                    (U::Neg, _) => anyhow::bail!("dtype mismatch for {op:?} {arg:?}"),
+                    (U::Neg, _) => crate::bail!("dtype mismatch for {op:?} {arg:?}"),
                     (U::Exp, Value::F32(v)) => Value::F32(v.exp()),
-                    (U::Exp, _) => anyhow::bail!("dtype mismatch for {op:?} {arg:?}"),
+                    (U::Exp, _) => crate::bail!("dtype mismatch for {op:?} {arg:?}"),
                     (U::Cast, Value::F32(v)) => match dtype {
                         ssa::DType::F32 => Value::F32(*v),
                         ssa::DType::I32 => Value::I32(W(v.0.map(|v| v as i32))),
-                        _ => anyhow::bail!("dtype mismatch for {op:?} {arg:?} {dtype:?}"),
+                        _ => crate::bail!("dtype mismatch for {op:?} {arg:?} {dtype:?}"),
                     },
                     (U::Cast, Value::I32(v)) => match dtype {
                         ssa::DType::I32 => Value::I32(*v),
                         ssa::DType::F32 => Value::F32(W(v.0.map(|v| v as f32))),
-                        _ => anyhow::bail!("dtype mismatch for {op:?} {arg:?} {dtype:?}"),
+                        _ => crate::bail!("dtype mismatch for {op:?} {arg:?} {dtype:?}"),
                     },
-                    (U::Cast, _) => anyhow::bail!("dtype mismatch for {op:?} {arg:?}"),
+                    (U::Cast, _) => crate::bail!("dtype mismatch for {op:?} {arg:?}"),
                 };
                 (v, None)
             }
@@ -384,7 +384,7 @@ pub fn eval_ssa<const N: usize>(
                     (R::Min, Value::I32(v)) => {
                         Value::I32(W::splat(v.0.iter().cloned().min().unwrap_or(i32::MAX)))
                     }
-                    (_, _) => anyhow::bail!("dtype mismatch for {op:?} {arg:?}"),
+                    (_, _) => crate::bail!("dtype mismatch for {op:?} {arg:?}"),
                 };
                 (v, None)
             }

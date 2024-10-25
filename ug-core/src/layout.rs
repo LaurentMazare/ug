@@ -1,5 +1,5 @@
 //! The shape of a tensor is a tuple with the size of each of its dimensions.
-use anyhow::{Error, Result};
+use crate::{bail, Error, Result};
 
 #[derive(Clone, PartialEq, Eq)]
 pub struct Shape(Vec<usize>);
@@ -88,7 +88,7 @@ macro_rules! extract_dims {
     ($fn_name:ident, $cnt:tt, $dims:expr, $out_type:ty) => {
         pub fn $fn_name(dims: &[usize]) -> Result<$out_type> {
             if dims.len() != $cnt {
-                anyhow::bail!(
+                bail!(
                     "unexpected number of dims, expected {} got {} shape {:?}",
                     $cnt,
                     dims.len(),
@@ -105,7 +105,7 @@ macro_rules! extract_dims {
         }
 
         impl std::convert::TryInto<$out_type> for Shape {
-            type Error = anyhow::Error;
+            type Error = crate::Error;
             fn try_into(self) -> std::result::Result<$out_type, Self::Error> {
                 self.$fn_name()
             }
@@ -212,7 +212,7 @@ impl Shape {
             } else if r_value == 1 {
                 l_value
             } else {
-                anyhow::bail!("shape mismatch in binary op '{op}', lhs: {lhs:?} rhs: {rhs:?}")
+                bail!("shape mismatch in binary op '{op}', lhs: {lhs:?} rhs: {rhs:?}")
             }
         }
         Ok(Shape::from(bcast_dims))
@@ -228,7 +228,7 @@ impl Dim for usize {
     fn to_index(&self, shape: &Shape, op: &'static str) -> Result<usize> {
         let dim = *self;
         if dim >= shape.dims().len() {
-            anyhow::bail!("dim out of range in '{op}', dim: {dim}, shape: {shape:?}")
+            bail!("dim out of range in '{op}', dim: {dim}, shape: {shape:?}")
         }
         Ok(dim)
     }
@@ -236,7 +236,7 @@ impl Dim for usize {
     fn to_index_plus_one(&self, shape: &Shape, op: &'static str) -> Result<usize> {
         let dim = *self;
         if dim > shape.dims().len() {
-            anyhow::bail!("dim out of range in '{op}', dim: {dim}, shape: {shape:?}")
+            bail!("dim out of range in '{op}', dim: {dim}, shape: {shape:?}")
         }
         Ok(dim)
     }
@@ -256,7 +256,7 @@ impl D {
             Self::Minus2 => -2,
             Self::Minus(u) => -(*u as i32),
         };
-        anyhow::format_err!("dim out of range in '{op}', dim: {dim}, shape: {shape:?}")
+        Error::Msg(format!("dim out of range in '{op}', dim: {dim}, shape: {shape:?}")).bt()
     }
 }
 
@@ -289,10 +289,10 @@ pub trait Dims: Sized {
         let dims = self.to_indexes_internal(shape, op)?;
         for (i, &dim) in dims.iter().enumerate() {
             if dims[..i].contains(&dim) {
-                anyhow::bail!("duplicate dim indexes in '{op}', dims: {dims:?}, shape: {shape:?}")
+                bail!("duplicate dim indexes in '{op}', dims: {dims:?}, shape: {shape:?}")
             }
             if dim >= shape.rank() {
-                anyhow::bail!("dim out of range in '{op}', dim: {dim}, shape: {shape:?}")
+                bail!("dim out of range in '{op}', dim: {dim}, shape: {shape:?}")
             }
         }
         Ok(dims)
@@ -417,10 +417,10 @@ impl ShapeWithOneHole for ((),) {
 
 fn hole_size(el_count: usize, prod_d: usize, s: &dyn std::fmt::Debug) -> Result<usize> {
     if prod_d == 0 {
-        anyhow::bail!("cannot reshape tensor of {el_count} elements to {s:?}")
+        bail!("cannot reshape tensor of {el_count} elements to {s:?}")
     }
     if el_count % prod_d != 0 {
-        anyhow::bail!("cannot reshape tensor with {el_count} elements to {s:?}")
+        bail!("cannot reshape tensor with {el_count} elements to {s:?}")
     }
     Ok(el_count / prod_d)
 }
