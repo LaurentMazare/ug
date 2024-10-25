@@ -395,7 +395,7 @@ impl lang::Kernel {
                 dst: ptr_i,
                 offset: off_i.into(),
                 value: src_i.to_a(),
-                dtype: ssa::DType::F32, // TODO(laurent): support other dtypes
+                dtype: src.dtype(),
             };
             instrs.push((Id::new(), store));
 
