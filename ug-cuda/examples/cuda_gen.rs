@@ -36,7 +36,7 @@ fn eval_dotprod() -> Result<()> {
 }
 
 fn eval_lower_add() -> Result<()> {
-    let kernel = ug::samples::simple_add(1024);
+    let kernel = ug::samples::simple_add(1024)?;
     println!("<<<< ADD LANG >>>>\n{kernel:?}");
     let kernel = kernel.lower()?;
     println!("<<<< ADD SSA >>>>\n{kernel:?}");

@@ -233,14 +233,11 @@ impl lang::ExprNode {
     ) -> Result<(Id, Block)> {
         use lang::Expr as E;
         let dst_id = Id::new();
+        let dtype = self.dtype();
         let block = match &self.inner.expr {
             E::Load(src) => {
                 let (ptr_i, off_i, src_b) = src.lower(range_id, per_arg)?;
-                let instr = SsaI::Load {
-                    src: ptr_i,
-                    offset: off_i.into(),
-                    dtype: ssa::DType::F32, // TODO(laurent): support other dtypes
-                };
+                let instr = SsaI::Load { src: ptr_i, offset: off_i.into(), dtype };
                 let mut src_b = src_b.0;
                 src_b.push((dst_id, instr));
                 src_b
@@ -249,23 +246,14 @@ impl lang::ExprNode {
             E::Range(_, _) => anyhow::bail!("TODO range is not supported yet"),
             E::Unary(op, arg) => {
                 let (arg_id, arg_b) = arg.lower(range_id, per_arg)?;
-                let instr = SsaI::Unary {
-                    op: *op,
-                    arg: arg_id.to_a(),
-                    dtype: ssa::DType::F32, // TODO(laurent): support other dtypes
-                };
+                let instr = SsaI::Unary { op: *op, arg: arg_id.to_a(), dtype };
                 let last = vec![(dst_id, instr)];
                 [arg_b.0.as_slice(), last.as_slice()].concat()
             }
             E::Binary(op, lhs, rhs) => {
                 let (lhs_id, lhs_b) = lhs.lower(range_id, per_arg)?;
                 let (rhs_id, rhs_b) = rhs.lower(range_id, per_arg)?;
-                let instr = SsaI::Binary {
-                    op: *op,
-                    lhs: lhs_id.to_a(),
-                    rhs: rhs_id.to_a(),
-                    dtype: ssa::DType::F32, // TODO(laurent): support other dtypes
-                };
+                let instr = SsaI::Binary { op: *op, lhs: lhs_id.to_a(), rhs: rhs_id.to_a(), dtype };
                 let last = vec![(dst_id, instr)];
                 [lhs_b.0.as_slice(), rhs_b.0.as_slice(), last.as_slice()].concat()
             }

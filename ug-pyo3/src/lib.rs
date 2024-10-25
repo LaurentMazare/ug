@@ -496,8 +496,9 @@ impl Expr {
     }
 
     #[staticmethod]
-    fn load(ptr: &Arg, offset: &IndexExpr, len: &IndexExpr, stride: &IndexExpr) -> Self {
-        Self(ug::lang::ExprNode::load(&ptr.0, &offset.0, &len.0, &stride.0))
+    fn load(ptr: &Arg, offset: &IndexExpr, len: &IndexExpr, stride: &IndexExpr) -> PyResult<Self> {
+        let load = ug::lang::ExprNode::load(&ptr.0, &offset.0, &len.0, &stride.0).map_err(w)?;
+        Ok(Self(load))
     }
 }
 

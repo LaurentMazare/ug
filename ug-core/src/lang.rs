@@ -1,4 +1,5 @@
 pub use crate::DType;
+use anyhow::Result;
 use half::{bf16, f16};
 use std::sync::Arc;
 
@@ -213,6 +214,7 @@ pub(crate) struct ExprNodeInner {
     #[allow(unused)]
     pub(crate) id: NodeId,
     pub(crate) expr: Expr,
+    pub(crate) dtype: DType,
 }
 
 impl IndexExprNode {
@@ -292,14 +294,19 @@ pub enum Ops {
 }
 
 impl ExprNode {
-    fn from_expr(expr: Expr) -> Self {
+    pub fn dtype(&self) -> DType {
+        self.inner.dtype
+    }
+
+    fn from_expr(expr: Expr, dtype: DType) -> Self {
         let id = NodeId::new();
-        let inner = ExprNodeInner { id, expr };
+        let inner = ExprNodeInner { id, expr, dtype };
         Self { inner: Arc::new(inner) }
     }
 
     pub fn cst<C: Into<Const>>(c: C) -> Self {
-        Self::from_expr(Expr::Const(c.into()))
+        let c = c.into();
+        Self::from_expr(Expr::Const(c), c.dtype())
     }
 
     pub fn load(
@@ -307,30 +314,37 @@ impl ExprNode {
         offset: &IndexExprNode,
         len: &IndexExprNode,
         stride: &IndexExprNode,
-    ) -> Self {
+    ) -> Result<Self> {
+        let dtype = match ptr.type_() {
+            ssa::Type::Ptr(v) => v,
+            ssa::Type::Value(_) => anyhow::bail!("non-pointer arguments are not supported yet"),
+        };
         let ss = StridedSlice {
             ptr: *ptr,
             offset: offset.clone(),
             len: len.clone(),
             stride: stride.clone(),
         };
-        Self::from_expr(Expr::Load(ss))
+        Ok(Self::from_expr(Expr::Load(ss), dtype))
     }
 
     pub fn unary(&self, op: UnaryOp) -> Self {
-        Self::from_expr(Expr::Unary(op, self.clone()))
+        Self::from_expr(Expr::Unary(op, self.clone()), self.dtype())
     }
 
     pub fn binary(&self, rhs: &Self, op: BinaryOp) -> Self {
-        Self::from_expr(Expr::Binary(op, self.clone(), rhs.clone()))
+        let dtype = self.dtype();
+        Self::from_expr(Expr::Binary(op, self.clone(), rhs.clone()), dtype)
     }
 
     pub fn add(&self, rhs: &Self) -> Self {
-        Self::from_expr(Expr::Binary(BinaryOp::Add, self.clone(), rhs.clone()))
+        let dtype = self.dtype();
+        Self::from_expr(Expr::Binary(BinaryOp::Add, self.clone(), rhs.clone()), dtype)
     }
 
     pub fn mul(&self, rhs: &Self) -> Self {
-        Self::from_expr(Expr::Binary(BinaryOp::Mul, self.clone(), rhs.clone()))
+        let dtype = self.dtype();
+        Self::from_expr(Expr::Binary(BinaryOp::Mul, self.clone(), rhs.clone()), dtype)
     }
 
     pub fn all_args(&self, args: &mut std::collections::HashSet<Arg>) {

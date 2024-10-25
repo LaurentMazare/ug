@@ -252,15 +252,17 @@ pub mod op {
 
 use crate::lang::{Arg, DType, ExprNode as E, IndexExprNode as I, Kernel, Ops};
 
-pub fn simple_add(block_size: usize) -> Kernel {
+pub fn simple_add(block_size: usize) -> anyhow::Result<Kernel> {
     let lhs_ptr = Arg::ptr(DType::F32);
     let rhs_ptr = Arg::ptr(DType::F32);
     let dst_ptr = Arg::ptr(DType::F32);
     let offset = I::mul(&I::program_id(), &I::cst(block_size));
     let stride = I::cst(1);
     let len = I::cst(block_size);
-    let lhs = E::load(&lhs_ptr, &offset, &len, &stride);
-    let rhs = E::load(&rhs_ptr, &offset, &len, &stride);
+    let lhs = E::load(&lhs_ptr, &offset, &len, &stride)?;
+    let rhs = E::load(&rhs_ptr, &offset, &len, &stride)?;
     let op = Ops::store(&dst_ptr, &offset, &len, &stride, &lhs.add(&rhs));
-    Kernel::new(format!("simple_add_{block_size}"), vec![lhs_ptr, rhs_ptr, dst_ptr], vec![op])
+    let k =
+        Kernel::new(format!("simple_add_{block_size}"), vec![lhs_ptr, rhs_ptr, dst_ptr], vec![op]);
+    Ok(k)
 }
