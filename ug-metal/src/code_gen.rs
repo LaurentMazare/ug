@@ -146,7 +146,7 @@ pub fn gen<W: std::io::Write>(w: &mut W, func_name: &str, kernel: &ssa::Kernel) 
             }
             I::Unary { op, arg, dtype } => {
                 let op = match op {
-                    ssa::UnaryOp::Exp => "__expf",
+                    ssa::UnaryOp::Exp => "exp",
                     ssa::UnaryOp::Neg => "neg",
                     ssa::UnaryOp::Id => "",
                     ssa::UnaryOp::Cast => match dtype {
@@ -159,10 +159,8 @@ pub fn gen<W: std::io::Write>(w: &mut W, func_name: &str, kernel: &ssa::Kernel) 
                 };
                 writeln!(w, "{indent}{} {var_id} = {op}({});", D(*dtype), A(*arg))?;
             }
-            I::Special(ssa::Special::LocalIdx) => {
-                writeln!(w, "{indent}int {var_id} = threadIdx.x;")?
-            }
-            I::Special(ssa::Special::GridIdx) => writeln!(w, "{indent}int {var_id} = blockIdx.x;")?,
+            I::Special(ssa::Special::LocalIdx) => writeln!(w, "{indent}int {var_id} = tpitg.x;")?,
+            I::Special(ssa::Special::GridIdx) => writeln!(w, "{indent}int {var_id} = tgpig.x;")?,
             I::Barrier => writeln!(w, "{indent}__syncthreads();")?,
             I::ReduceLocal { op, arg, dtype } => {
                 let op = match op {
