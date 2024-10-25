@@ -83,6 +83,7 @@ pub struct Device {
 
 #[derive(Clone)]
 pub struct Slice {
+    // TODO(laurent): handle some general types.
     slice: cudarc::driver::CudaSlice<f32>,
     len: usize,
 }
