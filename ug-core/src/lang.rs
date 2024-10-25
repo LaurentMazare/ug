@@ -80,6 +80,36 @@ impl Const {
             Self::F32(_) => DType::F32,
         }
     }
+
+    pub fn zero(dtype: DType) -> Self {
+        match dtype {
+            DType::F16 => Self::F16(f16::ZERO),
+            DType::BF16 => Self::BF16(bf16::ZERO),
+            DType::F32 => Self::F32(0f32),
+            DType::I32 => Self::I32(0i32),
+            DType::I64 => Self::I64(0i64),
+        }
+    }
+
+    pub fn min_value(dtype: DType) -> Self {
+        match dtype {
+            DType::F16 => Self::F16(f16::NEG_INFINITY),
+            DType::BF16 => Self::BF16(bf16::NEG_INFINITY),
+            DType::F32 => Self::F32(f32::NEG_INFINITY),
+            DType::I32 => Self::I32(i32::MIN),
+            DType::I64 => Self::I64(i64::MIN),
+        }
+    }
+
+    pub fn max_value(dtype: DType) -> Self {
+        match dtype {
+            DType::F16 => Self::F16(f16::INFINITY),
+            DType::BF16 => Self::BF16(bf16::INFINITY),
+            DType::F32 => Self::F32(f32::INFINITY),
+            DType::I32 => Self::I32(i32::MAX),
+            DType::I64 => Self::I64(i64::MAX),
+        }
+    }
 }
 
 /// Unique identifier for arguments.
