@@ -9,4 +9,4 @@ pub mod samples;
 
 pub use dtype::DType;
 pub use error::{Error, Result};
-pub use layout::{Layout, Shape};
+pub use layout::{Layout, Shape, D};
