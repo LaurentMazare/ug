@@ -632,6 +632,24 @@ pub mod ssa {
         }
     }
 
+    impl From<i64> for A {
+        fn from(value: i64) -> Self {
+            Self::Const(Const::I64(value))
+        }
+    }
+
+    impl From<half::bf16> for A {
+        fn from(value: half::bf16) -> Self {
+            Self::Const(Const::BF16(value))
+        }
+    }
+
+    impl From<half::f16> for A {
+        fn from(value: half::f16) -> Self {
+            Self::Const(Const::F16(value))
+        }
+    }
+
     impl From<f32> for A {
         fn from(value: f32) -> Self {
             Self::Const(Const::F32(value))
