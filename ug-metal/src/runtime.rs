@@ -33,6 +33,10 @@ pub struct Device {
 }
 
 impl Device {
+    pub fn new_command_queue(&self) -> metal::CommandQueue {
+        self.device.new_command_queue()
+    }
+
     pub fn new() -> Result<Self> {
         let device = match metal::Device::system_default() {
             Some(device) => device,

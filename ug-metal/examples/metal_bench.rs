@@ -27,7 +27,7 @@ struct Args {
 fn run_one(args: &Args, n_cols: usize) -> Result<()> {
     let mut rng = rand::thread_rng();
     let n_rows = args.n_rows;
-    let (ssa_kernel, _block_dim) = match args.which {
+    let (ssa_kernel, block_dim) = match args.which {
         Which::Exp => (ug::samples::ssa::exp(n_cols)?, n_cols),
         Which::ExpBlock => {
             let bs = if n_cols <= 1024 {
@@ -65,24 +65,28 @@ fn run_one(args: &Args, n_cols: usize) -> Result<()> {
         println!("METAL\n{metal_code}");
     }
     let device = ug_metal::runtime::Device::new()?;
-    let _func = device.compile_metal(&metal_code, "mykernel")?;
+    let func = device.compile_metal(&metal_code, "mykernel")?;
     let n_elements = n_rows * n_cols;
-    let _res = device.zeros::<f32>(n_elements)?;
+    let res = device.zeros::<f32>(n_elements)?;
     let arg: Vec<f32> = (0..n_elements).map(|_| rng.gen()).collect();
-    let _arg = device.slice_from_values(&arg)?;
+    let arg = device.slice_from_values(&arg)?;
+    let cq = device.new_command_queue();
     let run = || {
-        // unsafe {
-        //     func.launch2(
-        //         arg.slice(),
-        //         res.slice(),
-        //         cudarc::driver::LaunchConfig {
-        //             grid_dim: (n_rows as u32, 1, 1),
-        //             block_dim: (block_dim as u32, 1, 1),
-        //             shared_mem_bytes: 0,
-        //         },
-        //     )?
-        // }
-        // device.synchronize()?;
+        let cb = cq.new_command_buffer();
+        let (arg, res) = (arg.buffer(), res.buffer());
+        let encoder = cb.new_compute_command_encoder();
+        let pl = func.pipeline()?;
+        encoder.set_compute_pipeline_state(&pl);
+        ug_metal::set_params!(encoder, (arg, res));
+        encoder.use_resource(arg, metal::MTLResourceUsage::Read);
+        encoder.use_resource(res, metal::MTLResourceUsage::Write);
+        let grid_size = metal::MTLSize::new(n_rows as u64, 1, 1);
+        let threadgroup_size = metal::MTLSize::new(block_dim as u64, 1, 1);
+        encoder.dispatch_thread_groups(grid_size, threadgroup_size);
+        // Somehow, using dispatch_threads with non-even group size doesn't work properly here.
+        encoder.end_encoding();
+        cb.commit();
+        cb.wait_until_completed();
         Ok::<_, ug::Error>(())
     };
     println!("warmup {:?}", ssa_kernel.flops_mem_per_thread()?);
@@ -110,8 +114,11 @@ fn main() -> Result<()> {
 
     let args = Args::parse();
     println!("{args:?}");
-    for n_cols in [128, 256, 512, 768, 1024, 1536, 2048, 3072, 4096] {
-        run_one(&args, n_cols)?;
-    }
+    objc::rc::autoreleasepool(|| {
+        for n_cols in [128, 256, 512, 768, 1024, 1536, 2048, 3072, 4096] {
+            run_one(&args, n_cols)?;
+        }
+        Ok::<_, ug::Error>(())
+    })?;
     Ok(())
 }

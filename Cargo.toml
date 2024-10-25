@@ -21,8 +21,9 @@ anyhow = { version = "1", features = ["backtrace"] }
 clap = { version = "4.5.20", features = ["derive"] }
 cudarc = { version = "0.12.1", features = ["f16", "cuda-version-from-build-system"] }
 half = { version = "2.3.1", features = ["num-traits", "use-intrinsics", "rand_distr"] }
-metal = "0.27.0"
+metal = "0.29.0"
 num = "0.4.3"
+objc = "0.2.7"
 ug = { path = "./ug-core", version = "0.0.2" }
 ug-cuda = { path = "./ug-cuda", version = "0.0.2" }
 rand = "0.8.5"
