@@ -65,6 +65,34 @@ pub mod ssa {
         Ok(Kernel { instrs: b.relocate()? })
     }
 
+    pub fn exp_block(dim2: usize, block_size: usize) -> Result<Kernel> {
+        if dim2 % block_size != 0 {
+            anyhow::bail!("last-dim {dim2} must be divisible by block size {block_size}")
+        }
+
+        let mut b = crate::lower::Block::empty();
+        let dtype = DType::F32;
+        let src_i = b.push(I::DefineGlobal { index: 0, dtype: DType::F32 });
+        let dst_i = b.push(I::DefineGlobal { index: 1, dtype: DType::F32 });
+        let g_i = b.push(I::Special(ssa::Special::GridIdx));
+        let l_i = b.push(I::Special(ssa::Special::LocalIdx));
+        let off_i = b.mul(g_i, dim2 as i32);
+        let off_i = b.binary(BinaryOp::Add, off_i, l_i, DType::I32);
+
+        for i in (0..dim2).step_by(block_size) {
+            let off_i = b.add(off_i, i as i32);
+            let load_i = b.push(I::Load { src: src_i.to_varid(), offset: off_i.to_a(), dtype });
+            let value_i = b.unary(ssa::UnaryOp::Exp, load_i, dtype);
+            b.push(I::Store {
+                dst: dst_i.to_varid(),
+                offset: off_i.to_a(),
+                value: value_i.to_a(),
+                dtype,
+            });
+        }
+        Ok(Kernel { instrs: b.relocate()? })
+    }
+
     pub fn softmax_barrier(_dim1: usize, dim2: usize) -> Result<Kernel> {
         let mut b = crate::lower::Block::empty();
         let dtype = DType::F32;

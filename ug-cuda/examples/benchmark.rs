@@ -6,6 +6,7 @@ use rand::Rng;
 #[derive(clap::ValueEnum, Clone, Debug)]
 enum Which {
     Exp,
+    ExpBlock,
     Softmax,
     SsaSoftmax,
     SsaSoftmaxReduce,
@@ -28,6 +29,16 @@ fn run_one(args: &Args, n_cols: usize) -> Result<()> {
     let n_rows = args.n_rows;
     let (ssa_kernel, block_dim) = match args.which {
         Which::Exp => (ug::samples::ssa::exp(n_cols)?, n_cols),
+        Which::ExpBlock => {
+            let bs = if n_cols <= 1024 {
+                n_cols
+            } else if n_cols % 1024 != 0 {
+                512
+            } else {
+                1024
+            };
+            (ug::samples::ssa::exp_block(n_cols, bs)?, bs)
+        }
         Which::SsaSoftmax => (ug::samples::ssa::softmax(n_rows, n_cols)?, n_cols),
         Which::SsaSoftmaxReduce => {
             let bs = if n_cols <= 1024 {
