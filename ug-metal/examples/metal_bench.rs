@@ -22,6 +22,9 @@ struct Args {
 
     #[arg(short, long)]
     verbose: bool,
+
+    #[arg(short, long)]
+    disable_metal_validation: bool,
 }
 
 fn run_one(args: &Args, n_cols: usize) -> Result<()> {
@@ -114,6 +117,9 @@ fn main() -> Result<()> {
 
     let args = Args::parse();
     println!("{args:?}");
+    if !args.disable_metal_validation {
+        std::env::set_var("METAL_DEVICE_WRAPPER_TYPE", "1")
+    }
     objc::rc::autoreleasepool(|| {
         for n_cols in [128, 256, 512, 768, 1024, 1536, 2048, 3072, 4096] {
             run_one(&args, n_cols)?;

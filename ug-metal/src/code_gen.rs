@@ -98,7 +98,7 @@ pub fn gen<W: std::io::Write>(w: &mut W, func_name: &str, kernel: &ssa::Kernel) 
             I::DefineGlobal { index: _, dtype: _ } => {}
             I::DefineLocal { dtype, size } => {
                 // TODO(laurent): should we enforce the alignment in some cases?
-                writeln!(w, "{indent}__shared__ {} {var_id}[{size}];", D(*dtype))?
+                writeln!(w, "{indent}threadgroup {} {var_id}[{size}];", D(*dtype))?
             }
             I::DefineAcc(cst) | I::Const(cst) => {
                 writeln!(w, "{indent}{} {var_id} = {};", D(cst.dtype()), C(*cst))?
@@ -161,7 +161,7 @@ pub fn gen<W: std::io::Write>(w: &mut W, func_name: &str, kernel: &ssa::Kernel) 
             }
             I::Special(ssa::Special::LocalIdx) => writeln!(w, "{indent}int {var_id} = tpitg.x;")?,
             I::Special(ssa::Special::GridIdx) => writeln!(w, "{indent}int {var_id} = tgpig.x;")?,
-            I::Barrier => writeln!(w, "{indent}__syncthreads();")?,
+            I::Barrier => writeln!(w, "{indent}threadgroup_barrier(mem_flags::mem_threadgroup);")?,
             I::ReduceLocal { op, arg, dtype } => {
                 let op = match op {
                     ssa::ReduceOp::Sum => "block_reduce_sum",
