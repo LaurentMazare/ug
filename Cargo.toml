@@ -1,8 +1,6 @@
 [workspace]
 members = [
   "ug-core",
-]
-exclude = [
   "ug-cuda",
   "ug-metal",
   "ug-pyo3",
