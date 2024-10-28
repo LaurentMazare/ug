@@ -237,11 +237,11 @@ pub mod op {
         let dst_ptr = Arg::ptr(DType::F32);
         let src = op::load(src_ptr.id(), layout.clone(), DType::F32)?;
         let src_max = op::reduce(op::ReduceOp::Max, src.clone(), 1)?;
-        let src_max = op::broadcast(src_max, 1, dim2)?;
+        let src_max = op::broadcast(src_max, (dim1, dim2))?;
         let diff = op::binary(op::BinaryOp::Sub, src, src_max)?;
         let exp = op::unary(op::UnaryOp::Exp, diff)?;
         let sum_exp = op::reduce(op::ReduceOp::Sum, exp.clone(), 1)?;
-        let sum_exp = op::broadcast(sum_exp, 1, dim2)?;
+        let sum_exp = op::broadcast(sum_exp, (dim1, dim2))?;
         let sm = op::binary(op::BinaryOp::Div, exp, sum_exp)?;
         let st = op::store(dst_ptr.id(), layout, sm)?;
         let kernel =

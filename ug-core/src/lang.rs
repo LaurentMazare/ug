@@ -28,6 +28,19 @@ pub enum BinaryOp {
     Max,
 }
 
+impl BinaryOp {
+    fn as_str(&self) -> &'static str {
+        match self {
+            Self::Add => "add",
+            Self::Sub => "sub",
+            Self::Mul => "mul",
+            Self::Div => "div",
+            Self::Min => "min",
+            Self::Max => "max",
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Type {
     Value(DType),
@@ -471,7 +484,7 @@ pub mod op {
         Unary { op: UnaryOp, arg: Ast },
         Binary { op: BinaryOp, lhs: Ast, rhs: Ast },
         Const(Const),
-        Broadcast { arg: Ast, axis: usize, dim_len: usize },
+        Broadcast { arg: Ast, broadcasted_dims: Vec<usize> },
         // TODO(laurent): Add some reshape/transpose...
     }
 
@@ -481,19 +494,30 @@ pub mod op {
         Ok(Ast { inner: Arc::new(inner), dtype, shape })
     }
 
-    pub fn broadcast(arg: Ast, axis: usize, dim_len: usize) -> Result<Ast> {
+    pub fn broadcast<S: Into<Shape>>(arg: Ast, shape: S) -> Result<Ast> {
+        let shape: Shape = shape.into();
         let dtype = arg.dtype;
-        let mut dims = arg.shape.dims().to_vec();
-        match dims.get(axis) {
-            None => crate::bail!("unexpected axis for reduce, {axis} {dims:?}"),
-            Some(1) => (),
-            Some(_) => {
-                crate::bail!("expected a len of 1 on the broadcasted dim {axis} {dims:?}")
+        if arg.shape.rank() > shape.rank() {
+            crate::bail!(
+                "target shape {:?} has less dimensions than original shape {:?}",
+                shape,
+                arg.shape
+            )
+        }
+        let inserted_dims = shape.rank() - arg.shape.rank();
+        let mut broadcasted_dims = (0..inserted_dims).collect::<Vec<_>>();
+        for (dim_idx, &dim_len) in arg.shape.dims().iter().enumerate() {
+            let dim_idx = dim_idx + inserted_dims;
+            if shape.dims()[dim_idx] != dim_len {
+                if dim_len == 1 {
+                    broadcasted_dims.push(dim_idx)
+                } else {
+                    crate::bail!("cannot broadcast from {:?} to {:?}", arg.shape, shape)
+                }
             }
-        };
-        dims[axis] = dim_len;
-        let inner = AstInner::Broadcast { arg, axis, dim_len };
-        Ok(Ast { inner: Arc::new(inner), dtype, shape: Shape::from_dims(&dims) })
+        }
+        let inner = AstInner::Broadcast { arg, broadcasted_dims };
+        Ok(Ast { inner: Arc::new(inner), dtype, shape })
     }
 
     pub fn unary(op: UnaryOp, arg: Ast) -> Result<Ast> {
@@ -527,6 +551,13 @@ pub mod op {
         let shape = lhs.shape.clone();
         let inner = AstInner::Binary { op, lhs, rhs };
         Ok(Ast { inner: Arc::new(inner), dtype, shape })
+    }
+
+    pub fn broadcast_binary(op: BinaryOp, lhs: Ast, rhs: Ast) -> Result<Ast> {
+        let shape = lhs.shape.broadcast_shape_binary_op(rhs.shape(), op.as_str())?;
+        let lhs = broadcast(lhs, shape.clone())?;
+        let rhs = broadcast(rhs, shape)?;
+        binary(op, lhs, rhs)
     }
 
     pub fn cst<I: Into<Const>>(v: I) -> Ast {

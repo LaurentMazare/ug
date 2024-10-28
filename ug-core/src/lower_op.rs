@@ -126,9 +126,9 @@ fn extract_const(ast: &Ast, axis: usize) -> Result<(Vec<(Id, Ast)>, Ast)> {
                 let rhs = walk(rhs, tgt_axis, accs)?;
                 lang::op::binary(*op, lhs, rhs)?
             }
-            A::Broadcast { arg, axis, dim_len } => {
+            A::Broadcast { arg, .. } => {
                 let arg = walk(arg, tgt_axis, accs)?;
-                lang::op::broadcast(arg, *axis, *dim_len)?
+                lang::op::broadcast(arg, ast.shape())?
             }
         };
         Ok(ast)
@@ -160,12 +160,16 @@ impl Ast {
                 off_b.push((dst_i, load));
                 (dst_i, Block(off_b))
             }
-            A::Broadcast { arg, axis, dim_len: _ } => {
+            A::Broadcast { arg, broadcasted_dims } => {
                 let mut idxs = idxs.0.to_vec();
-                match idxs.get_mut(*axis) {
-                    None => crate::bail!("unexpected axis for broadcast, {axis} {:?}", self.shape),
-                    Some(v) => v.broadcast = true,
-                };
+                for axis in broadcasted_dims.iter() {
+                    match idxs.get_mut(*axis) {
+                        None => {
+                            crate::bail!("unexpected axis for broadcast, {axis} {:?}", self.shape)
+                        }
+                        Some(v) => v.broadcast = true,
+                    };
+                }
                 arg.lower(&Indexes(idxs), opts, per_arg)?
             }
             A::Const(c) => {
