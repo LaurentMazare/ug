@@ -1,5 +1,5 @@
+use crate::block::{Block, Id};
 use crate::lang::{self, op::Ast, ssa};
-use crate::lower::{Block, Id};
 use crate::Result;
 use ssa::{DType, Instr as SsaI};
 

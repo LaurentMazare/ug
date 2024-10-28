@@ -46,7 +46,7 @@ pub mod ssa {
     }
 
     pub fn exp(block_size: usize) -> Result<Kernel> {
-        let mut b = crate::lower::Block::empty();
+        let mut b = crate::block::Block::empty();
         let dtype = DType::F32;
         let src_i = b.push(I::DefineGlobal { index: 0, dtype: DType::F32 });
         let dst_i = b.push(I::DefineGlobal { index: 1, dtype: DType::F32 });
@@ -70,7 +70,7 @@ pub mod ssa {
             crate::bail!("last-dim {dim2} must be divisible by block size {block_size}")
         }
 
-        let mut b = crate::lower::Block::empty();
+        let mut b = crate::block::Block::empty();
         let dtype = DType::F32;
         let src_i = b.push(I::DefineGlobal { index: 0, dtype: DType::F32 });
         let dst_i = b.push(I::DefineGlobal { index: 1, dtype: DType::F32 });
@@ -94,7 +94,7 @@ pub mod ssa {
     }
 
     pub fn softmax_barrier(_dim1: usize, dim2: usize) -> Result<Kernel> {
-        let mut b = crate::lower::Block::empty();
+        let mut b = crate::block::Block::empty();
         let dtype = DType::F32;
         let src_i = b.push(I::DefineGlobal { index: 0, dtype: DType::F32 });
         let dst_i = b.push(I::DefineGlobal { index: 1, dtype: DType::F32 });
@@ -153,7 +153,7 @@ pub mod ssa {
     }
 
     pub fn softmax_reduce(_dim1: usize, dim2: usize) -> Result<Kernel> {
-        let mut b = crate::lower::Block::empty();
+        let mut b = crate::block::Block::empty();
         let dtype = DType::F32;
         let src_i = b.push(I::DefineGlobal { index: 0, dtype: DType::F32 });
         let dst_i = b.push(I::DefineGlobal { index: 1, dtype: DType::F32 });
@@ -182,7 +182,7 @@ pub mod ssa {
             crate::bail!("last-dim {dim2} must be divisible by block size {block_size}")
         }
         let per_block = dim2 / block_size;
-        let mut b = crate::lower::Block::empty();
+        let mut b = crate::block::Block::empty();
         let dtype = DType::F32;
         let src_i = b.push(I::DefineGlobal { index: 0, dtype: DType::F32 });
         let dst_i = b.push(I::DefineGlobal { index: 1, dtype: DType::F32 });

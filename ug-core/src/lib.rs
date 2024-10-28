@@ -1,3 +1,4 @@
+pub mod block;
 pub mod dtype;
 pub mod error;
 pub mod interpreter;
