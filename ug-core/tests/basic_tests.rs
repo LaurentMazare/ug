@@ -114,3 +114,23 @@ fn ssa_softmax_reduce() -> Result<()> {
     );
     Ok(())
 }
+
+#[test]
+fn affine() -> Result<()> {
+    let kernel = {
+        use ug::{lang::op, DType, Layout};
+        let layout = Layout::from_shape(4);
+        let ptr = ug::lang::Arg::ptr(DType::F32);
+        let src = op::load(ptr.id(), layout.clone(), DType::F32)?;
+        let sub = op::binary(op::BinaryOp::Sub, src, op::cst(0.5))?;
+        let mul = op::binary(op::BinaryOp::Mul, sub, op::cst(3.))?;
+        let st = op::store(ptr.id(), layout, mul)?;
+        op::Kernel::new("affine".to_string(), vec![ptr], vec![st])
+    };
+    let ssa_kernel = kernel.lower(&Default::default())?;
+    let mut a = ug::interpreter::Buffer::F32(vec![1., 2., 3., 4.]);
+    ug::interpreter::eval_ssa::<4>(&ssa_kernel, vec![&mut a], &[], 0)?;
+    let a = a.as_f32()?;
+    assert_eq!(a, [1.5, 4.5, 7.5, 10.5]);
+    Ok(())
+}

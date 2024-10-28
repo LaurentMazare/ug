@@ -520,8 +520,8 @@ pub mod op {
         } else {
             lhs.dtype
         };
-        // Broadcasting has to be done explicitely.
-        if lhs.shape != rhs.shape {
+        // Broadcasting has to be done explicitely except for scalar values.
+        if lhs.shape != rhs.shape && lhs.shape.rank() != 0 && rhs.shape.rank() != 0 {
             crate::bail!("shape mismatch in {op:?}, lhs: {:?}, rhs: {:?}", lhs.shape, rhs.shape)
         }
         let shape = lhs.shape.clone();
