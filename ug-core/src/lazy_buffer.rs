@@ -1,30 +1,53 @@
+#![allow(unused)]
 use crate::dtype::WithDType;
-use crate::Result;
+use crate::{DType, Result};
 
-pub trait Device: Clone {
-    type Slice<D: WithDType>;
+pub trait Device {
+    type Slice: Sized;
 
-    fn allocate_uninit<D: WithDType>(&self, len: usize) -> Result<Self::Slice<D>>;
-    fn copy_host_to_device<D: WithDType>(src: &[D], dst: &mut Self::Slice<D>) -> Result<()>;
-    fn copy_device_to_host<D: WithDType>(src: &Self::Slice<D>, dst: &mut [D]) -> Result<()>;
+    fn allocate_uninit<DT: WithDType>(&self, len: usize) -> Result<Self::Slice>;
+    fn copy_host_to_device<DT: WithDType>(src: &[DT], dst: &mut Self::Slice) -> Result<()>;
+    fn copy_device_to_host<DT: WithDType>(src: &Self::Slice, dst: &mut [DT]) -> Result<()>;
     fn synchronize(&self) -> Result<()>;
 }
 
-pub struct LazyBuffer<D: Device, DT: WithDType> {
-    data: Option<D::Slice<DT>>,
+pub enum Op<D: Device> {
+    Unary(crate::lang::UnaryOp, LazyBuffer<D>),
+    Binary(crate::lang::BinaryOp, LazyBuffer<D>, LazyBuffer<D>),
+    Reduce(crate::lang::ReduceOp, LazyBuffer<D>, usize),
+}
+
+pub struct LazyBuffer<D: Device>(std::sync::Arc<LazyBufferInner<D>>);
+
+impl<D: Device> std::ops::Deref for LazyBuffer<D> {
+    type Target = LazyBufferInner<D>;
+
+    fn deref(&self) -> &Self::Target {
+        self.0.as_ref()
+    }
+}
+
+pub struct LazyBufferInner<D: Device> {
+    data: Option<D::Slice>,
+    op: Option<Op<D>>,
+    dtype: crate::DType,
     device: D,
 }
 
-impl<D: Device, DT: WithDType> LazyBuffer<D, DT> {
+impl<D: Device> LazyBuffer<D> {
     pub fn realized(&self) -> bool {
         self.data.is_some()
     }
 
-    pub fn data(&self) -> Option<&D::Slice<DT>> {
+    pub fn data(&self) -> Option<&D::Slice> {
         self.data.as_ref()
     }
 
     pub fn device(&self) -> &D {
         &self.device
+    }
+
+    pub fn dtype(&self) -> DType {
+        self.dtype
     }
 }
