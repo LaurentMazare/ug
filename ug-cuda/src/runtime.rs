@@ -161,3 +161,49 @@ impl Device {
         Ok(())
     }
 }
+
+impl ug::Device for Device {
+    type Slice<DT: ug::WithDType> = cudarc::driver::CudaSlice<DT>;
+
+    #[allow(clippy::missing_transmute_annotations)]
+    fn allocate_uninit<D: ug::WithDType>(&self, len: usize) -> Result<Self::Slice<D>> {
+        let type_id = std::any::TypeId::of::<D>();
+        let slice = match D::DTYPE {
+            ug::DType::F32 => {
+                // This assert + transmute is ugly but avoids adding the DeviceRepr constraint in
+                // WithDType.
+                assert_eq!(type_id, std::any::TypeId::of::<f32>());
+                unsafe { std::mem::transmute(self.device.alloc::<f32>(len).w()?) }
+            }
+            ug::DType::F16 => {
+                assert_eq!(type_id, std::any::TypeId::of::<half::f16>());
+                unsafe { std::mem::transmute(self.device.alloc::<half::f16>(len).w()?) }
+            }
+            ug::DType::BF16 => {
+                assert_eq!(type_id, std::any::TypeId::of::<half::bf16>());
+                unsafe { std::mem::transmute(self.device.alloc::<half::bf16>(len).w()?) }
+            }
+            ug::DType::I32 => {
+                assert_eq!(type_id, std::any::TypeId::of::<i32>());
+                unsafe { std::mem::transmute(self.device.alloc::<i32>(len).w()?) }
+            }
+            ug::DType::I64 => {
+                assert_eq!(type_id, std::any::TypeId::of::<i64>());
+                unsafe { std::mem::transmute(self.device.alloc::<i64>(len).w()?) }
+            }
+        };
+        Ok(slice)
+    }
+
+    fn copy_host_to_device<D: ug::WithDType>(_src: &[D], _dst: &mut Self::Slice<D>) -> Result<()> {
+        todo!()
+    }
+
+    fn copy_device_to_host<D: ug::WithDType>(_src: &Self::Slice<D>, _dst: &mut [D]) -> Result<()> {
+        todo!()
+    }
+
+    fn synchronize(&self) -> Result<()> {
+        self.synchronize()
+    }
+}

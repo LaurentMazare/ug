@@ -70,7 +70,7 @@ impl DType {
     }
 }
 
-pub trait WithDType: Copy + Clone {
+pub trait WithDType: Copy + Clone + 'static {
     const DTYPE: DType;
 }
 

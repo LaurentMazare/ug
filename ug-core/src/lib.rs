@@ -9,6 +9,7 @@ pub mod lower;
 pub mod lower_op;
 pub mod samples;
 
-pub use dtype::DType;
+pub use dtype::{DType, WithDType};
 pub use error::{Error, Result};
 pub use layout::{Layout, Shape, D};
+pub use lazy_buffer::{Device, LazyBuffer};
