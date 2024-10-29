@@ -69,3 +69,27 @@ impl DType {
         }
     }
 }
+
+pub trait WithDType: Copy + Clone {
+    const DTYPE: DType;
+}
+
+impl WithDType for f32 {
+    const DTYPE: DType = DType::F32;
+}
+
+impl WithDType for half::f16 {
+    const DTYPE: DType = DType::F16;
+}
+
+impl WithDType for half::bf16 {
+    const DTYPE: DType = DType::BF16;
+}
+
+impl WithDType for i32 {
+    const DTYPE: DType = DType::I32;
+}
+
+impl WithDType for i64 {
+    const DTYPE: DType = DType::I64;
+}
