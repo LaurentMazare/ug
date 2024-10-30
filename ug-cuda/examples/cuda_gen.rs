@@ -24,9 +24,9 @@ fn eval_dotprod() -> Result<()> {
     let rhs = device.slice_from_values(&rhs)?;
     unsafe {
         func.launch3(
-            res.slice(),
-            lhs.slice(),
-            rhs.slice(),
+            res.slice::<f32>()?,
+            lhs.slice::<f32>()?,
+            rhs.slice::<f32>()?,
             cudarc::driver::LaunchConfig::for_num_elems(1),
         )?
     };
@@ -53,9 +53,9 @@ fn eval_lower_add() -> Result<()> {
     let rhs = device.slice_from_values(&rhs)?;
     unsafe {
         func.launch3(
-            lhs.slice(),
-            rhs.slice(),
-            res.slice(),
+            lhs.slice::<f32>()?,
+            rhs.slice::<f32>()?,
+            res.slice::<f32>()?,
             cudarc::driver::LaunchConfig::for_num_elems(1),
         )?
     };
@@ -79,7 +79,11 @@ fn eval_softmax() -> Result<()> {
     let arg = vec![0., 1., 2., 3., 2., 1., 2., 1.];
     let arg = device.slice_from_values(&arg)?;
     unsafe {
-        func.launch2(arg.slice(), res.slice(), cudarc::driver::LaunchConfig::for_num_elems(1))?
+        func.launch2(
+            arg.slice::<f32>()?,
+            res.slice::<f32>()?,
+            cudarc::driver::LaunchConfig::for_num_elems(1),
+        )?
     };
     let res = res.to_vec()?;
     println!("res: {res:?}");

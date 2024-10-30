@@ -73,8 +73,8 @@ fn run_one(args: &Args, n_cols: usize) -> Result<()> {
     let run = || {
         unsafe {
             func.launch2(
-                arg.slice(),
-                res.slice(),
+                arg.slice::<f32>()?,
+                res.slice::<f32>()?,
                 cudarc::driver::LaunchConfig {
                     grid_dim: (n_rows as u32, 1, 1),
                     block_dim: (block_dim as u32, 1, 1),

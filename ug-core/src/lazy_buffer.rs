@@ -2,10 +2,18 @@
 use crate::dtype::WithDType;
 use crate::{DType, Result};
 
-pub trait Device {
-    type Slice: Sized;
+pub trait Slice {
+    type Device;
 
-    fn allocate_uninit<DT: WithDType>(&self, len: usize) -> Result<Self::Slice>;
+    fn device(&self) -> &Self::Device;
+    fn dtype(&self) -> DType;
+}
+
+pub trait Device {
+    type Slice;
+
+    #[allow(clippy::missing_safety_doc)]
+    unsafe fn allocate_uninit<DT: WithDType>(&self, len: usize) -> Result<Self::Slice>;
     fn copy_host_to_device<DT: WithDType>(src: &[DT], dst: &mut Self::Slice) -> Result<()>;
     fn copy_device_to_host<DT: WithDType>(src: &Self::Slice, dst: &mut [DT]) -> Result<()>;
     fn synchronize(&self) -> Result<()>;

@@ -1,6 +1,7 @@
+pub use cudarc::driver::DeviceSlice;
 pub use cudarc::driver::LaunchConfig;
 use std::sync::Arc;
-use ug::{Error, Result};
+use ug::{Error, Result, Slice as S};
 
 pub trait WithErr {
     type T;
@@ -81,29 +82,72 @@ pub struct Device {
     device: Arc<cudarc::driver::CudaDevice>,
 }
 
+// A GADT based solution would seem better than this variant but not sure how to do this in rust.
+#[derive(Clone)]
+pub enum SliceInner {
+    F32(cudarc::driver::CudaSlice<f32>),
+    F16(cudarc::driver::CudaSlice<half::f16>),
+    BF16(cudarc::driver::CudaSlice<half::bf16>),
+    I32(cudarc::driver::CudaSlice<i32>),
+    I64(cudarc::driver::CudaSlice<i64>),
+}
+
 #[derive(Clone)]
 pub struct Slice {
-    // TODO(laurent): handle some general types.
-    slice: cudarc::driver::CudaSlice<f32>,
-    len: usize,
+    inner: SliceInner,
+    device: Device,
 }
+
+pub trait ToSlice: Sized {
+    fn slice(s: &Slice) -> Result<&cudarc::driver::CudaSlice<Self>>;
+}
+
+macro_rules! to_slice {
+    ($ty:ty, $dtype:ident) => {
+        impl ToSlice for $ty {
+            fn slice(s: &Slice) -> Result<&cudarc::driver::CudaSlice<Self>> {
+                match &s.inner {
+                    SliceInner::$dtype(s) => Ok(s),
+                    _ => ug::bail!(
+                        "dtype mismatch, expected {:?}, got {:?}",
+                        ug::DType::$dtype,
+                        s.dtype()
+                    ),
+                }
+            }
+        }
+    };
+}
+to_slice!(f32, F32);
+to_slice!(half::f16, F16);
+to_slice!(half::bf16, BF16);
+to_slice!(i32, I32);
+to_slice!(i64, I64);
 
 impl Slice {
     pub fn to_vec(&self) -> Result<Vec<f32>> {
-        let vec = self.slice.device().dtoh_sync_copy(&self.slice).w()?;
-        Ok(vec)
+        match &self.inner {
+            SliceInner::F32(slice) => slice.device().dtoh_sync_copy(slice).w(),
+            _ => todo!(),
+        }
     }
 
     pub fn len(&self) -> usize {
-        self.len
+        match &self.inner {
+            SliceInner::F32(slice) => slice.len(),
+            SliceInner::F16(slice) => slice.len(),
+            SliceInner::BF16(slice) => slice.len(),
+            SliceInner::I32(slice) => slice.len(),
+            SliceInner::I64(slice) => slice.len(),
+        }
     }
 
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
 
-    pub fn slice(&self) -> &cudarc::driver::CudaSlice<f32> {
-        &self.slice
+    pub fn slice<D: ToSlice>(&self) -> Result<&cudarc::driver::CudaSlice<D>> {
+        ToSlice::slice(self)
     }
 }
 
@@ -147,13 +191,12 @@ impl Device {
 
     pub fn zeros(&self, len: usize) -> Result<Slice> {
         let slice = self.device.alloc_zeros::<f32>(len).w()?;
-        Ok(Slice { slice, len })
+        Ok(Slice { inner: SliceInner::F32(slice), device: self.clone() })
     }
 
     pub fn slice_from_values(&self, vs: &[f32]) -> Result<Slice> {
-        let len = vs.len();
         let slice = self.device.htod_sync_copy(vs).w()?;
-        Ok(Slice { slice, len })
+        Ok(Slice { inner: SliceInner::F32(slice), device: self.clone() })
     }
 
     pub fn synchronize(&self) -> Result<()> {
@@ -166,26 +209,30 @@ impl ug::Device for Device {
     type Slice = Slice;
 
     #[allow(clippy::missing_transmute_annotations)]
-    fn allocate_uninit<D: ug::WithDType>(&self, len: usize) -> Result<Self::Slice> {
-        let slice = match D::DTYPE {
+    unsafe fn allocate_uninit<D: ug::WithDType>(&self, len: usize) -> Result<Self::Slice> {
+        let inner = match D::DTYPE {
             ug::DType::F32 => {
-                let slice = unsafe { self.device.alloc::<f32>(len).w()? };
-                Slice { slice, len }
+                let slice = self.device.alloc::<f32>(len).w()?;
+                SliceInner::F32(slice)
             }
             ug::DType::F16 => {
-                todo!()
+                let slice = self.device.alloc::<half::f16>(len).w()?;
+                SliceInner::F16(slice)
             }
             ug::DType::BF16 => {
-                todo!()
+                let slice = self.device.alloc::<half::bf16>(len).w()?;
+                SliceInner::BF16(slice)
             }
             ug::DType::I32 => {
-                todo!()
+                let slice = self.device.alloc::<i32>(len).w()?;
+                SliceInner::I32(slice)
             }
             ug::DType::I64 => {
-                todo!()
+                let slice = self.device.alloc::<i64>(len).w()?;
+                SliceInner::I64(slice)
             }
         };
-        Ok(slice)
+        Ok(Slice { inner, device: self.clone() })
     }
 
     fn copy_device_to_host<DT: ug::WithDType>(_src: &Self::Slice, _dst: &mut [DT]) -> Result<()> {
@@ -198,5 +245,22 @@ impl ug::Device for Device {
 
     fn synchronize(&self) -> Result<()> {
         self.synchronize()
+    }
+}
+
+impl ug::Slice for Slice {
+    type Device = Device;
+    fn dtype(&self) -> ug::DType {
+        match &self.inner {
+            SliceInner::F32(_) => ug::DType::F32,
+            SliceInner::F16(_) => ug::DType::F16,
+            SliceInner::BF16(_) => ug::DType::BF16,
+            SliceInner::I32(_) => ug::DType::I32,
+            SliceInner::I64(_) => ug::DType::I64,
+        }
+    }
+
+    fn device(&self) -> &Self::Device {
+        &self.device
     }
 }
