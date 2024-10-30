@@ -1,4 +1,4 @@
-use crate::{bail, Result};
+use crate::{bail, Const, Result};
 use half::{bf16, f16};
 
 #[derive(Debug, Clone)]
@@ -104,6 +104,8 @@ impl DType {
 pub trait WithDType: Copy + Clone + 'static + num::Zero {
     const DTYPE: DType;
 
+    fn to_const(self) -> Const;
+    fn from_const(data: Const) -> Result<Self>;
     fn to_cpu_storage(data: &[Self]) -> CpuStorageRef<'_>;
     fn from_cpu_storage(data: CpuStorageRef<'_>) -> Result<&[Self]>;
     fn to_cpu_storage_mut(data: &mut [Self]) -> CpuStorageRefMut<'_>;
@@ -114,6 +116,23 @@ macro_rules! with_dtype {
     ($ty:ty, $dtype:ident) => {
         impl WithDType for $ty {
             const DTYPE: DType = DType::$dtype;
+
+            fn to_const(self) -> Const {
+                Const::$dtype(self)
+            }
+
+            fn from_const(data: Const) -> Result<Self> {
+                match data {
+                    Const::$dtype(data) => Ok(data),
+                    _ => {
+                        bail!(
+                            "unexpected dtype for const, expected {:?}, got {:?}",
+                            Self::DTYPE,
+                            data.dtype()
+                        )
+                    }
+                }
+            }
 
             fn to_cpu_storage_mut(data: &mut [Self]) -> CpuStorageRefMut<'_> {
                 CpuStorageRefMut::$dtype(data)

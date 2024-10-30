@@ -1,6 +1,6 @@
 # ug
 
-Experiments around compiling tensor ops for cuda/metal/...
-
-When running the metal tests, enable the metal API validation via
-`METAL_DEVICE_WRAPPER_TYPE=1`.
+Deep-learning framework inspired by
+[triton](https://github.com/triton-lang/triton),
+[tinygrad](https://github.com/tinygrad/tinygrad/), and
+[micrograd](https://github.com/karpathy/micrograd).
