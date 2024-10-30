@@ -22,7 +22,7 @@ pub trait Slice {
     }
 }
 
-pub trait Device {
+pub trait Device: Clone {
     type Slice: Slice<Device = Self>;
 
     #[allow(clippy::missing_safety_doc)]
@@ -37,6 +37,12 @@ pub enum Op<D: Device> {
 }
 
 pub struct LazyBuffer<D: Device>(std::sync::Arc<LazyBufferInner<D>>);
+
+impl<D: Device> Clone for LazyBuffer<D> {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
+}
 
 impl<D: Device> std::ops::Deref for LazyBuffer<D> {
     type Target = LazyBufferInner<D>;
@@ -68,5 +74,41 @@ impl<D: Device> LazyBuffer<D> {
 
     pub fn dtype(&self) -> DType {
         self.dtype
+    }
+
+    pub fn unary(&self, op: crate::lang::UnaryOp) -> Result<Self> {
+        // TODO: dtype/op checks.
+        let inner = LazyBufferInner {
+            data: None,
+            op: Some(Op::Unary(op, self.clone())),
+            dtype: self.dtype,
+            device: self.device.clone(),
+        };
+        let lb = LazyBuffer(std::sync::Arc::new(inner));
+        Ok(lb)
+    }
+
+    pub fn binary(&self, op: crate::lang::BinaryOp, rhs: Self) -> Result<Self> {
+        // TODO: dtype/op checks.
+        let inner = LazyBufferInner {
+            data: None,
+            op: Some(Op::Binary(op, self.clone(), rhs)),
+            dtype: self.dtype,
+            device: self.device.clone(),
+        };
+        let lb = LazyBuffer(std::sync::Arc::new(inner));
+        Ok(lb)
+    }
+
+    pub fn reduce(&self, op: crate::lang::ReduceOp, axis: usize) -> Result<Self> {
+        // TODO: dtype/op checks.
+        let inner = LazyBufferInner {
+            data: None,
+            op: Some(Op::Reduce(op, self.clone(), axis)),
+            dtype: self.dtype,
+            device: self.device.clone(),
+        };
+        let lb = LazyBuffer(std::sync::Arc::new(inner));
+        Ok(lb)
     }
 }
