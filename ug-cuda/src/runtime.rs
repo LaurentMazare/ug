@@ -1,7 +1,7 @@
 pub use cudarc::driver::DeviceSlice;
 pub use cudarc::driver::LaunchConfig;
 use std::sync::Arc;
-use ug::{Error, Result, Slice as S};
+use ug::{Device as D, Error, Result, Slice as S, WithDType};
 
 pub trait WithErr {
     type T;
@@ -194,9 +194,10 @@ impl Device {
         Ok(Slice { inner: SliceInner::F32(slice), device: self.clone() })
     }
 
-    pub fn slice_from_values(&self, vs: &[f32]) -> Result<Slice> {
-        let slice = self.device.htod_sync_copy(vs).w()?;
-        Ok(Slice { inner: SliceInner::F32(slice), device: self.clone() })
+    pub fn slice_from_values<D: WithDType>(&self, vs: &[D]) -> Result<Slice> {
+        let mut slice = unsafe { self.allocate_uninit::<D>(vs.len())? };
+        slice.copy_host_to_device(vs)?;
+        Ok(slice)
     }
 
     pub fn synchronize(&self) -> Result<()> {
@@ -209,7 +210,7 @@ impl ug::Device for Device {
     type Slice = Slice;
 
     #[allow(clippy::missing_transmute_annotations)]
-    unsafe fn allocate_uninit<D: ug::WithDType>(&self, len: usize) -> Result<Self::Slice> {
+    unsafe fn allocate_uninit<D: WithDType>(&self, len: usize) -> Result<Self::Slice> {
         let inner = match D::DTYPE {
             ug::DType::F32 => {
                 let slice = self.device.alloc::<f32>(len).w()?;
@@ -235,14 +236,6 @@ impl ug::Device for Device {
         Ok(Slice { inner, device: self.clone() })
     }
 
-    fn copy_device_to_host<DT: ug::WithDType>(_src: &Self::Slice, _dst: &mut [DT]) -> Result<()> {
-        todo!()
-    }
-
-    fn copy_host_to_device<DT: ug::WithDType>(_src: &[DT], _dst: &mut Self::Slice) -> Result<()> {
-        todo!()
-    }
-
     fn synchronize(&self) -> Result<()> {
         self.synchronize()
     }
@@ -262,5 +255,33 @@ impl ug::Slice for Slice {
 
     fn device(&self) -> &Self::Device {
         &self.device
+    }
+
+    fn copy_host_to_device<DT: WithDType>(&mut self, src: &[DT]) -> Result<()> {
+        use ug::dtype::CpuStorageRef as C;
+        use SliceInner as S;
+        match (&mut self.inner, DT::to_cpu_storage(src)) {
+            (S::BF16(dst), C::BF16(src)) => self.device.device.htod_sync_copy_into(src, dst).w()?,
+            (S::F16(dst), C::F16(src)) => self.device.device.htod_sync_copy_into(src, dst).w()?,
+            (S::F32(dst), C::F32(src)) => self.device.device.htod_sync_copy_into(src, dst).w()?,
+            (S::I32(dst), C::I32(src)) => self.device.device.htod_sync_copy_into(src, dst).w()?,
+            (S::I64(dst), C::I64(src)) => self.device.device.htod_sync_copy_into(src, dst).w()?,
+            (_, _) => ug::bail!("htod dtype mismatch, dst {:?}, src {:?}", self.dtype(), DT::DTYPE),
+        }
+        Ok(())
+    }
+
+    fn copy_device_to_host<DT: WithDType>(&self, dst: &mut [DT]) -> Result<()> {
+        use ug::dtype::CpuStorageRefMut as C;
+        use SliceInner as S;
+        match (&self.inner, DT::to_cpu_storage_mut(dst)) {
+            (S::BF16(src), C::BF16(dst)) => self.device.device.dtoh_sync_copy_into(src, dst).w()?,
+            (S::F16(src), C::F16(dst)) => self.device.device.dtoh_sync_copy_into(src, dst).w()?,
+            (S::F32(src), C::F32(dst)) => self.device.device.dtoh_sync_copy_into(src, dst).w()?,
+            (S::I32(src), C::I32(dst)) => self.device.device.dtoh_sync_copy_into(src, dst).w()?,
+            (S::I64(src), C::I64(dst)) => self.device.device.dtoh_sync_copy_into(src, dst).w()?,
+            (_, _) => ug::bail!("dtoh dtype mismatch, dst {:?}, src {:?}", DT::DTYPE, self.dtype()),
+        }
+        Ok(())
     }
 }

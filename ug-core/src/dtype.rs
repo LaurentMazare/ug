@@ -1,3 +1,34 @@
+use crate::{bail, Result};
+use half::{bf16, f16};
+
+#[derive(Debug, Clone)]
+pub enum CpuStorage {
+    BF16(Vec<bf16>),
+    F16(Vec<f16>),
+    F32(Vec<f32>),
+    I32(Vec<i32>),
+    I64(Vec<i64>),
+}
+
+// Poor man's GADT...
+#[derive(Debug, Copy, Clone)]
+pub enum CpuStorageRef<'a> {
+    BF16(&'a [bf16]),
+    F16(&'a [f16]),
+    F32(&'a [f32]),
+    I32(&'a [i32]),
+    I64(&'a [i64]),
+}
+
+#[derive(Debug)]
+pub enum CpuStorageRefMut<'a> {
+    BF16(&'a mut [bf16]),
+    F16(&'a mut [f16]),
+    F32(&'a mut [f32]),
+    I32(&'a mut [i32]),
+    I64(&'a mut [i64]),
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum DType {
     BF16,
@@ -72,24 +103,101 @@ impl DType {
 
 pub trait WithDType: Copy + Clone + 'static {
     const DTYPE: DType;
+
+    fn to_cpu_storage(data: &[Self]) -> CpuStorageRef<'_>;
+    fn from_cpu_storage(data: CpuStorageRef<'_>) -> Result<&[Self]>;
+    fn to_cpu_storage_mut(data: &mut [Self]) -> CpuStorageRefMut<'_>;
+    fn from_cpu_storage_mut(data: CpuStorageRefMut<'_>) -> Result<&mut [Self]>;
 }
 
-impl WithDType for f32 {
-    const DTYPE: DType = DType::F32;
+macro_rules! with_dtype {
+    ($ty:ty, $dtype:ident) => {
+        impl WithDType for $ty {
+            const DTYPE: DType = DType::$dtype;
+
+            fn to_cpu_storage_mut(data: &mut [Self]) -> CpuStorageRefMut<'_> {
+                CpuStorageRefMut::$dtype(data)
+            }
+
+            fn from_cpu_storage_mut(data: CpuStorageRefMut<'_>) -> Result<&mut [Self]> {
+                match data {
+                    CpuStorageRefMut::$dtype(data) => Ok(data),
+                    _ => {
+                        bail!(
+                            "unexpected dtype, expected {:?}, got {:?}",
+                            Self::DTYPE,
+                            data.dtype()
+                        )
+                    }
+                }
+            }
+            fn to_cpu_storage(data: &[Self]) -> CpuStorageRef<'_> {
+                CpuStorageRef::$dtype(data)
+            }
+
+            fn from_cpu_storage(data: CpuStorageRef<'_>) -> Result<&[Self]> {
+                match data {
+                    CpuStorageRef::$dtype(data) => Ok(data),
+                    _ => {
+                        bail!(
+                            "unexpected dtype, expected {:?}, got {:?}",
+                            Self::DTYPE,
+                            data.dtype()
+                        )
+                    }
+                }
+            }
+        }
+    };
+}
+with_dtype!(bf16, BF16);
+with_dtype!(f16, F16);
+with_dtype!(f32, F32);
+with_dtype!(i32, I32);
+with_dtype!(i64, I64);
+
+impl CpuStorage {
+    pub fn dtype(&self) -> DType {
+        match self {
+            Self::BF16(_) => DType::BF16,
+            Self::F16(_) => DType::F16,
+            Self::F32(_) => DType::F32,
+            Self::I32(_) => DType::I32,
+            Self::I64(_) => DType::I64,
+        }
+    }
+
+    pub fn as_ref(&self) -> CpuStorageRef<'_> {
+        match self {
+            Self::BF16(v) => CpuStorageRef::BF16(v.as_slice()),
+            Self::F16(v) => CpuStorageRef::F16(v.as_slice()),
+            Self::F32(v) => CpuStorageRef::F32(v.as_slice()),
+            Self::I32(v) => CpuStorageRef::I32(v.as_slice()),
+            Self::I64(v) => CpuStorageRef::I64(v.as_slice()),
+        }
+    }
 }
 
-impl WithDType for half::f16 {
-    const DTYPE: DType = DType::F16;
+impl CpuStorageRef<'_> {
+    pub fn dtype(&self) -> DType {
+        match self {
+            Self::BF16(_) => DType::BF16,
+            Self::F16(_) => DType::F16,
+            Self::F32(_) => DType::F32,
+            Self::I32(_) => DType::I32,
+            Self::I64(_) => DType::I64,
+        }
+    }
 }
 
-impl WithDType for half::bf16 {
-    const DTYPE: DType = DType::BF16;
-}
-
-impl WithDType for i32 {
-    const DTYPE: DType = DType::I32;
-}
-
-impl WithDType for i64 {
-    const DTYPE: DType = DType::I64;
+impl CpuStorageRefMut<'_> {
+    pub fn dtype(&self) -> DType {
+        match self {
+            Self::BF16(_) => DType::BF16,
+            Self::F16(_) => DType::F16,
+            Self::F32(_) => DType::F32,
+            Self::I32(_) => DType::I32,
+            Self::I64(_) => DType::I64,
+        }
+    }
 }
