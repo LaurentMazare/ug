@@ -125,27 +125,6 @@ to_slice!(i32, I32);
 to_slice!(i64, I64);
 
 impl Slice {
-    pub fn to_vec(&self) -> Result<Vec<f32>> {
-        match &self.inner {
-            SliceInner::F32(slice) => slice.device().dtoh_sync_copy(slice).w(),
-            _ => todo!(),
-        }
-    }
-
-    pub fn len(&self) -> usize {
-        match &self.inner {
-            SliceInner::F32(slice) => slice.len(),
-            SliceInner::F16(slice) => slice.len(),
-            SliceInner::BF16(slice) => slice.len(),
-            SliceInner::I32(slice) => slice.len(),
-            SliceInner::I64(slice) => slice.len(),
-        }
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
-
     pub fn slice<D: ToSlice>(&self) -> Result<&cudarc::driver::CudaSlice<D>> {
         ToSlice::slice(self)
     }
@@ -283,5 +262,15 @@ impl ug::Slice for Slice {
             (_, _) => ug::bail!("dtoh dtype mismatch, dst {:?}, src {:?}", DT::DTYPE, self.dtype()),
         }
         Ok(())
+    }
+
+    fn len(&self) -> usize {
+        match &self.inner {
+            SliceInner::F32(slice) => slice.len(),
+            SliceInner::F16(slice) => slice.len(),
+            SliceInner::BF16(slice) => slice.len(),
+            SliceInner::I32(slice) => slice.len(),
+            SliceInner::I64(slice) => slice.len(),
+        }
     }
 }

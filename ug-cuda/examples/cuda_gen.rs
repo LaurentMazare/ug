@@ -1,4 +1,4 @@
-use ug::Result;
+use ug::{Result, Slice};
 
 fn eval_add() -> Result<()> {
     let kernel = ug::samples::ssa::simple_add(1024);
@@ -30,7 +30,7 @@ fn eval_dotprod() -> Result<()> {
             cudarc::driver::LaunchConfig::for_num_elems(1),
         )?
     };
-    let res = res.to_vec()?;
+    let res: Vec<f32> = res.to_vec()?;
     println!("res: {res:?}");
     Ok(())
 }
@@ -59,7 +59,7 @@ fn eval_lower_add() -> Result<()> {
             cudarc::driver::LaunchConfig::for_num_elems(1),
         )?
     };
-    let res = res.to_vec()?;
+    let res: Vec<f32> = res.to_vec()?;
     println!("res: {res:?}");
     Ok(())
 }
@@ -85,7 +85,7 @@ fn eval_softmax() -> Result<()> {
             cudarc::driver::LaunchConfig::for_num_elems(1),
         )?
     };
-    let res = res.to_vec()?;
+    let res: Vec<f32> = res.to_vec()?;
     println!("res: {res:?}");
     Ok(())
 }

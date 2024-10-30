@@ -7,8 +7,19 @@ pub trait Slice {
 
     fn device(&self) -> &Self::Device;
     fn dtype(&self) -> DType;
+    fn len(&self) -> usize;
     fn copy_host_to_device<DT: WithDType>(&mut self, src: &[DT]) -> Result<()>;
     fn copy_device_to_host<DT: WithDType>(&self, dst: &mut [DT]) -> Result<()>;
+
+    fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    fn to_vec<DT: WithDType>(&self) -> Result<Vec<DT>> {
+        let mut host = vec![DT::zero(); self.len()];
+        self.copy_device_to_host(&mut host)?;
+        Ok(host)
+    }
 }
 
 pub trait Device {

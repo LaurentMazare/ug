@@ -101,7 +101,7 @@ impl DType {
     }
 }
 
-pub trait WithDType: Copy + Clone + 'static {
+pub trait WithDType: Copy + Clone + 'static + num::Zero {
     const DTYPE: DType;
 
     fn to_cpu_storage(data: &[Self]) -> CpuStorageRef<'_>;
