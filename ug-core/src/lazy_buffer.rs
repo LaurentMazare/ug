@@ -1,6 +1,6 @@
 #![allow(unused)]
 use crate::dtype::WithDType;
-use crate::{DType, Result};
+use crate::{DType, Layout, Result, Shape};
 
 pub trait Slice {
     type Device: Device<Slice = Self>;
@@ -60,6 +60,7 @@ pub struct LazyBufferInner<D: Device> {
     data: Option<D::Slice>,
     op: Option<Op<D>>,
     dtype: crate::DType,
+    layout: Layout,
     device: D,
 }
 
@@ -80,12 +81,29 @@ impl<D: Device> LazyBuffer<D> {
         self.dtype
     }
 
+    pub fn layout(&self) -> &Layout {
+        &self.layout
+    }
+
+    pub fn shape(&self) -> &Shape {
+        self.layout.shape()
+    }
+
+    pub fn dims(&self) -> &[usize] {
+        self.layout.shape().dims()
+    }
+
+    pub fn rank(&self) -> usize {
+        self.layout.shape().rank()
+    }
+
     pub fn unary(&self, op: crate::lang::UnaryOp) -> Result<Self> {
         // TODO: dtype/op checks.
         let inner = LazyBufferInner {
             data: None,
             op: Some(Op::Unary(op, self.clone())),
             dtype: self.dtype,
+            layout: Layout::from_shape(self.shape()),
             device: self.device.clone(),
         };
         let lb = LazyBuffer(std::sync::Arc::new(inner));
@@ -93,12 +111,13 @@ impl<D: Device> LazyBuffer<D> {
     }
 
     pub fn binary(&self, op: crate::lang::BinaryOp, rhs: Self) -> Result<Self> {
-        // TODO: dtype/op checks.
+        // TODO: dtype/op/shape checks.
         let inner = LazyBufferInner {
             data: None,
             op: Some(Op::Binary(op, self.clone(), rhs)),
             dtype: self.dtype,
             device: self.device.clone(),
+            layout: Layout::from_shape(self.shape()),
         };
         let lb = LazyBuffer(std::sync::Arc::new(inner));
         Ok(lb)
@@ -106,11 +125,13 @@ impl<D: Device> LazyBuffer<D> {
 
     pub fn reduce(&self, op: crate::lang::ReduceOp, axis: usize) -> Result<Self> {
         // TODO: dtype/op checks.
+        let shape = self.shape(); // TODO: squeeze or remove axis.
         let inner = LazyBufferInner {
             data: None,
             op: Some(Op::Reduce(op, self.clone(), axis)),
             dtype: self.dtype,
             device: self.device.clone(),
+            layout: Layout::from_shape(shape),
         };
         let lb = LazyBuffer(std::sync::Arc::new(inner));
         Ok(lb)
