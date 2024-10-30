@@ -3,14 +3,14 @@ use crate::dtype::WithDType;
 use crate::{DType, Result};
 
 pub trait Slice {
-    type Device;
+    type Device: Device<Slice = Self>;
 
     fn device(&self) -> &Self::Device;
     fn dtype(&self) -> DType;
 }
 
 pub trait Device {
-    type Slice;
+    type Slice: Slice<Device = Self>;
 
     #[allow(clippy::missing_safety_doc)]
     unsafe fn allocate_uninit<DT: WithDType>(&self, len: usize) -> Result<Self::Slice>;
