@@ -34,6 +34,10 @@ pub enum Op<D: Device> {
     Unary(crate::lang::UnaryOp, LazyBuffer<D>),
     Binary(crate::lang::BinaryOp, LazyBuffer<D>, LazyBuffer<D>),
     Reduce(crate::lang::ReduceOp, LazyBuffer<D>, usize),
+    Const(crate::lang::Const),
+    // TODO: maybe the following should be an Arc<Mutex<...>> or similar so that it can easily be
+    // modified.
+    Copy(crate::dtype::CpuStorage),
 }
 
 pub struct LazyBuffer<D: Device>(std::sync::Arc<LazyBufferInner<D>>);

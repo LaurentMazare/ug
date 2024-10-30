@@ -1,4 +1,5 @@
 pub mod block;
+pub mod r#const;
 pub mod dtype;
 pub mod error;
 pub mod interpreter;
@@ -13,3 +14,4 @@ pub use dtype::{DType, WithDType};
 pub use error::{Error, Result};
 pub use layout::{Layout, Shape, D};
 pub use lazy_buffer::{Device, LazyBuffer, Slice};
+pub use r#const::Const;
