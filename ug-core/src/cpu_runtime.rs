@@ -155,8 +155,10 @@ impl crate::CpuDevice {
         let tmp_so = tmp_dir.join(format!("ug_{pid}_{kernel_id}.so"));
         let result = compile_inner(c_code, func_name, &tmp_c, &tmp_so);
         // Ensure that the temporary files are cleaned up, even on failures.
-        let _ = std::fs::remove_file(tmp_c);
-        let _ = std::fs::remove_file(tmp_so);
+        if !crate::utils::KEEP_TMP.with(|b| *b) {
+            let _ = std::fs::remove_file(tmp_c);
+            let _ = std::fs::remove_file(tmp_so);
+        }
         result
     }
 }

@@ -12,6 +12,7 @@ pub mod lower;
 pub mod lower_op;
 pub mod samples;
 pub mod schedule;
+pub mod utils;
 
 pub use cpu_runtime::CpuDevice;
 pub use dtype::{DType, WithDType};
