@@ -79,7 +79,7 @@ pub fn gen<W: std::io::Write>(w: &mut W, func_name: &str, kernel: &ssa::Kernel) 
     }
     let mut args = args.into_iter().collect::<Vec<_>>();
     args.sort_by_key(|v| v.0);
-    writeln!(w, "extern \"C\" void {func_name}(")?;
+    writeln!(w, "void {func_name}(")?;
     for (arg_idx2, &(var_id, (arg_idx, dtype))) in args.iter().enumerate() {
         if arg_idx != arg_idx2 {
             bail!("unexpected arguments in kernel {args:?}")

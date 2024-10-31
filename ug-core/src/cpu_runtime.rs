@@ -38,9 +38,9 @@ impl Func {
 }
 
 impl crate::CpuDevice {
-    pub fn compile(&self, c_code: &str, func_name: String) -> Result<Func> {
+    pub fn compile(&self, c_code: &[u8], func_name: String) -> Result<Func> {
         fn compile_inner(
-            c_code: &str,
+            c_code: &[u8],
             func_name: String,
             tmp_c: &PathBuf,
             tmp_so: &PathBuf,
@@ -53,7 +53,11 @@ impl crate::CpuDevice {
                 .output()?;
 
             if !output.status.success() {
-                crate::bail!("compilation failed {:?}", output.stderr)
+                crate::bail!(
+                    "compilation failed\nstdout:\n{}\nstderr:{}",
+                    String::from_utf8_lossy(&output.stdout),
+                    String::from_utf8_lossy(&output.stderr)
+                )
             }
             let lib = unsafe { libloading::Library::new(tmp_so)? };
             Ok(Func { func_name, lib })
@@ -63,7 +67,7 @@ impl crate::CpuDevice {
         let pid = std::process::id();
         let kernel_id = KernelId::new().as_usize();
         let tmp_c = tmp_dir.join(format!("ug_{pid}_{kernel_id}.c"));
-        let tmp_so = tmp_dir.join(format!("ug_{pid}_{kernel_id}.c"));
+        let tmp_so = tmp_dir.join(format!("ug_{pid}_{kernel_id}.so"));
         let result = compile_inner(c_code, func_name, &tmp_c, &tmp_so);
         // Ensure that the temporary files are cleaned up, even on failures.
         let _ = std::fs::remove_file(tmp_c);
