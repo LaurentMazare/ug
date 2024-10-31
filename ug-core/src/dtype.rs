@@ -176,6 +176,20 @@ with_dtype!(i32, I32);
 with_dtype!(i64, I64);
 
 impl CpuStorage {
+    pub fn len(&self) -> usize {
+        match self {
+            Self::BF16(s) => s.len(),
+            Self::F16(s) => s.len(),
+            Self::F32(s) => s.len(),
+            Self::I32(s) => s.len(),
+            Self::I64(s) => s.len(),
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     pub fn dtype(&self) -> DType {
         match self {
             Self::BF16(_) => DType::BF16,
