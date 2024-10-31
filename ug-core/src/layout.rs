@@ -114,6 +114,10 @@ macro_rules! extract_dims {
 }
 
 impl Shape {
+    pub fn num_elements(&self) -> usize {
+        self.dims().iter().product()
+    }
+
     pub fn from_dims(dims: &[usize]) -> Self {
         Self(dims.to_vec())
     }
@@ -570,7 +574,7 @@ impl Layout {
     }
 
     pub fn num_elements(&self) -> usize {
-        self.shape.dims().iter().product()
+        self.shape.num_elements()
     }
 
     pub fn shape(&self) -> &Shape {

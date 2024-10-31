@@ -46,6 +46,8 @@ impl Context {
     fn walk<D: Device>(&mut self, b: &LazyBuffer<D>) -> Result<Ast> {
         use crate::lazy_buffer::Op;
 
+        let dtype = b.dtype();
+        let shape = b.shape();
         let ast = match b.op() {
             Op::Unary(op, arg) => {
                 let ast = self.walk(arg)?;
@@ -62,13 +64,12 @@ impl Context {
             }
             Op::Const(cst) => crate::lang::op::cst(*cst),
             Op::Copy(_sto) => {
-                todo!()
+                let arg_id = crate::lang::ArgId::new();
+                crate::lang::op::load(arg_id, Layout::from_shape(shape), dtype)?
             }
             Op::Layout(_op, arg) => {
-                let dtype = arg.dtype();
                 let ast = self.walk(arg)?;
                 self.items.push(ScheduleItem { ast });
-                let shape = b.shape();
                 let arg_id = crate::lang::ArgId::new();
                 crate::lang::op::load(arg_id, Layout::from_shape(shape), dtype)?
             }
