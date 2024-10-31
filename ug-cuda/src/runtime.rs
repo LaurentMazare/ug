@@ -87,7 +87,6 @@ impl Func {
 #[derive(Clone)]
 pub struct Device {
     device: Arc<cudarc::driver::CudaDevice>,
-    #[allow(unused)]
     blas: Arc<cudarc::cublas::CudaBlas>,
 }
 
@@ -144,6 +143,14 @@ impl Device {
         let device = cudarc::driver::CudaDevice::new(device_index).w()?;
         let blas = cudarc::cublas::CudaBlas::new(device.clone()).w()?;
         Ok(Self { device, blas: Arc::new(blas) })
+    }
+
+    pub fn cudarc_device(&self) -> &cudarc::driver::CudaDevice {
+        self.device.as_ref()
+    }
+
+    pub fn blas(&self) -> &cudarc::cublas::CudaBlas {
+        self.blas.as_ref()
     }
 
     pub fn compile_cu(
