@@ -131,9 +131,17 @@ impl crate::CpuDevice {
             tmp_so: &PathBuf,
         ) -> Result<Func> {
             std::fs::write(tmp_c, c_code)?;
+            // TODO: add some environment variable or other ways to set some flags.
             let output = std::process::Command::new("gcc")
                 .arg(tmp_c)
-                .args(["-shared", "-O3", "-march=native", "-flto", "-fomit-frame-pointer", "-o"])
+                .args([
+                    "-shared",
+                    "-O3",
+                    "-march=native",
+                    "-ffast-math",
+                    "-fomit-frame-pointer",
+                    "-o",
+                ])
                 .arg(tmp_so)
                 .output()?;
 
