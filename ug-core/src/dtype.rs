@@ -101,7 +101,7 @@ impl DType {
     }
 }
 
-pub trait WithDType: Copy + Clone + 'static + num::Zero {
+pub trait WithDType: Copy + Clone + 'static + num::Zero + num::One {
     const DTYPE: DType;
 
     fn to_const(self) -> Const;

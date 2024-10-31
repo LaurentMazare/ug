@@ -30,6 +30,12 @@ pub trait Device: Clone {
     fn synchronize(&self) -> Result<()>;
 }
 
+#[derive(Debug, Clone)]
+pub enum LayoutUpdate {
+    Reshape,
+    Broadcast,
+}
+
 pub enum Op<D: Device> {
     Unary(crate::lang::UnaryOp, LazyBuffer<D>),
     Binary(crate::lang::BinaryOp, LazyBuffer<D>, LazyBuffer<D>),
@@ -38,6 +44,7 @@ pub enum Op<D: Device> {
     // TODO: maybe the following should be an Arc<Mutex<...>> or similar so that it can easily be
     // modified.
     Copy(crate::dtype::CpuStorage),
+    Layout(LayoutUpdate),
 }
 
 pub struct LazyBuffer<D: Device>(std::sync::Arc<LazyBufferInner<D>>);

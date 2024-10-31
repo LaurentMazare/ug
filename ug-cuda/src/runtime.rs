@@ -8,6 +8,13 @@ pub trait WithErr {
     fn w(self) -> Result<Self::T>;
 }
 
+impl<T> WithErr for std::result::Result<T, cudarc::cublas::result::CublasError> {
+    type T = T;
+    fn w(self) -> Result<Self::T> {
+        self.map_err(|v| Error::wrap(v).bt())
+    }
+}
+
 impl<T> WithErr for std::result::Result<T, cudarc::driver::DriverError> {
     type T = T;
     fn w(self) -> Result<Self::T> {
@@ -80,6 +87,8 @@ impl Func {
 #[derive(Clone)]
 pub struct Device {
     device: Arc<cudarc::driver::CudaDevice>,
+    #[allow(unused)]
+    blas: Arc<cudarc::cublas::CudaBlas>,
 }
 
 // A GADT based solution would seem better than this variant but not sure how to do this in rust.
@@ -133,7 +142,8 @@ impl Slice {
 impl Device {
     pub fn new(device_index: usize) -> Result<Self> {
         let device = cudarc::driver::CudaDevice::new(device_index).w()?;
-        Ok(Self { device })
+        let blas = cudarc::cublas::CudaBlas::new(device.clone()).w()?;
+        Ok(Self { device, blas: Arc::new(blas) })
     }
 
     pub fn compile_cu(
