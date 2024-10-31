@@ -15,8 +15,13 @@ fn schedule() -> Result<()> {
         let arg = ug::lang::op::Arg::new(ug::lang::Type::Ptr(ug::DType::F32));
         let sto = ug::lang::op::store(arg.id(), Layout::from_shape((5, 2)), ast)?;
         let kernel = ug::lang::op::Kernel::new(format!("kernel{idx}"), vec![arg], vec![sto]);
-        let op = kernel.lower(&Default::default())?;
-        println!("{op:?}");
+        let ssa = kernel.lower(&Default::default())?;
+        println!("{ssa:?}");
+        let mut buffer = ug::interpreter::Buffer::F32(vec![0f32; 10]);
+        let args = vec![];
+        ug::interpreter::eval_ssa::<1>(&ssa, vec![&mut buffer], &args, 0)?;
+        let buffer = buffer.as_f32()?;
+        assert_eq!(buffer, [42., 42., 42., 42., 42., 42., 42., 42., 42., 42.]);
     }
     Ok(())
 }

@@ -299,6 +299,7 @@ pub fn eval_ssa<const N: usize>(
                     (Some(Buffer::I32(vs)), Value::I32(v)) => {
                         offset.0.iter().zip(v.0.iter()).for_each(|(o, v)| vs[*o as usize] = *v)
                     }
+                    (None, v) => crate::bail!("no buffer for store {v:?}"),
                     (_, v) => crate::bail!("unexpected dtype for value in store {v:?}"),
                 };
                 (value, None)
