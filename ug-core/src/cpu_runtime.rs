@@ -28,11 +28,19 @@ impl Func {
         self.func_name.as_str()
     }
 
-    pub fn run(&self) -> Result<()> {
+    pub unsafe fn run0(&self) -> Result<()> {
         let func_name = self.func_name.as_bytes();
         let symbol: libloading::Symbol<unsafe extern "C" fn()> =
             unsafe { self.lib.get(func_name)? };
         unsafe { symbol() };
+        Ok(())
+    }
+
+    pub fn run3(&self, v1: &mut [i32], v2: &mut [i32], v3: &mut [i32]) -> Result<()> {
+        let func_name = self.func_name.as_bytes();
+        let symbol: libloading::Symbol<unsafe extern "C" fn(*mut i32, *mut i32, *mut i32)> =
+            unsafe { self.lib.get(func_name)? };
+        unsafe { symbol(v1.as_mut_ptr(), v2.as_mut_ptr(), v3.as_mut_ptr()) };
         Ok(())
     }
 }
