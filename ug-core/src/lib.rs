@@ -1,6 +1,8 @@
 pub mod block;
 pub mod r#const;
 pub mod cpu;
+pub mod cpu_code_gen;
+pub mod cpu_runtime;
 pub mod dtype;
 pub mod error;
 pub mod interpreter;

@@ -12,6 +12,9 @@ pub enum Error {
     #[error(transparent)]
     FromUtf8(#[from] std::string::FromUtf8Error),
 
+    #[error(transparent)]
+    LibLoading(#[from] libloading::Error),
+
     /// Arbitrary errors wrapping.
     #[error(transparent)]
     Wrapped(Box<dyn std::error::Error + Send + Sync>),
