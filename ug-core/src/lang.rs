@@ -131,6 +131,10 @@ impl Ord for Arg {
 }
 
 impl Arg {
+    pub fn new(type_: Type) -> Self {
+        Self { id: ArgId::new(), type_ }
+    }
+
     pub fn value(dtype: DType) -> Self {
         let id = ArgId::new();
         Self { id, type_: Type::Value(dtype) }

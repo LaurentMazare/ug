@@ -3,14 +3,24 @@ use crate::{Device, Layout, LazyBuffer, Result};
 
 #[derive(Debug)]
 pub struct ScheduleItem {
-    pub ast: Ast,
+    ast: Ast,
     // TODO: Add the buffers, probably in a lazily allocated way, see device.Buffer in tinygrad.
+}
+
+impl ScheduleItem {
+    pub fn into_ast(self) -> Ast {
+        self.ast
+    }
+
+    pub fn ast(&self) -> &Ast {
+        &self.ast
+    }
 }
 
 #[derive(Debug)]
 pub struct Schedule {
     /// Elements in `items` are topologically sorted so that they can be run in order.
-    pub items: Vec<ScheduleItem>,
+    items: Vec<ScheduleItem>,
     // TODO: Add variables.
 }
 
@@ -29,6 +39,10 @@ impl Schedule {
         let ast = context.walk(buffer)?;
         context.items.push(ScheduleItem { ast });
         Ok(Self { items: context.items })
+    }
+
+    pub fn items(&self) -> &[ScheduleItem] {
+        self.items.as_slice()
     }
 }
 
