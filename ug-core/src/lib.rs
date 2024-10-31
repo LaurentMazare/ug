@@ -1,6 +1,5 @@
 pub mod block;
 pub mod r#const;
-pub mod cpu;
 pub mod cpu_code_gen;
 pub mod cpu_runtime;
 pub mod dtype;
@@ -14,7 +13,7 @@ pub mod lower_op;
 pub mod samples;
 pub mod schedule;
 
-pub use cpu::CpuDevice;
+pub use cpu_runtime::CpuDevice;
 pub use dtype::{DType, WithDType};
 pub use error::{Error, Result};
 pub use layout::{Layout, Shape, D};

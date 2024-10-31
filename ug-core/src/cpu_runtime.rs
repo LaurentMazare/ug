@@ -1,7 +1,83 @@
-#![allow(unused)]
-use crate::Result;
+pub use crate::dtype::CpuStorage;
+use crate::{DType, Result};
+use half::{bf16, f16};
 use std::path::PathBuf;
 
+#[derive(Clone, Copy, Debug)]
+pub struct CpuDevice;
+
+impl crate::Device for CpuDevice {
+    type Slice = CpuStorage;
+
+    unsafe fn allocate_uninit<DT: crate::WithDType>(&self, len: usize) -> Result<Self::Slice> {
+        let slice = match DT::DTYPE {
+            DType::BF16 => CpuStorage::BF16(vec![bf16::ZERO; len]),
+            DType::F16 => CpuStorage::F16(vec![f16::ZERO; len]),
+            DType::F32 => CpuStorage::F32(vec![0f32; len]),
+            DType::I32 => CpuStorage::I32(vec![0i32; len]),
+            DType::I64 => CpuStorage::I64(vec![0i64; len]),
+        };
+        Ok(slice)
+    }
+
+    fn synchronize(&self) -> Result<()> {
+        Ok(())
+    }
+}
+
+impl crate::Slice for CpuStorage {
+    type Device = CpuDevice;
+
+    fn len(&self) -> usize {
+        CpuStorage::len(self)
+    }
+
+    fn dtype(&self) -> crate::DType {
+        CpuStorage::dtype(self)
+    }
+
+    fn device(&self) -> &Self::Device {
+        &CpuDevice
+    }
+
+    fn copy_host_to_device<DT: crate::WithDType>(&mut self, src: &[DT]) -> Result<()> {
+        use crate::dtype::CpuStorage as S;
+        use crate::dtype::CpuStorageRef as C;
+        let dtype = self.dtype();
+        if src.len() != self.len() {
+            crate::bail!("dtoh len mismatch, dst {}, len {}", self.len(), src.len())
+        }
+        match (self, DT::to_cpu_storage(src)) {
+            (S::BF16(dst), C::BF16(src)) => dst.copy_from_slice(src),
+            (S::F16(dst), C::F16(src)) => dst.copy_from_slice(src),
+            (S::F32(dst), C::F32(src)) => dst.copy_from_slice(src),
+            (S::I32(dst), C::I32(src)) => dst.copy_from_slice(src),
+            (S::I64(dst), C::I64(src)) => dst.copy_from_slice(src),
+            (_, _) => {
+                crate::bail!("htod dtype mismatch, dst {dtype:?}, src {:?}", DT::DTYPE)
+            }
+        }
+        Ok(())
+    }
+
+    fn copy_device_to_host<DT: crate::WithDType>(&self, dst: &mut [DT]) -> Result<()> {
+        use crate::dtype::CpuStorage as S;
+        use crate::dtype::CpuStorageRefMut as C;
+        let dtype = self.dtype();
+        if dst.len() != self.len() {
+            crate::bail!("dtoh len mismatch, dst {}, len {}", dst.len(), self.len())
+        }
+        match (self, DT::to_cpu_storage_mut(dst)) {
+            (S::BF16(src), C::BF16(dst)) => dst.copy_from_slice(src),
+            (S::F16(src), C::F16(dst)) => dst.copy_from_slice(src),
+            (S::F32(src), C::F32(dst)) => dst.copy_from_slice(src),
+            (S::I32(src), C::I32(dst)) => dst.copy_from_slice(src),
+            (S::I64(src), C::I64(dst)) => dst.copy_from_slice(src),
+            (_, _) => crate::bail!("dtoh dtype mismatch, dst {:?}, src {dtype:?}", DT::DTYPE),
+        }
+        Ok(())
+    }
+}
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct KernelId(usize);
 
@@ -28,19 +104,20 @@ impl Func {
         self.func_name.as_str()
     }
 
+    #[allow(clippy::missing_safety_doc)]
     pub unsafe fn run0(&self) -> Result<()> {
         let func_name = self.func_name.as_bytes();
-        let symbol: libloading::Symbol<unsafe extern "C" fn()> =
-            unsafe { self.lib.get(func_name)? };
-        unsafe { symbol() };
+        let symbol: libloading::Symbol<unsafe extern "C" fn()> = self.lib.get(func_name)?;
+        symbol();
         Ok(())
     }
 
-    pub fn run3(&self, v1: &mut [i32], v2: &mut [i32], v3: &mut [i32]) -> Result<()> {
+    #[allow(clippy::missing_safety_doc)]
+    pub unsafe fn run3(&self, v1: &mut [i32], v2: &mut [i32], v3: &mut [i32]) -> Result<()> {
         let func_name = self.func_name.as_bytes();
         let symbol: libloading::Symbol<unsafe extern "C" fn(*mut i32, *mut i32, *mut i32)> =
-            unsafe { self.lib.get(func_name)? };
-        unsafe { symbol(v1.as_mut_ptr(), v2.as_mut_ptr(), v3.as_mut_ptr()) };
+            self.lib.get(func_name)?;
+        symbol(v1.as_mut_ptr(), v2.as_mut_ptr(), v3.as_mut_ptr());
         Ok(())
     }
 }
