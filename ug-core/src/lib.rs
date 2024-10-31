@@ -9,6 +9,7 @@ pub mod lazy_buffer;
 pub mod lower;
 pub mod lower_op;
 pub mod samples;
+pub mod schedule;
 
 pub use dtype::{DType, WithDType};
 pub use error::{Error, Result};

@@ -1,6 +1,22 @@
-#![allow(unused)]
 use crate::dtype::WithDType;
 use crate::{DType, Layout, Result, Shape};
+
+/// Unique identifier for LazyBuffer.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Id(usize);
+
+impl Id {
+    fn new() -> Self {
+        // https://users.rust-lang.org/t/idiomatic-rust-way-to-generate-unique-id/33805
+        use std::sync::atomic;
+        static COUNTER: atomic::AtomicUsize = atomic::AtomicUsize::new(1);
+        Self(COUNTER.fetch_add(1, atomic::Ordering::Relaxed))
+    }
+
+    pub fn as_usize(&self) -> usize {
+        self.0
+    }
+}
 
 pub trait Slice {
     type Device: Device<Slice = Self>;
@@ -31,7 +47,7 @@ pub trait Device: Clone {
 }
 
 #[derive(Debug, Clone)]
-pub enum LayoutUpdate {
+pub enum LayoutOp {
     Reshape,
     Broadcast,
 }
@@ -42,9 +58,9 @@ pub enum Op<D: Device> {
     Reduce(crate::lang::ReduceOp, LazyBuffer<D>, usize),
     Const(crate::lang::Const),
     // TODO: maybe the following should be an Arc<Mutex<...>> or similar so that it can easily be
-    // modified.
+    // modified?
     Copy(crate::dtype::CpuStorage),
-    Layout(LayoutUpdate),
+    Layout(LayoutOp, LazyBuffer<D>),
 }
 
 pub struct LazyBuffer<D: Device>(std::sync::Arc<LazyBufferInner<D>>);
@@ -64,14 +80,19 @@ impl<D: Device> std::ops::Deref for LazyBuffer<D> {
 }
 
 pub struct LazyBufferInner<D: Device> {
+    id: Id,
     data: Option<D::Slice>,
-    op: Option<Op<D>>,
+    op: Op<D>,
     dtype: crate::DType,
     layout: Layout,
     device: D,
 }
 
 impl<D: Device> LazyBuffer<D> {
+    pub fn op(&self) -> &Op<D> {
+        &self.op
+    }
+
     pub fn realized(&self) -> bool {
         self.data.is_some()
     }
@@ -107,8 +128,9 @@ impl<D: Device> LazyBuffer<D> {
     pub fn unary(&self, op: crate::lang::UnaryOp) -> Result<Self> {
         // TODO: dtype/op checks.
         let inner = LazyBufferInner {
+            id: Id::new(),
             data: None,
-            op: Some(Op::Unary(op, self.clone())),
+            op: Op::Unary(op, self.clone()),
             dtype: self.dtype,
             layout: Layout::from_shape(self.shape()),
             device: self.device.clone(),
@@ -120,8 +142,9 @@ impl<D: Device> LazyBuffer<D> {
     pub fn binary(&self, op: crate::lang::BinaryOp, rhs: Self) -> Result<Self> {
         // TODO: dtype/op/shape checks.
         let inner = LazyBufferInner {
+            id: Id::new(),
             data: None,
-            op: Some(Op::Binary(op, self.clone(), rhs)),
+            op: Op::Binary(op, self.clone(), rhs),
             dtype: self.dtype,
             device: self.device.clone(),
             layout: Layout::from_shape(self.shape()),
@@ -134,13 +157,18 @@ impl<D: Device> LazyBuffer<D> {
         // TODO: dtype/op checks.
         let shape = self.shape(); // TODO: squeeze or remove axis.
         let inner = LazyBufferInner {
+            id: Id::new(),
             data: None,
-            op: Some(Op::Reduce(op, self.clone(), axis)),
+            op: Op::Reduce(op, self.clone(), axis),
             dtype: self.dtype,
             device: self.device.clone(),
             layout: Layout::from_shape(shape),
         };
         let lb = LazyBuffer(std::sync::Arc::new(inner));
         Ok(lb)
+    }
+
+    pub fn id(&self) -> Id {
+        self.id
     }
 }
