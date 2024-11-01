@@ -95,15 +95,17 @@ pub struct CompiledSchedule<D: Device> {
 impl<D: Device> CompiledSchedule<D> {
     pub fn run(&self) -> Result<()> {
         for (func, args) in self.funcs.iter() {
-            let _ = args
+            // Should we do some deadlock detection?
+            let mut locks = args
                 .iter()
                 .map(|(_id, lb)| {
                     unsafe { lb.maybe_allocate_uninit()? };
-                    Ok(())
+                    let lock = lb.data().lock()?;
+                    Ok(lock)
                 })
-                .collect::<Result<Vec<_>>>();
-            // TODO: proper argument handling.
-            self.device.run(func, &mut [])?
+                .collect::<Result<Vec<_>>>()?;
+            let mut locks = locks.iter_mut().map(|v| v.as_mut().unwrap()).collect::<Vec<_>>();
+            self.device.run(func, &mut locks)?
         }
         Ok(())
     }

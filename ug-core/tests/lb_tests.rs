@@ -1,3 +1,4 @@
+use ug::{Device, Slice};
 use ug::{LazyBuffer as LB, Result};
 
 #[test]
@@ -24,8 +25,6 @@ fn schedule_interpret() -> Result<()> {
 
 #[test]
 fn schedule_cpu() -> Result<()> {
-    use ug::{Device, Slice};
-
     let cpu = ug::CpuDevice;
     let lhs = LB::cst(40., (5, 2), &cpu)?;
     let rhs = LB::cst(2., (5, 2), &cpu)?;
@@ -40,5 +39,20 @@ fn schedule_cpu() -> Result<()> {
     cpu.run(&func, &mut [&mut buffer])?;
     let buffer = buffer.to_vec::<f32>()?;
     assert_eq!(buffer, [42., 42., 42., 42., 42., 42., 42., 42., 42., 42.]);
+    Ok(())
+}
+
+#[test]
+fn schedule_cpu_compile() -> Result<()> {
+    let cpu = ug::CpuDevice;
+    let lhs = LB::cst(40., (5, 2), &cpu)?;
+    let rhs = LB::cst(2., (5, 2), &cpu)?;
+    let lb = lhs.binary(ug::lang::BinaryOp::Add, rhs)?;
+    let schedule = ug::Schedule::create_one(&lb)?;
+    let schedule = schedule.compile()?;
+    schedule.run()?;
+    let data = lb.data().lock()?;
+    let data = data.as_ref().unwrap().to_vec::<f32>()?;
+    assert_eq!(data, [42., 42., 42., 42., 42., 42., 42., 42., 42., 42.]);
     Ok(())
 }

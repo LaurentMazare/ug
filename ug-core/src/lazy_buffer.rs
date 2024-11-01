@@ -53,9 +53,9 @@ impl<D: Device> std::ops::Deref for LazyBuffer<D> {
 
 pub struct LazyBufferInner<D: Device> {
     id: Id,
-    // A RwLock here has some runtime overhead when lots of buffers are
+    // A Mutex here has some runtime overhead when lots of buffers are
     // used but allows the structure to be shared between threads.
-    data: std::sync::RwLock<Option<D::Slice>>,
+    data: std::sync::Mutex<Option<D::Slice>>,
     op: Op<D>,
     dtype: crate::DType,
     layout: Layout,
@@ -65,7 +65,7 @@ pub struct LazyBufferInner<D: Device> {
 impl<D: Device> LazyBuffer<D> {
     #[allow(clippy::missing_safety_doc)]
     pub unsafe fn maybe_allocate_uninit(&self) -> Result<()> {
-        let mut data = self.data.write().unwrap();
+        let mut data = self.data.lock()?;
         if data.is_none() {
             // TODO: This should only apply to C contiguous tensors.
             let nels = self.layout.num_elements();
@@ -86,11 +86,11 @@ impl<D: Device> LazyBuffer<D> {
     }
 
     pub fn realized(&self) -> bool {
-        let data = self.data.read().unwrap();
+        let data = self.data.lock().unwrap();
         data.is_some()
     }
 
-    pub fn data(&self) -> &std::sync::RwLock<Option<D::Slice>> {
+    pub fn data(&self) -> &std::sync::Mutex<Option<D::Slice>> {
         &self.data
     }
 
@@ -122,7 +122,7 @@ impl<D: Device> LazyBuffer<D> {
         // TODO: dtype/op checks.
         let inner = LazyBufferInner {
             id: Id::new(),
-            data: std::sync::RwLock::new(None),
+            data: std::sync::Mutex::new(None),
             op: Op::Unary(op, self.clone()),
             dtype: self.dtype,
             layout: Layout::from_shape(self.shape()),
@@ -136,7 +136,7 @@ impl<D: Device> LazyBuffer<D> {
         // TODO: dtype/op/shape checks.
         let inner = LazyBufferInner {
             id: Id::new(),
-            data: std::sync::RwLock::new(None),
+            data: std::sync::Mutex::new(None),
             op: Op::Binary(op, self.clone(), rhs),
             dtype: self.dtype,
             device: self.device.clone(),
@@ -151,7 +151,7 @@ impl<D: Device> LazyBuffer<D> {
         let shape = self.shape(); // TODO: squeeze or remove axis.
         let inner = LazyBufferInner {
             id: Id::new(),
-            data: std::sync::RwLock::new(None),
+            data: std::sync::Mutex::new(None),
             op: Op::Reduce(op, self.clone(), axis),
             dtype: self.dtype,
             device: self.device.clone(),
@@ -177,7 +177,7 @@ impl<D: Device> LazyBuffer<D> {
         }
         let inner = LazyBufferInner {
             id: Id::new(),
-            data: std::sync::RwLock::new(None),
+            data: std::sync::Mutex::new(None),
             op: Op::Layout(LayoutOp::Reshape, self.clone()),
             dtype: self.dtype,
             device: self.device.clone(),
@@ -205,7 +205,7 @@ impl<D: Device> LazyBuffer<D> {
 
         let inner = LazyBufferInner {
             id: Id::new(),
-            data: std::sync::RwLock::new(None),
+            data: std::sync::Mutex::new(None),
             op: Op::Layout(LayoutOp::Broadcast, self.clone()),
             dtype: self.dtype,
             device: self.device.clone(),
@@ -220,7 +220,7 @@ impl<D: Device> LazyBuffer<D> {
         let s: Shape = s.into();
         let inner = LazyBufferInner {
             id: Id::new(),
-            data: std::sync::RwLock::new(None),
+            data: std::sync::Mutex::new(None),
             op: Op::Const(c),
             dtype: c.dtype(),
             device: device.clone(),
@@ -235,7 +235,7 @@ impl<D: Device> LazyBuffer<D> {
         let dtype = data.dtype();
         let inner = LazyBufferInner {
             id: Id::new(),
-            data: std::sync::RwLock::new(None),
+            data: std::sync::Mutex::new(None),
             op: Op::Copy(data),
             dtype,
             device: device.clone(),

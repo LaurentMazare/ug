@@ -60,6 +60,12 @@ impl Error {
     }
 }
 
+impl<T> From<std::sync::PoisonError<T>> for Error {
+    fn from(_value: std::sync::PoisonError<T>) -> Self {
+        Self::Msg("poisoned mutex".into())
+    }
+}
+
 #[macro_export]
 macro_rules! bail {
     ($msg:literal $(,)?) => {
