@@ -18,31 +18,70 @@ impl ScheduleItem {
 }
 
 #[derive(Debug)]
-pub struct Schedule {
+pub struct Schedule<D: Device> {
     /// Elements in `items` are topologically sorted so that they can be run in order.
     items: Vec<ScheduleItem>,
+    device: D,
     // TODO: Add variables.
 }
 
-impl Schedule {
-    pub fn create<D: Device>(buffers: &[&LazyBuffer<D>]) -> Result<Schedule> {
+impl<D: Device> Schedule<D> {
+    pub fn create(buffers: &[&LazyBuffer<D>]) -> Result<Self> {
+        let device = if buffers.is_empty() {
+            crate::bail!("no buffers provided")
+        } else {
+            buffers[0].device().clone()
+        };
         let mut context = Context::new();
         for buffer in buffers.iter() {
             let ast = context.walk(buffer)?;
             context.items.push(ScheduleItem { ast });
         }
-        Ok(Self { items: context.items })
+        Ok(Self { items: context.items, device })
     }
 
-    pub fn create_one<D: Device>(buffer: &LazyBuffer<D>) -> Result<Schedule> {
+    pub fn create_one(buffer: &LazyBuffer<D>) -> Result<Self> {
         let mut context = Context::new();
         let ast = context.walk(buffer)?;
         context.items.push(ScheduleItem { ast });
-        Ok(Self { items: context.items })
+        Ok(Self { items: context.items, device: buffer.device().clone() })
     }
 
     pub fn items(&self) -> &[ScheduleItem] {
         self.items.as_slice()
+    }
+
+    pub fn compile(&self) -> Result<CompiledSchedule<D>> {
+        use crate::lang::op;
+        // TODO: compilation cache.
+        let mut funcs = Vec::with_capacity(self.items().len());
+        for item in self.items() {
+            let ast = item.ast().clone();
+            // TODO: use the stored variables/args.
+            let arg = op::Arg::new(crate::lang::Type::Ptr(crate::DType::F32));
+            let sto = op::store(arg.id(), Layout::from_shape((5, 2)), ast)?;
+            let kernel = op::Kernel::new("forty_two".into(), vec![arg], vec![sto]);
+            let ssa = kernel.lower(&Default::default())?;
+            let func = self.device.compile(&ssa)?;
+            funcs.push(func)
+        }
+        let device = self.device.clone();
+        Ok(CompiledSchedule { funcs, device })
+    }
+}
+
+pub struct CompiledSchedule<D: Device> {
+    funcs: Vec<D::Func>,
+    device: D,
+}
+
+impl<D: Device> CompiledSchedule<D> {
+    pub fn run(&self) -> Result<()> {
+        for func in self.funcs.iter() {
+            // TODO: proper argument handling.
+            self.device.run(func, &mut [])?
+        }
+        Ok(())
     }
 }
 
