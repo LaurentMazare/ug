@@ -8,7 +8,6 @@ fn schedule_interpret() -> Result<()> {
     let lb = lhs.binary(ug::lang::BinaryOp::Add, rhs)?;
     let schedule = ug::Schedule::create_one(&lb)?;
     let items = schedule.items();
-    println!("{schedule:?}");
     assert_eq!(items.len(), 1);
     for (idx, item) in items.iter().enumerate() {
         let ast = item.ast().clone();

@@ -53,7 +53,9 @@ impl<D: Device> std::ops::Deref for LazyBuffer<D> {
 
 pub struct LazyBufferInner<D: Device> {
     id: Id,
-    data: Option<D::Slice>,
+    // A RwLock here has some runtime overhead when lots of buffers are
+    // used but allows the structure to be shared between threads.
+    data: std::sync::RwLock<Option<D::Slice>>,
     op: Op<D>,
     dtype: crate::DType,
     layout: Layout,
@@ -61,16 +63,35 @@ pub struct LazyBufferInner<D: Device> {
 }
 
 impl<D: Device> LazyBuffer<D> {
+    #[allow(clippy::missing_safety_doc)]
+    pub unsafe fn maybe_allocate_uninit(&mut self) -> Result<()> {
+        let mut data = self.data.write().unwrap();
+        if data.is_none() {
+            // TODO: This should only apply to C contiguous tensors.
+            let nels = self.layout.num_elements();
+            let v = match self.dtype {
+                DType::BF16 => self.device.allocate_uninit::<half::bf16>(nels)?,
+                DType::F16 => self.device.allocate_uninit::<half::f16>(nels)?,
+                DType::F32 => self.device.allocate_uninit::<f32>(nels)?,
+                DType::I32 => self.device.allocate_uninit::<i32>(nels)?,
+                DType::I64 => self.device.allocate_uninit::<i64>(nels)?,
+            };
+            *data = Some(v)
+        }
+        Ok(())
+    }
+
     pub fn op(&self) -> &Op<D> {
         &self.op
     }
 
     pub fn realized(&self) -> bool {
-        self.data.is_some()
+        let data = self.data.read().unwrap();
+        data.is_some()
     }
 
-    pub fn data(&self) -> Option<&D::Slice> {
-        self.data.as_ref()
+    pub fn data(&self) -> &std::sync::RwLock<Option<D::Slice>> {
+        &self.data
     }
 
     pub fn device(&self) -> &D {
@@ -101,7 +122,7 @@ impl<D: Device> LazyBuffer<D> {
         // TODO: dtype/op checks.
         let inner = LazyBufferInner {
             id: Id::new(),
-            data: None,
+            data: std::sync::RwLock::new(None),
             op: Op::Unary(op, self.clone()),
             dtype: self.dtype,
             layout: Layout::from_shape(self.shape()),
@@ -115,7 +136,7 @@ impl<D: Device> LazyBuffer<D> {
         // TODO: dtype/op/shape checks.
         let inner = LazyBufferInner {
             id: Id::new(),
-            data: None,
+            data: std::sync::RwLock::new(None),
             op: Op::Binary(op, self.clone(), rhs),
             dtype: self.dtype,
             device: self.device.clone(),
@@ -130,7 +151,7 @@ impl<D: Device> LazyBuffer<D> {
         let shape = self.shape(); // TODO: squeeze or remove axis.
         let inner = LazyBufferInner {
             id: Id::new(),
-            data: None,
+            data: std::sync::RwLock::new(None),
             op: Op::Reduce(op, self.clone(), axis),
             dtype: self.dtype,
             device: self.device.clone(),
@@ -156,7 +177,7 @@ impl<D: Device> LazyBuffer<D> {
         }
         let inner = LazyBufferInner {
             id: Id::new(),
-            data: None,
+            data: std::sync::RwLock::new(None),
             op: Op::Layout(LayoutOp::Reshape, self.clone()),
             dtype: self.dtype,
             device: self.device.clone(),
@@ -184,7 +205,7 @@ impl<D: Device> LazyBuffer<D> {
 
         let inner = LazyBufferInner {
             id: Id::new(),
-            data: None,
+            data: std::sync::RwLock::new(None),
             op: Op::Layout(LayoutOp::Broadcast, self.clone()),
             dtype: self.dtype,
             device: self.device.clone(),
@@ -199,7 +220,7 @@ impl<D: Device> LazyBuffer<D> {
         let s: Shape = s.into();
         let inner = LazyBufferInner {
             id: Id::new(),
-            data: None,
+            data: std::sync::RwLock::new(None),
             op: Op::Const(c),
             dtype: c.dtype(),
             device: device.clone(),
@@ -214,7 +235,7 @@ impl<D: Device> LazyBuffer<D> {
         let dtype = data.dtype();
         let inner = LazyBufferInner {
             id: Id::new(),
-            data: None,
+            data: std::sync::RwLock::new(None),
             op: Op::Copy(data),
             dtype,
             device: device.clone(),
