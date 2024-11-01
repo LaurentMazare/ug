@@ -117,6 +117,7 @@ impl crate::Slice for CpuStorage {
         Ok(())
     }
 }
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct KernelId(usize);
 

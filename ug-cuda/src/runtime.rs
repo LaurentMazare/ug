@@ -29,6 +29,22 @@ impl<T> WithErr for std::result::Result<T, cudarc::nvrtc::CompileError> {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct KernelId(usize);
+
+impl KernelId {
+    pub(crate) fn new() -> Self {
+        // https://users.rust-lang.org/t/idiomatic-rust-way-to-generate-unique-id/33805
+        use std::sync::atomic;
+        static COUNTER: atomic::AtomicUsize = atomic::AtomicUsize::new(1);
+        Self(COUNTER.fetch_add(1, atomic::Ordering::Relaxed))
+    }
+
+    pub fn as_usize(&self) -> usize {
+        self.0
+    }
+}
+
 #[derive(Clone)]
 pub struct Func {
     func: cudarc::driver::CudaFunction,
@@ -237,8 +253,15 @@ impl ug::Device for Device {
         self.synchronize()
     }
 
-    fn compile(&self, _kernel: &ug::lang::ssa::Kernel) -> Result<Self::Func> {
-        todo!()
+    fn compile(&self, kernel: &ug::lang::ssa::Kernel) -> Result<Self::Func> {
+        let mut cu_code = Vec::with_capacity(8192);
+        let pid = std::process::id();
+        let kernel_id = KernelId::new().as_usize();
+        let func_name = format!("ugc_{pid}_{kernel_id}");
+        crate::code_gen::gen(&mut cu_code, &func_name, kernel)?;
+        let func_name_s = Box::leak(Box::new(func_name.to_string()));
+        let cu_code = String::from_utf8(cu_code)?;
+        self.compile_cu(&cu_code, &func_name, func_name_s)
     }
 
     fn run(&self, _f: &Self::Func, _args: &mut [&mut Self::Slice]) -> Result<()> {
