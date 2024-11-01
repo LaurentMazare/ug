@@ -3,9 +3,7 @@ use crate::{Device, Layout, LazyBuffer, Result};
 
 pub struct ScheduleItem<D: Device> {
     ast: Ast,
-    #[allow(unused)]
-    dst: LazyBuffer<D>,
-    // TODO: Add the buffers, probably in a lazily allocated way, see device.Buffer in tinygrad.
+    dst: (crate::lang::ArgId, LazyBuffer<D>),
 }
 
 impl<D: Device> ScheduleItem<D> {
@@ -15,6 +13,17 @@ impl<D: Device> ScheduleItem<D> {
 
     pub fn ast(&self) -> &Ast {
         &self.ast
+    }
+
+    pub fn kernel(&self) -> Result<crate::lang::op::Kernel> {
+        use crate::lang::op;
+        let ast = &self.ast;
+        let dst = &self.dst;
+        let arg = op::Arg::new(dst.0, crate::lang::Type::Ptr(dst.1.dtype()));
+        let sto = op::store(arg.id(), dst.1.layout().clone(), ast.clone())?;
+        // TODO: use the stored variables/args.
+        let kernel = op::Kernel::new(format!("realize_{:?}", dst.1.id()), vec![arg], vec![sto]);
+        Ok(kernel)
     }
 }
 
@@ -35,7 +44,8 @@ impl<D: Device> Schedule<D> {
         let mut context = Context::new();
         for &buffer in buffers.iter() {
             let ast = context.walk(buffer)?;
-            context.items.push(ScheduleItem { ast, dst: buffer.clone() });
+            let dst_id = crate::lang::ArgId::new();
+            context.items.push(ScheduleItem { ast, dst: (dst_id, buffer.clone()) });
         }
         Ok(Self { items: context.items, device })
     }
@@ -43,7 +53,8 @@ impl<D: Device> Schedule<D> {
     pub fn create_one(buffer: &LazyBuffer<D>) -> Result<Self> {
         let mut context = Context::new();
         let ast = context.walk(buffer)?;
-        context.items.push(ScheduleItem { ast, dst: buffer.clone() });
+        let dst_id = crate::lang::ArgId::new();
+        context.items.push(ScheduleItem { ast, dst: (dst_id, buffer.clone()) });
         Ok(Self { items: context.items, device: buffer.device().clone() })
     }
 
@@ -52,15 +63,10 @@ impl<D: Device> Schedule<D> {
     }
 
     pub fn compile(&self) -> Result<CompiledSchedule<D>> {
-        use crate::lang::op;
         // TODO: compilation cache.
         let mut funcs = Vec::with_capacity(self.items().len());
         for item in self.items() {
-            let ast = item.ast().clone();
-            // TODO: use the stored variables/args.
-            let arg = op::Arg::new(crate::lang::Type::Ptr(crate::DType::F32));
-            let sto = op::store(arg.id(), Layout::from_shape((5, 2)), ast)?;
-            let kernel = op::Kernel::new("forty_two".into(), vec![arg], vec![sto]);
+            let kernel = item.kernel()?;
             let ssa = kernel.lower(&Default::default())?;
             let func = self.device.compile(&ssa)?;
             funcs.push(func)
@@ -122,9 +128,9 @@ impl<D: Device> Context<D> {
             }
             Op::Layout(_op, arg) => {
                 let ast = self.walk(arg)?;
-                self.items.push(ScheduleItem { ast, dst: b.clone() });
-                let arg_id = crate::lang::ArgId::new();
-                crate::lang::op::load(arg_id, Layout::from_shape(shape), dtype)?
+                let dst_id = crate::lang::ArgId::new();
+                self.items.push(ScheduleItem { ast, dst: (dst_id, b.clone()) });
+                crate::lang::op::load(dst_id, Layout::from_shape(shape), dtype)?
             }
         };
 

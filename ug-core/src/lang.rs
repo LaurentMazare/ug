@@ -131,8 +131,8 @@ impl Ord for Arg {
 }
 
 impl Arg {
-    pub fn new(type_: Type) -> Self {
-        Self { id: ArgId::new(), type_ }
+    pub fn new(id: ArgId, type_: Type) -> Self {
+        Self { id, type_ }
     }
 
     pub fn value(dtype: DType) -> Self {

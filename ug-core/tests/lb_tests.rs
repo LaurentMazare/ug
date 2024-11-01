@@ -1,4 +1,4 @@
-use ug::{Layout, LazyBuffer as LB, Result};
+use ug::{LazyBuffer as LB, Result};
 
 #[test]
 fn schedule_interpret() -> Result<()> {
@@ -9,11 +9,8 @@ fn schedule_interpret() -> Result<()> {
     let schedule = ug::Schedule::create_one(&lb)?;
     let items = schedule.items();
     assert_eq!(items.len(), 1);
-    for (idx, item) in items.iter().enumerate() {
-        let ast = item.ast().clone();
-        let arg = ug::lang::op::Arg::new(ug::lang::Type::Ptr(ug::DType::F32));
-        let sto = ug::lang::op::store(arg.id(), Layout::from_shape((5, 2)), ast)?;
-        let kernel = ug::lang::op::Kernel::new(format!("kernel{idx}"), vec![arg], vec![sto]);
+    for item in items.iter() {
+        let kernel = item.kernel()?;
         let ssa = kernel.lower(&Default::default())?;
         println!("{ssa:?}");
         let mut buffer = ug::interpreter::Buffer::F32(vec![0f32; 10]);
@@ -36,10 +33,7 @@ fn schedule_cpu() -> Result<()> {
     let schedule = ug::Schedule::create_one(&lb)?;
     let items = schedule.items();
     assert_eq!(items.len(), 1);
-    let ast = items[0].ast().clone();
-    let arg = ug::lang::op::Arg::new(ug::lang::Type::Ptr(ug::DType::F32));
-    let sto = ug::lang::op::store(arg.id(), Layout::from_shape((5, 2)), ast)?;
-    let kernel = ug::lang::op::Kernel::new("forty_two".into(), vec![arg], vec![sto]);
+    let kernel = items[0].kernel()?;
     let ssa = kernel.lower(&Default::default())?;
     let func = cpu.compile(&ssa)?;
     let mut buffer = unsafe { cpu.allocate_uninit::<f32>(10)? };
