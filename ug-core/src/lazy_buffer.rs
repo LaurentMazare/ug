@@ -40,10 +40,16 @@ pub trait Slice {
 
 pub trait Device: Clone {
     type Slice: Slice<Device = Self>;
+    type Func;
 
     #[allow(clippy::missing_safety_doc)]
     unsafe fn allocate_uninit<DT: WithDType>(&self, len: usize) -> Result<Self::Slice>;
     fn synchronize(&self) -> Result<()>;
+    fn compile(&self, kernel: &crate::lang::ssa::Kernel) -> Result<Self::Func>;
+    // TODO: currently const parameters are hardcoded in the kernel and new code is generated for
+    // these when necessary. Maybe we should have a more generic arg type that could handle
+    // `Const` scalars.
+    fn run(&self, f: &Self::Func, args: &mut [&mut Self::Slice]) -> Result<()>;
 }
 
 #[derive(Debug, Clone)]

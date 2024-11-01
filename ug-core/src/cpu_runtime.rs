@@ -8,6 +8,7 @@ pub struct CpuDevice;
 
 impl crate::Device for CpuDevice {
     type Slice = CpuStorage;
+    type Func = Func;
 
     unsafe fn allocate_uninit<DT: crate::WithDType>(&self, len: usize) -> Result<Self::Slice> {
         let slice = match DT::DTYPE {
@@ -21,6 +22,34 @@ impl crate::Device for CpuDevice {
     }
 
     fn synchronize(&self) -> Result<()> {
+        Ok(())
+    }
+
+    fn compile(&self, kernel: &crate::lang::ssa::Kernel) -> Result<Self::Func> {
+        let mut c_code = Vec::with_capacity(8192);
+        let pid = std::process::id();
+        let kernel_id = KernelId::new().as_usize();
+        let func_name = format!("ug_{pid}_{kernel_id}");
+        crate::cpu_code_gen::gen(&mut c_code, &func_name, kernel)?;
+        CpuDevice::compile(self, &c_code, func_name)
+    }
+
+    fn run(&self, f: &Self::Func, args: &mut [&mut Self::Slice]) -> Result<()> {
+        use libloading::Symbol as S;
+        use std::ffi::c_void;
+
+        let func_name = f.func_name.as_bytes();
+        match args {
+            [] => {
+                let symbol: S<unsafe extern "C" fn()> = unsafe { f.lib.get(func_name)? };
+                unsafe { symbol() }
+            }
+            [arg1] => {
+                let symbol: S<unsafe extern "C" fn(*mut c_void)> = unsafe { f.lib.get(func_name)? };
+                unsafe { symbol(arg1.as_mut_ptr()) }
+            }
+            _ => crate::bail!("unsupported number of args for kernel {}", args.len()),
+        }
         Ok(())
     }
 }
@@ -164,10 +193,8 @@ impl crate::CpuDevice {
         }
 
         let tmp_dir = std::env::temp_dir();
-        let pid = std::process::id();
-        let kernel_id = KernelId::new().as_usize();
-        let tmp_c = tmp_dir.join(format!("ug_{pid}_{kernel_id}.c"));
-        let tmp_so = tmp_dir.join(format!("ug_{pid}_{kernel_id}.so"));
+        let tmp_c = tmp_dir.join(format!("{func_name}.c"));
+        let tmp_so = tmp_dir.join(format!("{func_name}.so"));
         let result = compile_inner(c_code, func_name, &tmp_c, &tmp_so);
         // Ensure that the temporary files are cleaned up, even on failures.
         if !crate::utils::KEEP_TMP.with(|b| *b) {

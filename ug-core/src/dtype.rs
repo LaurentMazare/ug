@@ -176,6 +176,26 @@ with_dtype!(i32, I32);
 with_dtype!(i64, I64);
 
 impl CpuStorage {
+    pub fn as_mut_ptr(&mut self) -> *mut std::ffi::c_void {
+        match self {
+            Self::BF16(s) => s.as_mut_ptr() as *mut std::ffi::c_void,
+            Self::F16(s) => s.as_mut_ptr() as *mut std::ffi::c_void,
+            Self::F32(s) => s.as_mut_ptr() as *mut std::ffi::c_void,
+            Self::I32(s) => s.as_mut_ptr() as *mut std::ffi::c_void,
+            Self::I64(s) => s.as_mut_ptr() as *mut std::ffi::c_void,
+        }
+    }
+
+    pub fn as_ptr(&mut self) -> *const std::ffi::c_void {
+        match self {
+            Self::BF16(s) => s.as_ptr() as *const std::ffi::c_void,
+            Self::F16(s) => s.as_ptr() as *const std::ffi::c_void,
+            Self::F32(s) => s.as_ptr() as *const std::ffi::c_void,
+            Self::I32(s) => s.as_ptr() as *const std::ffi::c_void,
+            Self::I64(s) => s.as_ptr() as *const std::ffi::c_void,
+        }
+    }
+
     pub fn len(&self) -> usize {
         match self {
             Self::BF16(s) => s.len(),

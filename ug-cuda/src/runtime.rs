@@ -204,6 +204,7 @@ impl Device {
 
 impl ug::Device for Device {
     type Slice = Slice;
+    type Func = Func;
 
     #[allow(clippy::missing_transmute_annotations)]
     unsafe fn allocate_uninit<D: WithDType>(&self, len: usize) -> Result<Self::Slice> {
@@ -234,6 +235,14 @@ impl ug::Device for Device {
 
     fn synchronize(&self) -> Result<()> {
         self.synchronize()
+    }
+
+    fn compile(&self, _kernel: &ug::lang::ssa::Kernel) -> Result<Self::Func> {
+        todo!()
+    }
+
+    fn run(&self, _f: &Self::Func, _args: &mut [&mut Self::Slice]) -> Result<()> {
+        todo!()
     }
 }
 
