@@ -113,11 +113,18 @@ impl Func {
     }
 
     #[allow(clippy::missing_safety_doc)]
-    pub unsafe fn run3(&self, v1: &mut [i32], v2: &mut [i32], v3: &mut [i32]) -> Result<()> {
+    pub unsafe fn run3<T>(&self, v1: &mut [T], v2: &mut [T], v3: &mut [T]) -> Result<()> {
+        use std::ffi::c_void;
+
         let func_name = self.func_name.as_bytes();
-        let symbol: libloading::Symbol<unsafe extern "C" fn(*mut i32, *mut i32, *mut i32)> =
-            self.lib.get(func_name)?;
-        symbol(v1.as_mut_ptr(), v2.as_mut_ptr(), v3.as_mut_ptr());
+        let symbol: libloading::Symbol<
+            unsafe extern "C" fn(*mut c_void, *mut c_void, *mut c_void),
+        > = self.lib.get(func_name)?;
+        symbol(
+            v1.as_mut_ptr() as *mut c_void,
+            v2.as_mut_ptr() as *mut c_void,
+            v3.as_mut_ptr() as *mut c_void,
+        );
         Ok(())
     }
 }
