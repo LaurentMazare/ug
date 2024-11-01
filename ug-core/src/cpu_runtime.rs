@@ -41,12 +41,22 @@ impl crate::Device for CpuDevice {
         let func_name = f.func_name.as_bytes();
         match args {
             [] => {
-                let symbol: S<unsafe extern "C" fn()> = unsafe { f.lib.get(func_name)? };
-                unsafe { symbol() }
+                let symbol: S<extern "C" fn()> = unsafe { f.lib.get(func_name)? };
+                symbol()
             }
-            [arg1] => {
-                let symbol: S<unsafe extern "C" fn(*mut c_void)> = unsafe { f.lib.get(func_name)? };
-                unsafe { symbol(arg1.as_mut_ptr()) }
+            [a1] => {
+                let symbol: S<extern "C" fn(*mut c_void)> = unsafe { f.lib.get(func_name)? };
+                symbol(a1.as_mut_ptr())
+            }
+            [a1, a2] => {
+                let symbol: S<extern "C" fn(*mut c_void, *mut c_void)> =
+                    unsafe { f.lib.get(func_name)? };
+                symbol(a1.as_mut_ptr(), a2.as_mut_ptr())
+            }
+            [a1, a2, a3] => {
+                let symbol: S<extern "C" fn(*mut c_void, *mut c_void, *mut c_void)> =
+                    unsafe { f.lib.get(func_name)? };
+                symbol(a1.as_mut_ptr(), a2.as_mut_ptr(), a3.as_mut_ptr())
             }
             _ => crate::bail!("unsupported number of args for kernel {}", args.len()),
         }
