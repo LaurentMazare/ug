@@ -1,5 +1,6 @@
 use pyo3::prelude::*;
 use std::sync::Arc;
+use ug::Slice as S;
 use ug_cuda::runtime as cuda;
 
 const MODULE_NAME: &str = "ug-pyo3-mod";
@@ -50,7 +51,16 @@ impl Func {
             block_dim: (block_dim, 1, 1),
             shared_mem_bytes,
         };
-        unsafe { self.0.launch3(s1.0.slice(), s2.0.slice(), s3.0.slice(), cfg).map_err(w)? };
+        unsafe {
+            self.0
+                .launch3(
+                    s1.0.slice::<f32>().map_err(w)?,
+                    s2.0.slice::<f32>().map_err(w)?,
+                    s3.0.slice::<f32>().map_err(w)?,
+                    cfg,
+                )
+                .map_err(w)?
+        };
         Ok(())
     }
 }
@@ -176,8 +186,8 @@ mod op {
             Ok(Self(ast))
         }
 
-        fn broadcast(&self, axis: usize, dim_len: usize) -> PyResult<Self> {
-            let ast = op::broadcast(self.0.clone(), axis, dim_len).map_err(w)?;
+        fn broadcast(&self, shape: Vec<usize>) -> PyResult<Self> {
+            let ast = op::broadcast(self.0.clone(), shape).map_err(w)?;
             Ok(Self(ast))
         }
 
