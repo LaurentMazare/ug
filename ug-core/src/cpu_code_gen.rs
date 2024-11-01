@@ -157,11 +157,11 @@ pub fn gen<W: std::io::Write>(w: &mut W, func_name: &str, kernel: &ssa::Kernel) 
             }
             I::Special(ssa::Special::LocalIdx) => {
                 // TODO: proper handling of LocalIdx, maybe via simd?
-                writeln!(w, "{indent}int {var_id} = threadIdx.x;")?
+                bail!("local-id is currently not supported in the cpu backend")
             }
             I::Special(ssa::Special::GridIdx) => {
                 // TODO: proper handling of GridIdx, maybe via omp?
-                writeln!(w, "{indent}int {var_id} = blockIdx.x;")?
+                bail!("grid-id is currently not supported in the cpu backend")
             }
             I::Barrier => writeln!(w, "{indent}__syncthreads();")?,
             I::ReduceLocal { op, arg, dtype } => {
