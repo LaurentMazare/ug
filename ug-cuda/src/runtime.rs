@@ -286,7 +286,7 @@ impl ug::Slice for Slice {
     }
 
     fn copy_host_to_device<DT: WithDType>(&mut self, src: &[DT]) -> Result<()> {
-        use ug::dtype::CpuStorageRef as C;
+        use ug::CpuStorageRef as C;
         use SliceInner as S;
         match (&mut self.inner, DT::to_cpu_storage(src)) {
             (S::BF16(dst), C::BF16(src)) => self.device.device.htod_sync_copy_into(src, dst).w()?,
@@ -300,7 +300,7 @@ impl ug::Slice for Slice {
     }
 
     fn copy_device_to_host<DT: WithDType>(&self, dst: &mut [DT]) -> Result<()> {
-        use ug::dtype::CpuStorageRefMut as C;
+        use ug::CpuStorageRefMut as C;
         use SliceInner as S;
         match (&self.inner, DT::to_cpu_storage_mut(dst)) {
             (S::BF16(src), C::BF16(dst)) => self.device.device.dtoh_sync_copy_into(src, dst).w()?,

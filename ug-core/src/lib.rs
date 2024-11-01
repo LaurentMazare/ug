@@ -14,8 +14,8 @@ pub mod samples;
 pub mod schedule;
 pub mod utils;
 
-pub use cpu_runtime::CpuDevice;
-pub use dtype::{CpuStorage, CpuStorageRef, CpuStorageRefMut, DType, WithDType};
+pub use cpu_runtime::{CpuDevice, CpuStorage, CpuStorageRef, CpuStorageRefMut};
+pub use dtype::{DType, WithDType};
 pub use error::{Error, Result};
 pub use layout::{Layout, Shape, D};
 pub use lazy_buffer::{Device, LazyBuffer, Slice};

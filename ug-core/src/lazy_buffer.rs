@@ -66,7 +66,7 @@ pub enum Op<D: Device> {
     Const(crate::lang::Const),
     // TODO: maybe the following should be an Arc<Mutex<...>> or similar so that it can easily be
     // modified?
-    Copy(crate::dtype::CpuStorage),
+    Copy(crate::CpuStorage),
     Layout(LayoutOp, LazyBuffer<D>),
 }
 
@@ -244,7 +244,7 @@ impl<D: Device> LazyBuffer<D> {
         Ok(lb)
     }
 
-    pub fn copy<S: Into<Shape>>(data: crate::dtype::CpuStorage, s: S, device: &D) -> Result<Self> {
+    pub fn copy<S: Into<Shape>>(data: crate::CpuStorage, s: S, device: &D) -> Result<Self> {
         let s: Shape = s.into();
         let dtype = data.dtype();
         let inner = LazyBufferInner {

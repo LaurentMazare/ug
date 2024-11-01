@@ -1,8 +1,114 @@
-pub use crate::dtype::CpuStorage;
 use crate::{DType, Result};
 use half::{bf16, f16};
 use std::path::PathBuf;
 
+#[derive(Debug, Clone)]
+pub enum CpuStorage {
+    BF16(Vec<bf16>),
+    F16(Vec<f16>),
+    F32(Vec<f32>),
+    I32(Vec<i32>),
+    I64(Vec<i64>),
+}
+
+// Poor man's GADT...
+#[derive(Debug, Copy, Clone)]
+pub enum CpuStorageRef<'a> {
+    BF16(&'a [bf16]),
+    F16(&'a [f16]),
+    F32(&'a [f32]),
+    I32(&'a [i32]),
+    I64(&'a [i64]),
+}
+
+#[derive(Debug)]
+pub enum CpuStorageRefMut<'a> {
+    BF16(&'a mut [bf16]),
+    F16(&'a mut [f16]),
+    F32(&'a mut [f32]),
+    I32(&'a mut [i32]),
+    I64(&'a mut [i64]),
+}
+
+impl CpuStorage {
+    pub fn as_mut_ptr(&mut self) -> *mut std::ffi::c_void {
+        match self {
+            Self::BF16(s) => s.as_mut_ptr() as *mut std::ffi::c_void,
+            Self::F16(s) => s.as_mut_ptr() as *mut std::ffi::c_void,
+            Self::F32(s) => s.as_mut_ptr() as *mut std::ffi::c_void,
+            Self::I32(s) => s.as_mut_ptr() as *mut std::ffi::c_void,
+            Self::I64(s) => s.as_mut_ptr() as *mut std::ffi::c_void,
+        }
+    }
+
+    pub fn as_ptr(&mut self) -> *const std::ffi::c_void {
+        match self {
+            Self::BF16(s) => s.as_ptr() as *const std::ffi::c_void,
+            Self::F16(s) => s.as_ptr() as *const std::ffi::c_void,
+            Self::F32(s) => s.as_ptr() as *const std::ffi::c_void,
+            Self::I32(s) => s.as_ptr() as *const std::ffi::c_void,
+            Self::I64(s) => s.as_ptr() as *const std::ffi::c_void,
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        match self {
+            Self::BF16(s) => s.len(),
+            Self::F16(s) => s.len(),
+            Self::F32(s) => s.len(),
+            Self::I32(s) => s.len(),
+            Self::I64(s) => s.len(),
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    pub fn dtype(&self) -> DType {
+        match self {
+            Self::BF16(_) => DType::BF16,
+            Self::F16(_) => DType::F16,
+            Self::F32(_) => DType::F32,
+            Self::I32(_) => DType::I32,
+            Self::I64(_) => DType::I64,
+        }
+    }
+
+    pub fn as_ref(&self) -> CpuStorageRef<'_> {
+        match self {
+            Self::BF16(v) => CpuStorageRef::BF16(v.as_slice()),
+            Self::F16(v) => CpuStorageRef::F16(v.as_slice()),
+            Self::F32(v) => CpuStorageRef::F32(v.as_slice()),
+            Self::I32(v) => CpuStorageRef::I32(v.as_slice()),
+            Self::I64(v) => CpuStorageRef::I64(v.as_slice()),
+        }
+    }
+}
+
+impl CpuStorageRef<'_> {
+    pub fn dtype(&self) -> DType {
+        match self {
+            Self::BF16(_) => DType::BF16,
+            Self::F16(_) => DType::F16,
+            Self::F32(_) => DType::F32,
+            Self::I32(_) => DType::I32,
+            Self::I64(_) => DType::I64,
+        }
+    }
+}
+
+impl CpuStorageRefMut<'_> {
+    pub fn dtype(&self) -> DType {
+        match self {
+            Self::BF16(_) => DType::BF16,
+            Self::F16(_) => DType::F16,
+            Self::F32(_) => DType::F32,
+            Self::I32(_) => DType::I32,
+            Self::I64(_) => DType::I64,
+        }
+    }
+}
 #[derive(Clone, Copy, Debug)]
 pub struct CpuDevice;
 
@@ -82,8 +188,8 @@ impl crate::Slice for CpuStorage {
     }
 
     fn copy_host_to_device<DT: crate::WithDType>(&mut self, src: &[DT]) -> Result<()> {
-        use crate::dtype::CpuStorage as S;
-        use crate::dtype::CpuStorageRef as C;
+        use CpuStorage as S;
+        use CpuStorageRef as C;
         let dtype = self.dtype();
         if src.len() != self.len() {
             crate::bail!("dtoh len mismatch, dst {}, len {}", self.len(), src.len())
@@ -102,8 +208,8 @@ impl crate::Slice for CpuStorage {
     }
 
     fn copy_device_to_host<DT: crate::WithDType>(&self, dst: &mut [DT]) -> Result<()> {
-        use crate::dtype::CpuStorage as S;
-        use crate::dtype::CpuStorageRefMut as C;
+        use CpuStorage as S;
+        use CpuStorageRefMut as C;
         let dtype = self.dtype();
         if dst.len() != self.len() {
             crate::bail!("dtoh len mismatch, dst {}, len {}", dst.len(), self.len())

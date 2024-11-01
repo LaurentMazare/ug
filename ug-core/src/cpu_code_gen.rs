@@ -163,7 +163,9 @@ pub fn gen<W: std::io::Write>(w: &mut W, func_name: &str, kernel: &ssa::Kernel) 
                 // TODO: proper handling of GridIdx, maybe via omp?
                 bail!("grid-id is currently not supported in the cpu backend")
             }
-            I::Barrier => writeln!(w, "{indent}__syncthreads();")?,
+            I::Barrier => {
+                // Nothing to do here as we're running with a single thread.
+            }
             I::ReduceLocal { op, arg, dtype } => {
                 let op = match op {
                     ssa::ReduceOp::Sum => "block_reduce_sum",
