@@ -31,7 +31,7 @@ impl crate::Device for CpuDevice {
         let kernel_id = KernelId::new().as_usize();
         let func_name = format!("ug_{pid}_{kernel_id}");
         crate::cpu_code_gen::gen(&mut c_code, &func_name, kernel)?;
-        CpuDevice::compile(self, &c_code, func_name)
+        self.compile_c(&c_code, func_name)
     }
 
     fn run(&self, f: &Self::Func, args: &mut [&mut Self::Slice]) -> Result<()> {
@@ -39,6 +39,8 @@ impl crate::Device for CpuDevice {
         use std::ffi::c_void;
 
         let func_name = f.func_name.as_bytes();
+        // TODO: For the calls below to be safe, we should store the kernel signature in Func
+        // and check that args matches it.
         match args {
             [] => {
                 let symbol: S<extern "C" fn()> = unsafe { f.lib.get(func_name)? };
@@ -170,7 +172,7 @@ impl Func {
 }
 
 impl crate::CpuDevice {
-    pub fn compile(&self, c_code: &[u8], func_name: String) -> Result<Func> {
+    pub fn compile_c(&self, c_code: &[u8], func_name: String) -> Result<Func> {
         fn compile_inner(
             c_code: &[u8],
             func_name: String,

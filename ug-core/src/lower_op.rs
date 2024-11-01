@@ -252,8 +252,14 @@ impl lang::op::Kernel {
     fn lower_b(&self, opts: &Opts) -> Result<Block> {
         let mut block = Block::empty();
         let mut per_arg = std::collections::HashMap::new();
-        let grid_id = block.push(SsaI::Special(ssa::Special::GridIdx));
-        let local_id = block.push(SsaI::Special(ssa::Special::LocalIdx));
+        let grid_id = opts.global().map(|axis| {
+            let id = block.push(SsaI::Special(ssa::Special::GridIdx));
+            (axis, id)
+        });
+        let local_id = opts.local().map(|axis| {
+            let id = block.push(SsaI::Special(ssa::Special::LocalIdx));
+            (axis, id)
+        });
         for (index, arg) in self.args.iter().enumerate() {
             let dtype = match arg.type_() {
                 ssa::Type::Ptr(v) => v,
@@ -271,9 +277,9 @@ impl lang::op::Kernel {
             let mut ranges = Vec::with_capacity(layout.rank());
             let mut idxs = Vec::with_capacity(layout.rank());
             for (dim_idx, &len) in layout.dims().iter().enumerate() {
-                let id = match (opts.global(), opts.local()) {
-                    (Some(g), _) if g.axis == dim_idx => grid_id,
-                    (_, Some(l)) if l.axis == dim_idx => local_id,
+                let id = match (grid_id, local_id) {
+                    (Some((g, grid_id)), _) if g.axis == dim_idx => grid_id,
+                    (_, Some((l, local_id))) if l.axis == dim_idx => local_id,
                     (_, _) => {
                         let r = block.range(0, len as i32);
                         let id = r.id();

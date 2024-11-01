@@ -1,7 +1,7 @@
 use ug::{Layout, LazyBuffer as LB, Result};
 
 #[test]
-fn schedule() -> Result<()> {
+fn schedule_interpret() -> Result<()> {
     let cpu = ug::CpuDevice;
     let lhs = LB::cst(40., (5, 2), &cpu)?;
     let rhs = LB::cst(2., (5, 2), &cpu)?;
@@ -23,5 +23,29 @@ fn schedule() -> Result<()> {
         let buffer = buffer.as_f32()?;
         assert_eq!(buffer, [42., 42., 42., 42., 42., 42., 42., 42., 42., 42.]);
     }
+    Ok(())
+}
+
+#[test]
+fn schedule_cpu() -> Result<()> {
+    use ug::{Device, Slice};
+
+    let cpu = ug::CpuDevice;
+    let lhs = LB::cst(40., (5, 2), &cpu)?;
+    let rhs = LB::cst(2., (5, 2), &cpu)?;
+    let lb = lhs.binary(ug::lang::BinaryOp::Add, rhs)?;
+    let schedule = ug::Schedule::create_one(&lb)?;
+    let items = schedule.items();
+    assert_eq!(items.len(), 1);
+    let ast = items[0].ast().clone();
+    let arg = ug::lang::op::Arg::new(ug::lang::Type::Ptr(ug::DType::F32));
+    let sto = ug::lang::op::store(arg.id(), Layout::from_shape((5, 2)), ast)?;
+    let kernel = ug::lang::op::Kernel::new("forty_two".into(), vec![arg], vec![sto]);
+    let ssa = kernel.lower(&Default::default())?;
+    let func = cpu.compile(&ssa)?;
+    let mut buffer = unsafe { cpu.allocate_uninit::<f32>(10)? };
+    cpu.run(&func, &mut [&mut buffer])?;
+    let buffer = buffer.to_vec::<f32>()?;
+    assert_eq!(buffer, [42., 42., 42., 42., 42., 42., 42., 42., 42., 42.]);
     Ok(())
 }
