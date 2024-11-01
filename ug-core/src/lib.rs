@@ -18,6 +18,40 @@ pub use cpu_runtime::{CpuDevice, CpuStorage, CpuStorageRef, CpuStorageRefMut};
 pub use dtype::{DType, WithDType};
 pub use error::{Error, Result};
 pub use layout::{Layout, Shape, D};
-pub use lazy_buffer::{Device, LazyBuffer, Slice};
+pub use lazy_buffer::LazyBuffer;
 pub use r#const::Const;
 pub use schedule::{Schedule, ScheduleItem};
+
+pub trait Slice {
+    type Device: Device<Slice = Self>;
+
+    fn device(&self) -> &Self::Device;
+    fn dtype(&self) -> DType;
+    fn len(&self) -> usize;
+    fn copy_host_to_device<DT: WithDType>(&mut self, src: &[DT]) -> Result<()>;
+    fn copy_device_to_host<DT: WithDType>(&self, dst: &mut [DT]) -> Result<()>;
+
+    fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    fn to_vec<DT: WithDType>(&self) -> Result<Vec<DT>> {
+        let mut host = vec![DT::zero(); self.len()];
+        self.copy_device_to_host(&mut host)?;
+        Ok(host)
+    }
+}
+
+pub trait Device: Clone {
+    type Slice: Slice<Device = Self>;
+    type Func;
+
+    #[allow(clippy::missing_safety_doc)]
+    unsafe fn allocate_uninit<DT: WithDType>(&self, len: usize) -> Result<Self::Slice>;
+    fn synchronize(&self) -> Result<()>;
+    fn compile(&self, kernel: &crate::lang::ssa::Kernel) -> Result<Self::Func>;
+    // TODO: currently const parameters are hardcoded in the kernel and new code is generated for
+    // these when necessary. Maybe we should have a more generic arg type that could handle
+    // `Const` scalars.
+    fn run(&self, f: &Self::Func, args: &mut [&mut Self::Slice]) -> Result<()>;
+}
