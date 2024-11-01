@@ -64,7 +64,7 @@ pub struct LazyBufferInner<D: Device> {
 
 impl<D: Device> LazyBuffer<D> {
     #[allow(clippy::missing_safety_doc)]
-    pub unsafe fn maybe_allocate_uninit(&mut self) -> Result<()> {
+    pub unsafe fn maybe_allocate_uninit(&self) -> Result<()> {
         let mut data = self.data.write().unwrap();
         if data.is_none() {
             // TODO: This should only apply to C contiguous tensors.
