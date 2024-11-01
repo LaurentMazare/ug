@@ -27,16 +27,8 @@ struct Func(cuda::Func);
 
 #[pymethods]
 impl Func {
-    #[pyo3(signature = (s1, s2, s3, block_dim=1, grid_dim=1, shared_mem_bytes=0))]
-    fn launch3(
-        &self,
-        s1: &Slice,
-        s2: &Slice,
-        s3: &mut Slice,
-        block_dim: u32,
-        grid_dim: u32,
-        shared_mem_bytes: u32,
-    ) -> PyResult<()> {
+    #[pyo3(signature = (s1, s2, s3))]
+    fn launch3(&self, s1: &Slice, s2: &Slice, s3: &mut Slice) -> PyResult<()> {
         let len = s3.0.len();
         let len1 = s1.0.len();
         let len2 = s2.0.len();
@@ -46,18 +38,12 @@ impl Func {
         if len2 != len {
             py_bail!("length mismatch {len2} <> {len}")
         }
-        let cfg = cuda::LaunchConfig {
-            grid_dim: (grid_dim, 1, 1),
-            block_dim: (block_dim, 1, 1),
-            shared_mem_bytes,
-        };
         unsafe {
             self.0
                 .launch3(
                     s1.0.slice::<f32>().map_err(w)?,
                     s2.0.slice::<f32>().map_err(w)?,
                     s3.0.slice::<f32>().map_err(w)?,
-                    cfg,
                 )
                 .map_err(w)?
         };
@@ -429,17 +415,41 @@ impl Device {
         Ok(Self(device))
     }
 
-    #[pyo3(signature = (ptx_code, func_name))]
-    fn compile_ptx(&self, ptx_code: &str, func_name: &str) -> PyResult<Func> {
+    #[pyo3(signature = (ptx_code, func_name, block_dim=1, grid_dim=1, shared_mem_bytes=0))]
+    fn compile_ptx(
+        &self,
+        ptx_code: &str,
+        func_name: &str,
+        block_dim: u32,
+        grid_dim: u32,
+        shared_mem_bytes: u32,
+    ) -> PyResult<Func> {
         let func_name = Box::leak(func_name.to_string().into_boxed_str());
-        let func = self.0.compile_ptx(ptx_code, MODULE_NAME, func_name).map_err(w)?;
+        let cfg = cuda::LaunchConfig {
+            grid_dim: (grid_dim, 1, 1),
+            block_dim: (block_dim, 1, 1),
+            shared_mem_bytes,
+        };
+        let func = self.0.compile_ptx(ptx_code, MODULE_NAME, func_name, cfg).map_err(w)?;
         Ok(Func(func))
     }
 
-    #[pyo3(signature = (cu_code, func_name))]
-    fn compile_cu(&self, cu_code: &str, func_name: &str) -> PyResult<Func> {
+    #[pyo3(signature = (cu_code, func_name, block_dim=1, grid_dim=1, shared_mem_bytes=0))]
+    fn compile_cu(
+        &self,
+        cu_code: &str,
+        func_name: &str,
+        block_dim: u32,
+        grid_dim: u32,
+        shared_mem_bytes: u32,
+    ) -> PyResult<Func> {
         let func_name = Box::leak(func_name.to_string().into_boxed_str());
-        let func = self.0.compile_cu(cu_code, MODULE_NAME, func_name).map_err(w)?;
+        let cfg = cuda::LaunchConfig {
+            grid_dim: (grid_dim, 1, 1),
+            block_dim: (block_dim, 1, 1),
+            shared_mem_bytes,
+        };
+        let func = self.0.compile_cu(cu_code, MODULE_NAME, func_name, cfg).map_err(w)?;
         Ok(Func(func))
     }
 

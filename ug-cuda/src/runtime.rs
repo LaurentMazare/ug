@@ -48,6 +48,7 @@ impl KernelId {
 #[derive(Clone)]
 pub struct Func {
     func: cudarc::driver::CudaFunction,
+    cfg: LaunchConfig,
 }
 
 impl Func {
@@ -55,14 +56,10 @@ impl Func {
     ///
     /// # Safety
     /// Launching a kernel is always unsafe...
-    pub unsafe fn launch1<Params: cudarc::driver::DeviceRepr>(
-        &self,
-        p: Params,
-        cfg: LaunchConfig,
-    ) -> Result<()> {
+    pub unsafe fn launch1<Params: cudarc::driver::DeviceRepr>(&self, p: Params) -> Result<()> {
         use cudarc::driver::LaunchAsync;
         let func = self.func.clone();
-        unsafe { func.launch(cfg, (p,)).w()? };
+        unsafe { func.launch(self.cfg, (p,)).w()? };
         Ok(())
     }
 
@@ -74,11 +71,10 @@ impl Func {
         &self,
         p1: Params,
         p2: Params,
-        cfg: LaunchConfig,
     ) -> Result<()> {
         use cudarc::driver::LaunchAsync;
         let func = self.func.clone();
-        unsafe { func.launch(cfg, (p1, p2)).w()? };
+        unsafe { func.launch(self.cfg, (p1, p2)).w()? };
         Ok(())
     }
 
@@ -91,11 +87,10 @@ impl Func {
         p1: Params,
         p2: Params,
         p3: Params,
-        cfg: LaunchConfig,
     ) -> Result<()> {
         use cudarc::driver::LaunchAsync;
         let func = self.func.clone();
-        unsafe { func.launch(cfg, (p1, p2, p3)).w()? };
+        unsafe { func.launch(self.cfg, (p1, p2, p3)).w()? };
         Ok(())
     }
 }
@@ -154,6 +149,18 @@ impl Slice {
     }
 }
 
+unsafe impl cudarc::driver::safe::DeviceRepr for &Slice {
+    fn as_kernel_param(&self) -> *mut std::ffi::c_void {
+        match &self.inner {
+            SliceInner::BF16(v) => v.as_kernel_param(),
+            SliceInner::F16(v) => v.as_kernel_param(),
+            SliceInner::F32(v) => v.as_kernel_param(),
+            SliceInner::I32(v) => v.as_kernel_param(),
+            SliceInner::I64(v) => v.as_kernel_param(),
+        }
+    }
+}
+
 impl Device {
     pub fn new(device_index: usize) -> Result<Self> {
         let device = cudarc::driver::CudaDevice::new(device_index).w()?;
@@ -174,6 +181,7 @@ impl Device {
         cu_code: &str,
         module_name: &str,
         func_name: &'static str,
+        cfg: LaunchConfig,
     ) -> Result<Func> {
         let opts =
             cudarc::nvrtc::CompileOptions { use_fast_math: Some(true), ..Default::default() };
@@ -183,7 +191,7 @@ impl Device {
             Some(func) => func,
             None => ug::bail!("unknown function {module_name}::{func_name}"),
         };
-        Ok(Func { func })
+        Ok(Func { func, cfg })
     }
 
     pub fn compile_ptx(
@@ -191,6 +199,7 @@ impl Device {
         ptx_code: &str,
         module_name: &str,
         func_name: &'static str,
+        cfg: LaunchConfig,
     ) -> Result<Func> {
         let ptx = cudarc::nvrtc::safe::Ptx::from_src(ptx_code);
         self.device.load_ptx(ptx, module_name, &[func_name]).w()?;
@@ -198,7 +207,7 @@ impl Device {
             Some(func) => func,
             None => ug::bail!("unknown function {module_name}::{func_name}"),
         };
-        Ok(Func { func })
+        Ok(Func { func, cfg })
     }
 
     pub fn zeros(&self, len: usize) -> Result<Slice> {
@@ -261,11 +270,22 @@ impl ug::Device for Device {
         crate::code_gen::gen(&mut cu_code, &func_name, kernel)?;
         let func_name_s = Box::leak(Box::new(func_name.to_string()));
         let cu_code = String::from_utf8(cu_code)?;
-        self.compile_cu(&cu_code, &func_name, func_name_s)
+        // TODO: proper launch config.
+        let cfg = LaunchConfig { grid_dim: (1, 1, 1), block_dim: (1, 1, 1), shared_mem_bytes: 0 };
+
+        self.compile_cu(&cu_code, &func_name, func_name_s, cfg)
     }
 
-    fn run(&self, _f: &Self::Func, _args: &mut [&mut Self::Slice]) -> Result<()> {
-        todo!()
+    fn run(&self, f: &Self::Func, args: &mut [&mut Self::Slice]) -> Result<()> {
+        use cudarc::driver::LaunchAsync;
+        let func = f.func.clone();
+        match args {
+            [a1] => {
+                unsafe { func.launch(f.cfg, (&**a1,)).w()? };
+            }
+            _ => ug::bail!("unsupported number of args for kernel {}", args.len()),
+        }
+        Ok(())
     }
 }
 

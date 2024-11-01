@@ -65,23 +65,18 @@ fn run_one(args: &Args, n_cols: usize) -> Result<()> {
         println!("CUDA\n{cuda_code}");
     }
     let device = ug_cuda::runtime::Device::new(0)?;
-    let func = device.compile_cu(&cuda_code, "foo", "mykernel")?;
+    let cfg = cudarc::driver::LaunchConfig {
+        grid_dim: (n_rows as u32, 1, 1),
+        block_dim: (block_dim as u32, 1, 1),
+        shared_mem_bytes: 0,
+    };
+    let func = device.compile_cu(&cuda_code, "foo", "mykernel", cfg)?;
     let n_elements = n_rows * n_cols;
     let res = device.zeros(n_elements)?;
     let arg: Vec<f32> = (0..n_elements).map(|_| rng.gen()).collect();
     let arg = device.slice_from_values(&arg)?;
     let run = || {
-        unsafe {
-            func.launch2(
-                arg.slice::<f32>()?,
-                res.slice::<f32>()?,
-                cudarc::driver::LaunchConfig {
-                    grid_dim: (n_rows as u32, 1, 1),
-                    block_dim: (block_dim as u32, 1, 1),
-                    shared_mem_bytes: 0,
-                },
-            )?
-        }
+        unsafe { func.launch2(arg.slice::<f32>()?, res.slice::<f32>()?)? }
         device.synchronize()?;
         Ok::<_, ug::Error>(())
     };
