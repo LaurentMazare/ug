@@ -132,8 +132,41 @@ impl<D: Device> CompiledSchedule<D> {
                         locks.iter_mut().map(|v| v.as_mut().unwrap()).collect::<Vec<_>>();
                     self.device.run(func, &mut locks)?
                 }
-                Func::MatMul { dst: _, lhs: _, rhs: _ } => {
-                    todo!()
+                Func::MatMul { dst, lhs, rhs } => {
+                    let lhs_l = lhs.layout();
+                    let rhs_l = rhs.layout();
+                    let lhs_dims = lhs_l.dims();
+                    let rhs_dims = rhs_l.dims();
+                    let dim = lhs_dims.len();
+
+                    if dim < 2 || rhs_dims.len() != dim {
+                        crate::bail!("shape mismatch in matmul {lhs_dims:?} {rhs_dims:?}")
+                    }
+
+                    let m = lhs_dims[dim - 2];
+                    let k = lhs_dims[dim - 1];
+                    let k2 = rhs_dims[dim - 2];
+                    let n = rhs_dims[dim - 1];
+
+                    let lhs_bsz: usize = lhs_dims[..dim - 2].iter().product();
+                    let rhs_bsz: usize = rhs_dims[..dim - 2].iter().product();
+                    if k != k2 || lhs_bsz != rhs_bsz {
+                        crate::bail!("shape mismatch in matmul {lhs_dims:?} {rhs_dims:?}")
+                    }
+                    let bmnk = (lhs_bsz, m, n, k);
+
+                    // TODO: provide a nicer api on LazyBuffer to get the underlying buffer and
+                    // have it created if necessary.
+                    unsafe { dst.maybe_allocate_uninit()? };
+                    unsafe { lhs.maybe_allocate_uninit()? };
+                    unsafe { rhs.maybe_allocate_uninit()? };
+                    let mut dst = dst.data().lock()?;
+                    let dst = dst.as_mut().unwrap();
+                    let lhs = lhs.data().lock()?;
+                    let lhs = lhs.as_ref().unwrap();
+                    let rhs = rhs.data().lock()?;
+                    let rhs = rhs.as_ref().unwrap();
+                    self.device.matmul(dst, lhs, rhs, bmnk, lhs_l, rhs_l)?;
                 }
             }
         }
@@ -169,10 +202,18 @@ impl<D: Device> Context<D> {
                 crate::lang::op::binary(*op, lhs, rhs)?
             }
             Op::MatMul(lhs, rhs) => {
-                let _lhs = self.walk(lhs)?;
-                let _rhs = self.walk(rhs)?;
-                // TODO: Split the graph here.
-                todo!()
+                // MatMul currently aren't fused with the rest of the graph. Maybe we should
+                // allow for custom ops that would be handled in the same way.
+                let _lhs_id = self.push_schedule_item(lhs)?;
+                let _rhs_id = self.push_schedule_item(rhs)?;
+                let dst_id = ArgId::new();
+                self.per_arg_id.insert(dst_id, b.clone());
+                self.items.push(ScheduleItem::MatMul {
+                    dst: b.clone(),
+                    lhs: lhs.clone(),
+                    rhs: rhs.clone(),
+                });
+                crate::lang::op::load(dst_id, Layout::from_shape(shape), dtype)?
             }
             Op::Reduce(op, arg, axis) => {
                 let ast = self.walk(arg)?;
