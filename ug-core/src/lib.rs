@@ -54,4 +54,14 @@ pub trait Device: Clone {
     // these when necessary. Maybe we should have a more generic arg type that could handle
     // `Const` scalars.
     fn run(&self, f: &Self::Func, args: &mut [&mut Self::Slice]) -> Result<()>;
+
+    fn matmul(
+        &self,
+        _dst: &mut Self::Slice,
+        _lhs: &Self::Slice,
+        _rhs: &Self::Slice,
+        _bmnk: (usize, usize, usize, usize),
+        _lhs_l: &Layout,
+        _rhs_l: &Layout,
+    ) -> Result<()>;
 }

@@ -287,6 +287,18 @@ impl ug::Device for Device {
         }
         Ok(())
     }
+
+    fn matmul(
+        &self,
+        _dst: &mut Self::Slice,
+        _lhs: &Self::Slice,
+        _rhs: &Self::Slice,
+        _bmnk: (usize, usize, usize, usize),
+        _lhs_l: &ug::Layout,
+        _rhs_l: &ug::Layout,
+    ) -> Result<()> {
+        ug::bail!("no matmul implementation for device")
+    }
 }
 
 impl ug::Slice for Slice {

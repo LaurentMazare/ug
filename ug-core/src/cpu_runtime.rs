@@ -170,6 +170,30 @@ impl crate::Device for CpuDevice {
         }
         Ok(())
     }
+
+    fn matmul(
+        &self,
+        dst: &mut Self::Slice,
+        lhs: &Self::Slice,
+        rhs: &Self::Slice,
+        bmnk: (usize, usize, usize, usize),
+        lhs_l: &Layout,
+        rhs_l: &Layout,
+    ) -> Result<()> {
+        use CpuStorage::{F16, F32};
+        let mm = MatMul(bmnk);
+        let (dst_dt, lhs_dt, rhs_dt) = (dst.dtype(), lhs.dtype(), rhs.dtype());
+        match (dst, lhs, rhs) {
+            (F16(dst), F16(lhs), F16(rhs)) => mm.gemm(dst, lhs, lhs_l, rhs, rhs_l)?,
+            (F32(dst), F32(lhs), F32(rhs)) => mm.gemm(dst, lhs, lhs_l, rhs, rhs_l)?,
+            _ => {
+                crate::bail!(
+                    "incorrect dtypes for matmul, dst: {dst_dt:?}, lhs: {lhs_dt:?}, rhs: {rhs_dt:?}"
+                )
+            }
+        }
+        Ok(())
+    }
 }
 
 impl crate::Slice for CpuStorage {
@@ -363,11 +387,12 @@ impl MatMul {
 
     pub fn gemm<T: crate::WithDType>(
         &self,
+        dst: &mut [T],
         lhs: &[T],
         lhs_l: &Layout,
         rhs: &[T],
         rhs_l: &Layout,
-    ) -> Result<Vec<T>> {
+    ) -> Result<()> {
         use gemm::{gemm, Parallelism};
 
         match T::DTYPE {
@@ -396,7 +421,6 @@ impl MatMul {
         let dst_rs = dst_strides[0];
         let dst_cs = dst_strides[1];
 
-        let mut dst = vec![T::zero(); b * m * n];
         let num_threads = crate::utils::get_num_threads();
         let parallelism =
             if num_threads > 1 { Parallelism::Rayon(num_threads) } else { Parallelism::None };
@@ -428,6 +452,6 @@ impl MatMul {
                 )
             }
         }
-        Ok(dst)
+        Ok(())
     }
 }
