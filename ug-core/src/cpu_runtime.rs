@@ -1,4 +1,4 @@
-use crate::{DType, Result};
+use crate::{DType, Error, Layout, Result};
 use half::{bf16, f16};
 use std::path::PathBuf;
 
@@ -321,5 +321,113 @@ impl crate::CpuDevice {
             let _ = std::fs::remove_file(tmp_so);
         }
         result
+    }
+}
+
+pub struct MatMul((usize, usize, usize, usize));
+
+impl MatMul {
+    fn striding_error(&self, lhs_l: &Layout, rhs_l: &Layout, msg: &'static str) -> Error {
+        Error::MatMulUnexpectedStriding(Box::new(crate::error::MatMulUnexpectedStriding {
+            lhs_l: lhs_l.clone(),
+            rhs_l: rhs_l.clone(),
+            bmnk: self.0,
+            msg,
+        }))
+        .bt()
+    }
+
+    fn ab_skip(&self, lhs_l: &Layout, rhs_l: &Layout) -> Result<(usize, usize)> {
+        let lhs_stride = lhs_l.strides();
+        let rhs_stride = rhs_l.strides();
+        let rank = lhs_stride.len();
+        let (_b, m, n, k) = self.0;
+        let a_skip: usize = match lhs_stride[..rank - 2] {
+            [s1, stride] if s1 == stride * lhs_l.dims()[1] => stride,
+            [_, stride] if lhs_l.dims()[0] == 1 => stride,
+            [stride, _] if lhs_l.dims()[1] == 1 => stride,
+            [stride] => stride,
+            [] => m * k,
+            _ => Err(self.striding_error(lhs_l, rhs_l, "non-contiguous lhs"))?,
+        };
+        let b_skip: usize = match rhs_stride[..rank - 2] {
+            [s1, stride] if s1 == stride * rhs_l.dims()[1] => stride,
+            [_, stride] if rhs_l.dims()[0] == 1 => stride,
+            [stride, _] if rhs_l.dims()[1] == 1 => stride,
+            [stride] => stride,
+            [] => n * k,
+            _ => Err(self.striding_error(lhs_l, rhs_l, "non-contiguous rhs"))?,
+        };
+        Ok((a_skip, b_skip))
+    }
+
+    pub fn gemm<T: crate::WithDType>(
+        &self,
+        lhs: &[T],
+        lhs_l: &Layout,
+        rhs: &[T],
+        rhs_l: &Layout,
+    ) -> Result<Vec<T>> {
+        use gemm::{gemm, Parallelism};
+
+        match T::DTYPE {
+            DType::F16 | DType::F32 => {}
+            _ => crate::bail!("unsupported dtype for gemm"),
+        }
+
+        let (b, m, n, k) = self.0;
+        let lhs = &lhs[lhs_l.offset()..];
+        let rhs = &rhs[rhs_l.offset()..];
+
+        let lhs_strides = lhs_l.strides();
+        let rhs_strides = rhs_l.strides();
+        let rank = lhs_strides.len();
+        let lhs_cs = lhs_strides[rank - 1];
+        let lhs_rs = lhs_strides[rank - 2];
+
+        let rhs_cs = rhs_strides[rank - 1];
+        let rhs_rs = rhs_strides[rank - 2];
+
+        let (a_skip, b_skip) = self.ab_skip(lhs_l, rhs_l)?;
+        let c_skip: usize = m * n;
+
+        let dst_shape: crate::Shape = (m, n).into();
+        let dst_strides = dst_shape.stride_contiguous();
+        let dst_rs = dst_strides[0];
+        let dst_cs = dst_strides[1];
+
+        let mut dst = vec![T::zero(); b * m * n];
+        let num_threads = crate::utils::get_num_threads();
+        let parallelism =
+            if num_threads > 1 { Parallelism::Rayon(num_threads) } else { Parallelism::None };
+        for step in 0..b {
+            let lhs_p = &lhs[step * a_skip..];
+            let rhs_p = &rhs[step * b_skip..];
+            let dst_p = &mut dst[step * c_skip..];
+            unsafe {
+                gemm(
+                    /* m: usize = */ m,
+                    /* n: usize = */ n,
+                    /* k: usize = */ k,
+                    /* dst: *mut T = */ dst_p.as_mut_ptr(),
+                    /* dst_cs: isize = */ dst_cs as isize,
+                    /* dst_rs: isize = */ dst_rs as isize,
+                    /* read_dst: bool = */ false,
+                    /* lhs: *const T = */ lhs_p.as_ptr(),
+                    /* lhs_cs: isize = */ lhs_cs as isize,
+                    /* lhs_rs: isize = */ lhs_rs as isize,
+                    /* rhs: *const T = */ rhs_p.as_ptr(),
+                    /* rhs_cs: isize = */ rhs_cs as isize,
+                    /* rhs_rs: isize = */ rhs_rs as isize,
+                    /* alpha: T = */ T::zero(),
+                    /* beta: T = */ T::one(),
+                    /* conj_dst: bool = */ false,
+                    /* conj_lhs: bool = */ false,
+                    /* conj_rhs: bool = */ false,
+                    parallelism,
+                )
+            }
+        }
+        Ok(dst)
     }
 }

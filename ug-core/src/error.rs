@@ -29,6 +29,10 @@ pub enum Error {
     /// User generated error message, typically created via `bail!`.
     #[error("{0}")]
     Msg(String),
+
+    // Box indirection to avoid large variant.
+    #[error("{0:?}")]
+    MatMulUnexpectedStriding(Box<MatMulUnexpectedStriding>),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -85,4 +89,12 @@ pub fn zip<T, U>(r1: Result<T>, r2: Result<U>) -> Result<(T, U)> {
         (Err(e), _) => Err(e),
         (_, Err(e)) => Err(e),
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct MatMulUnexpectedStriding {
+    pub lhs_l: crate::Layout,
+    pub rhs_l: crate::Layout,
+    pub bmnk: (usize, usize, usize, usize),
+    pub msg: &'static str,
 }

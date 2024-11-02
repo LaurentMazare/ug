@@ -25,6 +25,7 @@ half = { version = "2.3.1", features = ["num-traits", "use-intrinsics", "rand_di
 libloading = "0.8.5"
 metal = "0.29.0"
 num = "0.4.3"
+num_cpus = "1.16.0"
 objc = "0.2.7"
 ug = { path = "./ug-core", version = "0.1.0" }
 ug-cuda = { path = "./ug-cuda", version = "0.1.0" }
