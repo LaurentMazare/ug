@@ -13,7 +13,7 @@ fn schedule_interpret() -> Result<()> {
     for item in items.iter() {
         let kernel = match item {
             ug::ScheduleItem::Kernel(k) => k.kernel()?,
-            ug::ScheduleItem::MatMul { dst: _, lhs: _, rhs: _ } => ug::bail!("unexpected matmul"),
+            ug::ScheduleItem::MatMul { .. } => ug::bail!("unexpected matmul"),
         };
         let ssa = kernel.lower(&Default::default())?;
         println!("{ssa:?}");
@@ -37,7 +37,7 @@ fn schedule_cpu() -> Result<()> {
     assert_eq!(items.len(), 1);
     let kernel = match &items[0] {
         ug::ScheduleItem::Kernel(k) => k.kernel()?,
-        ug::ScheduleItem::MatMul { dst: _, lhs: _, rhs: _ } => ug::bail!("unexpected matmul"),
+        ug::ScheduleItem::MatMul { .. } => ug::bail!("unexpected matmul"),
     };
     let ssa = kernel.lower(&Default::default())?;
     let func = cpu.compile(&ssa)?;
@@ -60,5 +60,20 @@ fn schedule_cpu_compile() -> Result<()> {
     let data = lb.data().lock()?;
     let data = data.as_ref().unwrap().to_vec::<f32>()?;
     assert_eq!(data, [42., 42., 42., 42., 42., 42., 42., 42., 42., 42.]);
+    Ok(())
+}
+
+#[test]
+fn schedule_mm() -> Result<()> {
+    let cpu = ug::CpuDevice;
+    let lhs = LB::cst(1., (4, 2), &cpu)?;
+    let rhs = LB::cst(2., (2, 3), &cpu)?;
+    let lb = lhs.matmul(rhs)?;
+    let schedule = ug::Schedule::create_one(&lb)?;
+    let schedule = schedule.compile()?;
+    schedule.run()?;
+    let data = lb.data().lock()?;
+    let data = data.as_ref().unwrap().to_vec::<f32>()?;
+    assert_eq!(data, [4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0]);
     Ok(())
 }

@@ -51,6 +51,13 @@ pub struct Schedule<D: Device> {
 }
 
 impl<D: Device> Schedule<D> {
+    pub fn get_arg_id(&self, arg_id: ArgId) -> Result<&LazyBuffer<D>> {
+        match self.per_arg_id.get(&arg_id) {
+            Some(b) => Ok(b),
+            None => crate::bail!("no arg for id {arg_id:?}"),
+        }
+    }
+
     pub fn create(buffers: &[&LazyBuffer<D>]) -> Result<Self> {
         let device = if buffers.is_empty() {
             crate::bail!("no buffers provided")
@@ -95,11 +102,8 @@ impl<D: Device> Schedule<D> {
                     let mut args = vec![];
                     for arg in ssa.args().iter() {
                         let arg_id = arg.0.id();
-                        let arg = match self.per_arg_id.get(&arg_id) {
-                            Some(b) => b.clone(),
-                            None => crate::bail!("no arg for id {arg_id:?}"),
-                        };
-                        args.push((arg_id, arg))
+                        let arg = self.get_arg_id(arg_id)?;
+                        args.push((arg_id, arg.clone()))
                     }
                     let func = self.device.compile(&ssa)?;
                     Func::Kernel { func, args }
@@ -182,6 +186,13 @@ impl<D: Device> Context<D> {
         Self { items: vec![], per_arg_id: std::collections::HashMap::new() }
     }
 
+    fn get_arg_id(&self, arg_id: ArgId) -> Result<&LazyBuffer<D>> {
+        match self.per_arg_id.get(&arg_id) {
+            Some(b) => Ok(b),
+            None => crate::bail!("no arg for id {arg_id:?}"),
+        }
+    }
+
     fn walk(&mut self, b: &LazyBuffer<D>) -> Result<Ast> {
         use crate::lazy_buffer::Op;
 
@@ -233,6 +244,15 @@ impl<D: Device> Context<D> {
 
     fn push_schedule_item(&mut self, buffer: &LazyBuffer<D>) -> Result<ArgId> {
         let ast = self.walk(buffer)?;
+        if let crate::lang::op::AstInner::Load { src: src_arg_id, layout: _ } = ast.inner.as_ref() {
+            let src = self.get_arg_id(*src_arg_id)?;
+            if src.id() == buffer.id() {
+                // Avoid the cases where we load and store immediately a buffer, this is a no-op
+                // and would result in a deadlock.
+                return Ok(*src_arg_id);
+            }
+        }
+
         let dst_id = ArgId::new();
         self.per_arg_id.insert(dst_id, buffer.clone());
         let mut arg_ids = ast.arg_ids();
@@ -240,11 +260,8 @@ impl<D: Device> Context<D> {
         let args = arg_ids
             .into_iter()
             .map(|arg_id| {
-                let arg = match self.per_arg_id.get(&arg_id) {
-                    Some(b) => b.clone(),
-                    None => crate::bail!("no arg for id {arg_id:?}"),
-                };
-                Ok((arg_id, arg))
+                let arg = self.get_arg_id(arg_id)?;
+                Ok((arg_id, arg.clone()))
             })
             .collect::<Result<Vec<_>>>()?;
         let si = KernelItem { ast, dst: (dst_id, buffer.clone()), args };
