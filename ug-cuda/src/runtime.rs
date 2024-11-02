@@ -113,7 +113,7 @@ pub enum SliceInner {
 
 #[derive(Clone)]
 pub struct Slice {
-    inner: SliceInner,
+    pub(crate) inner: SliceInner,
     device: Device,
 }
 
@@ -290,14 +290,14 @@ impl ug::Device for Device {
 
     fn matmul(
         &self,
-        _dst: &mut Self::Slice,
-        _lhs: &Self::Slice,
-        _rhs: &Self::Slice,
-        _bmnk: (usize, usize, usize, usize),
-        _lhs_l: &ug::Layout,
-        _rhs_l: &ug::Layout,
+        dst: &mut Self::Slice,
+        lhs: &Self::Slice,
+        rhs: &Self::Slice,
+        bmnk: (usize, usize, usize, usize),
+        lhs_l: &ug::Layout,
+        rhs_l: &ug::Layout,
     ) -> Result<()> {
-        ug::bail!("no matmul implementation for device")
+        crate::gemm::matmul(&self.blas, dst, lhs, rhs, bmnk, lhs_l, rhs_l)
     }
 }
 
