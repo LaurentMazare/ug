@@ -3,13 +3,13 @@ use crate::{Device, Layout, LazyBuffer, Result};
 
 type Args<D> = Vec<(ArgId, LazyBuffer<D>)>;
 
-pub struct ScheduleItem<D: Device> {
+pub struct KernelItem<D: Device> {
     ast: Ast,
     dst: (ArgId, LazyBuffer<D>),
     args: Args<D>,
 }
 
-impl<D: Device> ScheduleItem<D> {
+impl<D: Device> KernelItem<D> {
     pub fn into_ast(self) -> Ast {
         self.ast
     }
@@ -31,6 +31,11 @@ impl<D: Device> ScheduleItem<D> {
         let kernel = op::Kernel::new(format!("realize_{:?}", dst.1.id()), args, vec![sto]);
         Ok(kernel)
     }
+}
+
+pub enum ScheduleItem<D: Device> {
+    Kernel(KernelItem<D>),
+    MatMul { dst: LazyBuffer<D>, lhs: LazyBuffer<D>, rhs: LazyBuffer<D> },
 }
 
 pub struct Schedule<D: Device> {
@@ -72,44 +77,65 @@ impl<D: Device> Schedule<D> {
         // TODO: compilation cache.
         let mut funcs = Vec::with_capacity(self.items().len());
         for item in self.items() {
-            let kernel = item.kernel()?;
-            let ssa = kernel.lower(&Default::default())?;
-            let mut args = vec![];
-            for arg in ssa.args().iter() {
-                let arg_id = arg.0.id();
-                let arg = match self.per_arg_id.get(&arg_id) {
-                    Some(b) => b.clone(),
-                    None => crate::bail!("no arg for id {arg_id:?}"),
-                };
-                args.push((arg_id, arg))
-            }
-            let func = self.device.compile(&ssa)?;
-            funcs.push((func, args))
+            let call = match item {
+                ScheduleItem::MatMul { dst, lhs, rhs } => {
+                    Func::MatMul { dst: dst.clone(), lhs: lhs.clone(), rhs: rhs.clone() }
+                }
+                ScheduleItem::Kernel(item) => {
+                    let kernel = item.kernel()?;
+                    let ssa = kernel.lower(&Default::default())?;
+                    let mut args = vec![];
+                    for arg in ssa.args().iter() {
+                        let arg_id = arg.0.id();
+                        let arg = match self.per_arg_id.get(&arg_id) {
+                            Some(b) => b.clone(),
+                            None => crate::bail!("no arg for id {arg_id:?}"),
+                        };
+                        args.push((arg_id, arg))
+                    }
+                    let func = self.device.compile(&ssa)?;
+                    Func::Kernel { func, args }
+                }
+            };
+            funcs.push(call)
         }
         let device = self.device.clone();
         Ok(CompiledSchedule { funcs, device })
     }
 }
 
+pub enum Func<D: Device> {
+    Kernel { func: D::Func, args: Args<D> },
+    MatMul { dst: LazyBuffer<D>, lhs: LazyBuffer<D>, rhs: LazyBuffer<D> },
+}
+
 pub struct CompiledSchedule<D: Device> {
-    funcs: Vec<(D::Func, Args<D>)>,
+    funcs: Vec<Func<D>>,
     device: D,
 }
 
 impl<D: Device> CompiledSchedule<D> {
     pub fn run(&self) -> Result<()> {
-        for (func, args) in self.funcs.iter() {
-            // Should we do some deadlock detection?
-            let mut locks = args
-                .iter()
-                .map(|(_id, lb)| {
-                    unsafe { lb.maybe_allocate_uninit()? };
-                    let lock = lb.data().lock()?;
-                    Ok(lock)
-                })
-                .collect::<Result<Vec<_>>>()?;
-            let mut locks = locks.iter_mut().map(|v| v.as_mut().unwrap()).collect::<Vec<_>>();
-            self.device.run(func, &mut locks)?
+        for func in self.funcs.iter() {
+            match func {
+                Func::Kernel { func, args } => {
+                    // Should we do some deadlock detection?
+                    let mut locks = args
+                        .iter()
+                        .map(|(_id, lb)| {
+                            unsafe { lb.maybe_allocate_uninit()? };
+                            let lock = lb.data().lock()?;
+                            Ok(lock)
+                        })
+                        .collect::<Result<Vec<_>>>()?;
+                    let mut locks =
+                        locks.iter_mut().map(|v| v.as_mut().unwrap()).collect::<Vec<_>>();
+                    self.device.run(func, &mut locks)?
+                }
+                Func::MatMul { dst: _, lhs: _, rhs: _ } => {
+                    todo!()
+                }
+            }
         }
         Ok(())
     }
@@ -141,6 +167,12 @@ impl<D: Device> Context<D> {
                 let lhs = self.walk(lhs)?;
                 let rhs = self.walk(rhs)?;
                 crate::lang::op::binary(*op, lhs, rhs)?
+            }
+            Op::MatMul(lhs, rhs) => {
+                let _lhs = self.walk(lhs)?;
+                let _rhs = self.walk(rhs)?;
+                // TODO: Split the graph here.
+                todo!()
             }
             Op::Reduce(op, arg, axis) => {
                 let ast = self.walk(arg)?;
@@ -177,8 +209,8 @@ impl<D: Device> Context<D> {
                 Ok((arg_id, arg))
             })
             .collect::<Result<Vec<_>>>()?;
-        let si = ScheduleItem { ast, dst: (dst_id, buffer.clone()), args };
-        self.items.push(si);
+        let si = KernelItem { ast, dst: (dst_id, buffer.clone()), args };
+        self.items.push(ScheduleItem::Kernel(si));
         Ok(dst_id)
     }
 }

@@ -11,7 +11,10 @@ fn schedule_interpret() -> Result<()> {
     let items = schedule.items();
     assert_eq!(items.len(), 1);
     for item in items.iter() {
-        let kernel = item.kernel()?;
+        let kernel = match item {
+            ug::ScheduleItem::Kernel(k) => k.kernel()?,
+            ug::ScheduleItem::MatMul { dst: _, lhs: _, rhs: _ } => ug::bail!("unexpected matmul"),
+        };
         let ssa = kernel.lower(&Default::default())?;
         println!("{ssa:?}");
         let mut buffer = ug::interpreter::Buffer::F32(vec![0f32; 10]);
@@ -32,7 +35,10 @@ fn schedule_cpu() -> Result<()> {
     let schedule = ug::Schedule::create_one(&lb)?;
     let items = schedule.items();
     assert_eq!(items.len(), 1);
-    let kernel = items[0].kernel()?;
+    let kernel = match &items[0] {
+        ug::ScheduleItem::Kernel(k) => k.kernel()?,
+        ug::ScheduleItem::MatMul { dst: _, lhs: _, rhs: _ } => ug::bail!("unexpected matmul"),
+    };
     let ssa = kernel.lower(&Default::default())?;
     let func = cpu.compile(&ssa)?;
     let mut buffer = unsafe { cpu.allocate_uninit::<f32>(10)? };

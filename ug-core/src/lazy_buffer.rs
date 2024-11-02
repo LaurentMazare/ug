@@ -27,6 +27,7 @@ pub enum LayoutOp {
 pub enum Op<D: Device> {
     Unary(crate::lang::UnaryOp, LazyBuffer<D>),
     Binary(crate::lang::BinaryOp, LazyBuffer<D>, LazyBuffer<D>),
+    MatMul(LazyBuffer<D>, LazyBuffer<D>),
     Reduce(crate::lang::ReduceOp, LazyBuffer<D>, usize),
     Const(crate::lang::Const),
     // TODO: maybe the following should be an Arc<Mutex<...>> or similar so that it can easily be
@@ -138,6 +139,20 @@ impl<D: Device> LazyBuffer<D> {
             id: Id::new(),
             data: std::sync::Mutex::new(None),
             op: Op::Binary(op, self.clone(), rhs),
+            dtype: self.dtype,
+            device: self.device.clone(),
+            layout: Layout::from_shape(self.shape()),
+        };
+        let lb = LazyBuffer(std::sync::Arc::new(inner));
+        Ok(lb)
+    }
+
+    pub fn matmul(&self, rhs: Self) -> Result<Self> {
+        // TODO: dtype/op/shape checks.
+        let inner = LazyBufferInner {
+            id: Id::new(),
+            data: std::sync::Mutex::new(None),
+            op: Op::MatMul(self.clone(), rhs),
             dtype: self.dtype,
             device: self.device.clone(),
             layout: Layout::from_shape(self.shape()),
