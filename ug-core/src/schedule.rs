@@ -35,7 +35,12 @@ impl<D: Device> KernelItem<D> {
 
 pub enum ScheduleItem<D: Device> {
     Kernel(KernelItem<D>),
-    MatMul { dst: LazyBuffer<D>, lhs: LazyBuffer<D>, rhs: LazyBuffer<D> },
+    MatMul {
+        dst: LazyBuffer<D>,
+        lhs: LazyBuffer<D>,
+        rhs: LazyBuffer<D>,
+        bmnk: (usize, usize, usize, usize),
+    },
 }
 
 pub struct Schedule<D: Device> {
@@ -78,9 +83,12 @@ impl<D: Device> Schedule<D> {
         let mut funcs = Vec::with_capacity(self.items().len());
         for item in self.items() {
             let call = match item {
-                ScheduleItem::MatMul { dst, lhs, rhs } => {
-                    Func::MatMul { dst: dst.clone(), lhs: lhs.clone(), rhs: rhs.clone() }
-                }
+                ScheduleItem::MatMul { dst, lhs, rhs, bmnk } => Func::MatMul {
+                    dst: dst.clone(),
+                    lhs: lhs.clone(),
+                    rhs: rhs.clone(),
+                    bmnk: *bmnk,
+                },
                 ScheduleItem::Kernel(item) => {
                     let kernel = item.kernel()?;
                     let ssa = kernel.lower(&Default::default())?;
@@ -105,8 +113,16 @@ impl<D: Device> Schedule<D> {
 }
 
 pub enum Func<D: Device> {
-    Kernel { func: D::Func, args: Args<D> },
-    MatMul { dst: LazyBuffer<D>, lhs: LazyBuffer<D>, rhs: LazyBuffer<D> },
+    Kernel {
+        func: D::Func,
+        args: Args<D>,
+    },
+    MatMul {
+        dst: LazyBuffer<D>,
+        lhs: LazyBuffer<D>,
+        rhs: LazyBuffer<D>,
+        bmnk: (usize, usize, usize, usize),
+    },
 }
 
 pub struct CompiledSchedule<D: Device> {
@@ -132,29 +148,9 @@ impl<D: Device> CompiledSchedule<D> {
                         locks.iter_mut().map(|v| v.as_mut().unwrap()).collect::<Vec<_>>();
                     self.device.run(func, &mut locks)?
                 }
-                Func::MatMul { dst, lhs, rhs } => {
+                Func::MatMul { dst, lhs, rhs, bmnk } => {
                     let lhs_l = lhs.layout();
                     let rhs_l = rhs.layout();
-                    let lhs_dims = lhs_l.dims();
-                    let rhs_dims = rhs_l.dims();
-                    let dim = lhs_dims.len();
-
-                    if dim < 2 || rhs_dims.len() != dim {
-                        crate::bail!("shape mismatch in matmul {lhs_dims:?} {rhs_dims:?}")
-                    }
-
-                    let m = lhs_dims[dim - 2];
-                    let k = lhs_dims[dim - 1];
-                    let k2 = rhs_dims[dim - 2];
-                    let n = rhs_dims[dim - 1];
-
-                    let lhs_bsz: usize = lhs_dims[..dim - 2].iter().product();
-                    let rhs_bsz: usize = rhs_dims[..dim - 2].iter().product();
-                    if k != k2 || lhs_bsz != rhs_bsz {
-                        crate::bail!("shape mismatch in matmul {lhs_dims:?} {rhs_dims:?}")
-                    }
-                    let bmnk = (lhs_bsz, m, n, k);
-
                     // TODO: provide a nicer api on LazyBuffer to get the underlying buffer and
                     // have it created if necessary.
                     unsafe { dst.maybe_allocate_uninit()? };
@@ -166,7 +162,7 @@ impl<D: Device> CompiledSchedule<D> {
                     let lhs = lhs.as_ref().unwrap();
                     let rhs = rhs.data().lock()?;
                     let rhs = rhs.as_ref().unwrap();
-                    self.device.matmul(dst, lhs, rhs, bmnk, lhs_l, rhs_l)?;
+                    self.device.matmul(dst, lhs, rhs, *bmnk, lhs_l, rhs_l)?;
                 }
             }
         }
@@ -201,7 +197,7 @@ impl<D: Device> Context<D> {
                 let rhs = self.walk(rhs)?;
                 crate::lang::op::binary(*op, lhs, rhs)?
             }
-            Op::MatMul(lhs, rhs) => {
+            Op::MatMul(lhs, rhs, bmnk) => {
                 // MatMul currently aren't fused with the rest of the graph. Maybe we should
                 // allow for custom ops that would be handled in the same way.
                 let _lhs_id = self.push_schedule_item(lhs)?;
@@ -212,6 +208,7 @@ impl<D: Device> Context<D> {
                     dst: b.clone(),
                     lhs: lhs.clone(),
                     rhs: rhs.clone(),
+                    bmnk: *bmnk,
                 });
                 crate::lang::op::load(dst_id, Layout::from_shape(shape), dtype)?
             }

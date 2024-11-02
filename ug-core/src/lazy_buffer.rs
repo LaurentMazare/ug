@@ -27,7 +27,7 @@ pub enum LayoutOp {
 pub enum Op<D: Device> {
     Unary(crate::lang::UnaryOp, LazyBuffer<D>),
     Binary(crate::lang::BinaryOp, LazyBuffer<D>, LazyBuffer<D>),
-    MatMul(LazyBuffer<D>, LazyBuffer<D>),
+    MatMul(LazyBuffer<D>, LazyBuffer<D>, (usize, usize, usize, usize)),
     Reduce(crate::lang::ReduceOp, LazyBuffer<D>, usize),
     Const(crate::lang::Const),
     // TODO: maybe the following should be an Arc<Mutex<...>> or similar so that it can easily be
@@ -148,14 +148,34 @@ impl<D: Device> LazyBuffer<D> {
     }
 
     pub fn matmul(&self, rhs: Self) -> Result<Self> {
-        // TODO: dtype/op/shape checks.
+        let lhs_l = self.layout();
+        let rhs_l = rhs.layout();
+        let lhs_dims = lhs_l.dims();
+        let rhs_dims = rhs_l.dims();
+        let dim = lhs_dims.len();
+
+        if dim < 2 || rhs_dims.len() != dim {
+            crate::bail!("shape mismatch in matmul {lhs_dims:?} {rhs_dims:?}")
+        }
+
+        let m = lhs_dims[dim - 2];
+        let k = lhs_dims[dim - 1];
+        let k2 = rhs_dims[dim - 2];
+        let n = rhs_dims[dim - 1];
+
+        let lhs_bsz: usize = lhs_dims[..dim - 2].iter().product();
+        let rhs_bsz: usize = rhs_dims[..dim - 2].iter().product();
+        if k != k2 || lhs_bsz != rhs_bsz {
+            crate::bail!("shape mismatch in matmul {lhs_dims:?} {rhs_dims:?}")
+        }
+        let bmnk = (lhs_bsz, m, n, k);
         let inner = LazyBufferInner {
             id: Id::new(),
             data: std::sync::Mutex::new(None),
-            op: Op::MatMul(self.clone(), rhs),
+            op: Op::MatMul(self.clone(), rhs, bmnk),
             dtype: self.dtype,
             device: self.device.clone(),
-            layout: Layout::from_shape(self.shape()),
+            layout: Layout::from_shape((lhs_bsz, m, n)),
         };
         let lb = LazyBuffer(std::sync::Arc::new(inner));
         Ok(lb)
