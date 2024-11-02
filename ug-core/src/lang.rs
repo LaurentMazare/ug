@@ -518,6 +518,27 @@ pub mod op {
             visit(self, &mut ops);
             ops
         }
+
+        pub fn arg_ids(&self) -> std::collections::HashSet<ArgId> {
+            fn visit(ast: &Ast, ids: &mut std::collections::HashSet<ArgId>) {
+                match ast.inner.as_ref() {
+                    AstInner::Reduce { op: _, axis: _, arg } => visit(arg, ids),
+                    AstInner::Unary { op: _, arg } => visit(arg, ids),
+                    AstInner::Binary { op: _, lhs, rhs } => {
+                        visit(lhs, ids);
+                        visit(rhs, ids)
+                    }
+                    AstInner::Broadcast { arg, .. } => visit(arg, ids),
+                    AstInner::Load { src, layout: _ } => {
+                        ids.insert(*src);
+                    }
+                    AstInner::Id { .. } | AstInner::Const(_) => {}
+                }
+            }
+            let mut ids = std::collections::HashSet::new();
+            visit(self, &mut ids);
+            ids
+        }
     }
 
     #[derive(Debug, Clone)]

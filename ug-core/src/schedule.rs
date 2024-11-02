@@ -22,14 +22,12 @@ impl<D: Device> ScheduleItem<D> {
         use crate::lang::op;
         let ast = &self.ast;
         let dst = &self.dst;
-        let mut args = self
+        let args = self
             .args
             .iter()
             .map(|(id, lb)| op::Arg::new(*id, crate::lang::Type::Ptr(lb.dtype())))
             .collect::<Vec<_>>();
-        args.push(op::Arg::new(dst.0, crate::lang::Type::Ptr(dst.1.dtype())));
         let sto = op::store(dst.0, dst.1.layout().clone(), ast.clone())?;
-        // TODO: use the stored variables/args.
         let kernel = op::Kernel::new(format!("realize_{:?}", dst.1.id()), args, vec![sto]);
         Ok(kernel)
     }
@@ -38,8 +36,8 @@ impl<D: Device> ScheduleItem<D> {
 pub struct Schedule<D: Device> {
     /// Elements in `items` are topologically sorted so that they can be run in order.
     items: Vec<ScheduleItem<D>>,
+    per_arg_id: std::collections::HashMap<ArgId, LazyBuffer<D>>,
     device: D,
-    // TODO: Add variables.
 }
 
 impl<D: Device> Schedule<D> {
@@ -51,21 +49,19 @@ impl<D: Device> Schedule<D> {
         };
         let mut context = Context::new();
         for &buffer in buffers.iter() {
-            let ast = context.walk(buffer)?;
-            let dst_id = ArgId::new();
-            let args = context.take_args();
-            context.items.push(ScheduleItem { ast, dst: (dst_id, buffer.clone()), args });
+            context.push_schedule_item(buffer)?;
         }
-        Ok(Self { items: context.items, device })
+        Ok(Self { items: context.items, device, per_arg_id: context.per_arg_id })
     }
 
     pub fn create_one(buffer: &LazyBuffer<D>) -> Result<Self> {
         let mut context = Context::new();
-        let ast = context.walk(buffer)?;
-        let dst_id = ArgId::new();
-        let args = context.take_args();
-        context.items.push(ScheduleItem { ast, dst: (dst_id, buffer.clone()), args });
-        Ok(Self { items: context.items, device: buffer.device().clone() })
+        context.push_schedule_item(buffer)?;
+        Ok(Self {
+            items: context.items,
+            device: buffer.device().clone(),
+            per_arg_id: context.per_arg_id,
+        })
     }
 
     pub fn items(&self) -> &[ScheduleItem<D>] {
@@ -78,8 +74,16 @@ impl<D: Device> Schedule<D> {
         for item in self.items() {
             let kernel = item.kernel()?;
             let ssa = kernel.lower(&Default::default())?;
+            let mut args = vec![];
+            for arg in ssa.args().iter() {
+                let arg_id = arg.0.id();
+                let arg = match self.per_arg_id.get(&arg_id) {
+                    Some(b) => b.clone(),
+                    None => crate::bail!("no arg for id {arg_id:?}"),
+                };
+                args.push((arg_id, arg))
+            }
             let func = self.device.compile(&ssa)?;
-            let args = vec![item.dst.clone()];
             funcs.push((func, args))
         }
         let device = self.device.clone();
@@ -113,20 +117,14 @@ impl<D: Device> CompiledSchedule<D> {
 
 struct Context<D: Device> {
     items: Vec<ScheduleItem<D>>,
-    args: Args<D>,
+    per_arg_id: std::collections::HashMap<ArgId, LazyBuffer<D>>,
     // TODO: Detect the shared parts of the computation graphs and ensure that these are realized
     // and converted to kernel arguments.
 }
 
 impl<D: Device> Context<D> {
     fn new() -> Self {
-        Self { items: vec![], args: vec![] }
-    }
-
-    fn take_args(&mut self) -> Args<D> {
-        let mut args = vec![];
-        std::mem::swap(&mut args, &mut self.args);
-        args
+        Self { items: vec![], per_arg_id: std::collections::HashMap::new() }
     }
 
     fn walk(&mut self, b: &LazyBuffer<D>) -> Result<Ast> {
@@ -151,18 +149,36 @@ impl<D: Device> Context<D> {
             Op::Const(cst) => crate::lang::op::cst(*cst),
             Op::Copy(_sto) => {
                 let arg_id = ArgId::new();
+                self.per_arg_id.insert(arg_id, b.clone());
                 // TODO: Add to args, and handle const properly.
                 crate::lang::op::load(arg_id, Layout::from_shape(shape), dtype)?
             }
             Op::Layout(_op, arg) => {
-                let ast = self.walk(arg)?;
-                let dst_id = ArgId::new();
-                let args = self.take_args();
-                self.items.push(ScheduleItem { ast, dst: (dst_id, b.clone()), args });
-                self.args.push((dst_id, b.clone()));
+                let dst_id = self.push_schedule_item(arg)?;
                 crate::lang::op::load(dst_id, Layout::from_shape(shape), dtype)?
             }
         };
         Ok(ast)
+    }
+
+    fn push_schedule_item(&mut self, buffer: &LazyBuffer<D>) -> Result<ArgId> {
+        let ast = self.walk(buffer)?;
+        let dst_id = ArgId::new();
+        self.per_arg_id.insert(dst_id, buffer.clone());
+        let mut arg_ids = ast.arg_ids();
+        arg_ids.insert(dst_id);
+        let args = arg_ids
+            .into_iter()
+            .map(|arg_id| {
+                let arg = match self.per_arg_id.get(&arg_id) {
+                    Some(b) => b.clone(),
+                    None => crate::bail!("no arg for id {arg_id:?}"),
+                };
+                Ok((arg_id, arg))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let si = ScheduleItem { ast, dst: (dst_id, buffer.clone()), args };
+        self.items.push(si);
+        Ok(dst_id)
     }
 }
