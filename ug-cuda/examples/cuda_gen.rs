@@ -1,7 +1,7 @@
 use ug::{Result, Slice};
 
 fn eval_add() -> Result<()> {
-    let kernel = ug::samples::ssa::simple_add(1024);
+    let kernel = ug::samples::ssa::simple_add(1024)?;
     println!("{kernel:?}");
     let mut w = std::io::stdout();
     ug_cuda::code_gen::gen(&mut w, "add", &kernel)?;
@@ -9,7 +9,7 @@ fn eval_add() -> Result<()> {
 }
 
 fn eval_dotprod() -> Result<()> {
-    let kernel = ug::samples::ssa::simple_dotprod(1024);
+    let kernel = ug::samples::ssa::simple_dotprod(1024)?;
     println!("{kernel:?}");
     let mut buf = vec![];
     ug_cuda::code_gen::gen(&mut buf, "dotprod", &kernel)?;

@@ -149,7 +149,7 @@ impl lang::Kernel {
                 ssa::Type::Ptr(v) => v,
                 ssa::Type::Value(_) => crate::bail!("non-pointer arguments are not supported yet"),
             };
-            instrs.push((id, SsaI::DefineGlobal { index, dtype }));
+            instrs.push((id, SsaI::DefineGlobal { index, dtype, arg_id: arg.id() }));
             per_arg.insert(arg.id(), id.to_varid());
         }
         for lang::Ops::Store { dst, src } in self.ops.iter() {
@@ -186,6 +186,6 @@ impl lang::Kernel {
     pub fn lower(&self) -> Result<ssa::Kernel> {
         let block = self.lower_b()?;
         let instrs = block.relocate()?;
-        Ok(ssa::Kernel { instrs })
+        ssa::Kernel::from_instrs(instrs)
     }
 }

@@ -66,37 +66,34 @@ impl std::fmt::Display for D {
 }
 
 pub fn gen<W: std::io::Write>(w: &mut W, func_name: &str, kernel: &ssa::Kernel) -> Result<()> {
-    let contains_reduce_local =
-        kernel.instrs.iter().any(|v| matches!(v, ssa::Instr::ReduceLocal { .. }));
+    let instrs = kernel.instrs();
+    let contains_reduce_local = instrs.iter().any(|v| matches!(v, ssa::Instr::ReduceLocal { .. }));
     if contains_reduce_local {
         bail!("TODO: add the reduce code if needed")
     }
-    let mut args = std::collections::HashMap::new();
-    for (idx, instr) in kernel.instrs.iter().enumerate() {
-        if let ssa::Instr::DefineGlobal { index, dtype } = instr {
-            args.insert(idx, (*index, *dtype));
-        }
-    }
-    let mut args = args.into_iter().collect::<Vec<_>>();
-    args.sort_by_key(|v| v.0);
     writeln!(w, "void {func_name}(")?;
-    for (arg_idx2, &(var_id, (arg_idx, dtype))) in args.iter().enumerate() {
-        if arg_idx != arg_idx2 {
-            bail!("unexpected arguments in kernel {args:?}")
-        }
-        let is_last = arg_idx == args.len() - 1;
+    for (arg_idx, &(arg, var_id)) in kernel.args().iter().enumerate() {
+        let is_last = arg_idx == kernel.args().len() - 1;
         let delim = if is_last { "" } else { "," };
-        writeln!(w, "  {}* {}{delim}", D(dtype), V(ssa::VarId::new(var_id)))?;
+        let ty_ = match arg.type_() {
+            ssa::Type::Value(dtype) => {
+                format!("{}", D(dtype))
+            }
+            ssa::Type::Ptr(dtype) => {
+                format!("{}*", D(dtype))
+            }
+        };
+        writeln!(w, "  {ty_} {}{delim}", V(ssa::VarId::new(var_id)))?
     }
     writeln!(w, ") {{")?;
 
     let mut depth = 0;
-    for (var_id, instr) in kernel.instrs.iter().enumerate() {
+    for (var_id, instr) in instrs.iter().enumerate() {
         use ssa::Instr as I;
         let var_id = V(ssa::VarId::new(var_id));
         let indent = " ".repeat(2 * depth + 2);
         match instr {
-            I::DefineGlobal { index: _, dtype: _ } => {}
+            I::DefineGlobal { index: _, dtype: _, arg_id: _ } => {}
             I::DefineLocal { dtype, size } => {
                 // TODO(laurent): should we enforce the alignment in some cases?
                 writeln!(w, "{indent}__shared__ {} {var_id}[{size}];", D(*dtype))?

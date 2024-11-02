@@ -199,8 +199,8 @@ impl Block {
                 SsaI::DefineLocal { size, dtype } => {
                     SsaI::DefineLocal { size: *size, dtype: *dtype }
                 }
-                SsaI::DefineGlobal { index, dtype } => {
-                    SsaI::DefineGlobal { index: *index, dtype: *dtype }
+                SsaI::DefineGlobal { index, arg_id, dtype } => {
+                    SsaI::DefineGlobal { index: *index, arg_id: *arg_id, dtype: *dtype }
                 }
                 SsaI::Barrier => SsaI::Barrier,
                 SsaI::ReduceLocal { op, arg, dtype } => {

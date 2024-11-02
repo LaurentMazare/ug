@@ -3,15 +3,19 @@ pub mod ssa {
     use crate::lang::ssa::{BinaryOp, Const, DType, Instr as I, Kernel, VarId, A};
     use crate::Result;
 
-    pub fn simple_add(vec_len: usize) -> Kernel {
+    fn arg(index: usize, dtype: DType) -> I {
+        I::DefineGlobal { index, dtype, arg_id: ssa::ArgId::new() }
+    }
+
+    pub fn simple_add(vec_len: usize) -> Result<Kernel> {
         let v = VarId::new;
         let a = |i| A::Var(VarId::new(i));
         let i32 = |i| A::Const(Const::I32(i));
         let dtype = DType::I32;
         let instrs = vec![
-            /* 0 */ I::DefineGlobal { index: 0, dtype: DType::I32 },
-            /* 1 */ I::DefineGlobal { index: 1, dtype: DType::I32 },
-            /* 2 */ I::DefineGlobal { index: 2, dtype: DType::I32 },
+            /* 0 */ arg(0, DType::I32),
+            /* 1 */ arg(1, DType::I32),
+            /* 2 */ arg(2, DType::I32),
             /* 3 */ I::Range { lo: i32(0), up: i32(vec_len as i32), end_idx: v(8) },
             /* 4 */ I::Load { src: v(1), offset: a(3), dtype },
             /* 5 */ I::Load { src: v(2), offset: a(3), dtype },
@@ -19,17 +23,17 @@ pub mod ssa {
             /* 7 */ I::Store { dst: v(0), offset: a(3), value: a(6), dtype },
             /* 8 */ I::EndRange { start_idx: v(3) },
         ];
-        Kernel { instrs }
+        Kernel::from_instrs(instrs)
     }
 
-    pub fn simple_dotprod(vec_len: usize) -> Kernel {
+    pub fn simple_dotprod(vec_len: usize) -> Result<Kernel> {
         let v = VarId::new;
         let a = |i| A::Var(VarId::new(i));
         let dtype = DType::F32;
         let instrs = vec![
-            /* 0 */ I::DefineGlobal { index: 0, dtype: DType::F32 },
-            /* 1 */ I::DefineGlobal { index: 1, dtype: DType::F32 },
-            /* 2 */ I::DefineGlobal { index: 2, dtype: DType::F32 },
+            /* 0 */ arg(0, DType::F32),
+            /* 1 */ arg(1, DType::F32),
+            /* 2 */ arg(2, DType::F32),
             /* 3 */ I::Const(Const::I32(0)),
             /* 4 */ I::Const(Const::I32(vec_len as i32)),
             /* 5 */ I::DefineAcc(Const::F32(0.)),
@@ -42,14 +46,14 @@ pub mod ssa {
             /* 12*/ I::EndRange { start_idx: v(6) },
             /* 13*/ I::Store { dst: v(0), offset: a(3), value: a(5), dtype },
         ];
-        Kernel { instrs }
+        Kernel::from_instrs(instrs)
     }
 
     pub fn exp(block_size: usize) -> Result<Kernel> {
         let mut b = crate::block::Block::empty();
         let dtype = DType::F32;
-        let src_i = b.push(I::DefineGlobal { index: 0, dtype: DType::F32 });
-        let dst_i = b.push(I::DefineGlobal { index: 1, dtype: DType::F32 });
+        let src_i = b.push(arg(0, DType::F32));
+        let dst_i = b.push(arg(1, DType::F32));
         let g_i = b.push(I::Special(ssa::Special::GridIdx));
         let l_i = b.push(I::Special(ssa::Special::LocalIdx));
         let off_i = b.mul(g_i, block_size as i32);
@@ -62,7 +66,8 @@ pub mod ssa {
             value: value_i.to_a(),
             dtype,
         });
-        Ok(Kernel { instrs: b.relocate()? })
+        let instrs = b.relocate()?;
+        Kernel::from_instrs(instrs)
     }
 
     pub fn exp_block(dim2: usize, block_size: usize) -> Result<Kernel> {
@@ -72,8 +77,8 @@ pub mod ssa {
 
         let mut b = crate::block::Block::empty();
         let dtype = DType::F32;
-        let src_i = b.push(I::DefineGlobal { index: 0, dtype: DType::F32 });
-        let dst_i = b.push(I::DefineGlobal { index: 1, dtype: DType::F32 });
+        let src_i = b.push(arg(0, DType::F32));
+        let dst_i = b.push(arg(1, DType::F32));
         let g_i = b.push(I::Special(ssa::Special::GridIdx));
         let l_i = b.push(I::Special(ssa::Special::LocalIdx));
         let off_i = b.mul(g_i, dim2 as i32);
@@ -90,14 +95,14 @@ pub mod ssa {
                 dtype,
             });
         }
-        Ok(Kernel { instrs: b.relocate()? })
+        Kernel::from_instrs(b.relocate()?)
     }
 
     pub fn softmax_barrier(_dim1: usize, dim2: usize) -> Result<Kernel> {
         let mut b = crate::block::Block::empty();
         let dtype = DType::F32;
-        let src_i = b.push(I::DefineGlobal { index: 0, dtype: DType::F32 });
-        let dst_i = b.push(I::DefineGlobal { index: 1, dtype: DType::F32 });
+        let src_i = b.push(arg(0, DType::F32));
+        let dst_i = b.push(arg(1, DType::F32));
         let sto_i = b.push(I::DefineLocal { size: (2 * dim2), dtype: DType::F32 }).to_varid();
         let g_i = b.push(I::Special(ssa::Special::GridIdx));
         let l_i = b.push(I::Special(ssa::Special::LocalIdx));
@@ -149,14 +154,14 @@ pub mod ssa {
             value: value_i.to_a(),
             dtype,
         });
-        Ok(Kernel { instrs: b.relocate()? })
+        Kernel::from_instrs(b.relocate()?)
     }
 
     pub fn softmax_reduce(_dim1: usize, dim2: usize) -> Result<Kernel> {
         let mut b = crate::block::Block::empty();
         let dtype = DType::F32;
-        let src_i = b.push(I::DefineGlobal { index: 0, dtype: DType::F32 });
-        let dst_i = b.push(I::DefineGlobal { index: 1, dtype: DType::F32 });
+        let src_i = b.push(arg(0, dtype));
+        let dst_i = b.push(arg(1, dtype));
         let g_i = b.push(I::Special(ssa::Special::GridIdx));
         let l_i = b.push(I::Special(ssa::Special::LocalIdx));
         let base_off_i = b.mul(g_i, dim2 as i32);
@@ -174,7 +179,7 @@ pub mod ssa {
             value: value_i.to_a(),
             dtype,
         });
-        Ok(Kernel { instrs: b.relocate()? })
+        Kernel::from_instrs(b.relocate()?)
     }
 
     pub fn softmax_block(_dim1: usize, dim2: usize, block_size: usize) -> Result<Kernel> {
@@ -184,8 +189,8 @@ pub mod ssa {
         let per_block = dim2 / block_size;
         let mut b = crate::block::Block::empty();
         let dtype = DType::F32;
-        let src_i = b.push(I::DefineGlobal { index: 0, dtype: DType::F32 });
-        let dst_i = b.push(I::DefineGlobal { index: 1, dtype: DType::F32 });
+        let src_i = b.push(arg(0, dtype));
+        let dst_i = b.push(arg(1, dtype));
         let g_i = b.push(I::Special(ssa::Special::GridIdx));
         let l_i = b.push(I::Special(ssa::Special::LocalIdx));
         let base_off_i = b.mul(g_i, dim2 as i32);
@@ -219,7 +224,7 @@ pub mod ssa {
             let value_i = b.binary(BinaryOp::Div, value_i, sum_i, dtype);
             b.push(I::Store { dst: dst_i.to_varid(), offset, value: value_i.to_a(), dtype });
         }
-        Ok(Kernel { instrs: b.relocate()? })
+        Kernel::from_instrs(b.relocate()?)
     }
 
     pub fn softmax(dim1: usize, dim2: usize) -> Result<Kernel> {

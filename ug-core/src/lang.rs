@@ -562,7 +562,7 @@ pub mod op {
 pub mod ssa {
     use crate::Result;
 
-    pub use super::{BinaryOp, Const, ReduceOp, Type, UnaryOp};
+    pub use super::{Arg, ArgId, BinaryOp, Const, ReduceOp, Type, UnaryOp};
     pub use crate::DType;
 
     #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -636,7 +636,7 @@ pub mod ssa {
     /// the final SSA.
     pub enum Instr {
         DefineAcc(Const),
-        DefineGlobal { index: usize, dtype: DType },
+        DefineGlobal { index: usize, arg_id: ArgId, dtype: DType },
         DefineLocal { size: usize, dtype: DType },
         Special(Special),
         Const(Const),
@@ -657,10 +657,33 @@ pub mod ssa {
 
     #[derive(Clone)]
     pub struct Kernel {
-        pub instrs: Vec<Instr>,
+        instrs: Vec<Instr>,
+        args: Vec<(Arg, usize)>,
     }
 
     impl Kernel {
+        pub fn instrs(&self) -> &[Instr] {
+            &self.instrs
+        }
+
+        pub fn args(&self) -> &[(Arg, usize)] {
+            &self.args
+        }
+
+        pub fn from_instrs(instrs: Vec<Instr>) -> crate::Result<Self> {
+            let mut args = vec![];
+            for (line_no, instr) in instrs.iter().enumerate() {
+                if let Instr::DefineGlobal { index, dtype, arg_id } = instr {
+                    if *index != args.len() {
+                        crate::bail!("unexpected order for arguments in kernel {instrs:?}")
+                    }
+                    let arg = Arg::new(*arg_id, Type::Ptr(*dtype));
+                    args.push((arg, line_no));
+                }
+            }
+            Ok(Self { instrs, args })
+        }
+
         pub fn flops_mem_per_thread(&self) -> Result<super::FlopsMem> {
             let mut flops = 0usize;
             let mut mem = 0usize;

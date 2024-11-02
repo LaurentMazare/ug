@@ -66,23 +66,21 @@ impl std::fmt::Display for D {
 }
 
 pub fn gen<W: std::io::Write>(w: &mut W, func_name: &str, kernel: &ssa::Kernel) -> Result<()> {
-    let mut args = std::collections::HashMap::new();
-    for (idx, instr) in kernel.instrs.iter().enumerate() {
-        if let ssa::Instr::DefineGlobal { index, dtype } = instr {
-            args.insert(idx, (*index, *dtype));
-        }
-    }
-    let mut args = args.into_iter().collect::<Vec<_>>();
-    args.sort_by_key(|v| v.0);
+    let instrs = kernel.instrs();
 
     writeln!(w, "#include <metal_stdlib>")?;
     writeln!(w, "using namespace metal;")?;
     writeln!(w, "[[kernel]] void {func_name}(")?;
-    for (arg_idx2, &(var_id, (arg_idx, dtype))) in args.iter().enumerate() {
-        if arg_idx != arg_idx2 {
-            ug::bail!("unexpected arguments in kernel {args:?}")
-        }
-        writeln!(w, "  device {}* {},", D(dtype), V(ssa::VarId::new(var_id)))?;
+    for &(arg, var_id) in kernel.args().iter() {
+        let ty_ = match arg.type_() {
+            ssa::Type::Value(dtype) => {
+                format!("{}", D(dtype))
+            }
+            ssa::Type::Ptr(dtype) => {
+                format!("device {}*", D(dtype))
+            }
+        };
+        writeln!(w, "  {ty_} {},", V(ssa::VarId::new(var_id)))?
     }
     writeln!(w, "  uint3 tgpig[[threadgroup_position_in_grid]],")?;
     writeln!(w, "  uint3 tpitg[[thread_position_in_threadgroup]],")?;
@@ -90,12 +88,12 @@ pub fn gen<W: std::io::Write>(w: &mut W, func_name: &str, kernel: &ssa::Kernel) 
     writeln!(w, ") {{")?;
 
     let mut depth = 0;
-    for (var_id, instr) in kernel.instrs.iter().enumerate() {
+    for (var_id, instr) in instrs.iter().enumerate() {
         use ssa::Instr as I;
         let var_id = V(ssa::VarId::new(var_id));
         let indent = " ".repeat(2 * depth + 2);
         match instr {
-            I::DefineGlobal { index: _, dtype: _ } => {}
+            I::DefineGlobal { arg_id: _, index: _, dtype: _ } => {}
             I::DefineLocal { dtype, size } => {
                 // TODO(laurent): should we enforce the alignment in some cases?
                 writeln!(w, "{indent}threadgroup {} {var_id}[{size}];", D(*dtype))?

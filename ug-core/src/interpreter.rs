@@ -192,13 +192,16 @@ pub fn eval_ssa<const N: usize>(
     _args: &[Value<N>],
     grid_idx: usize,
 ) -> Result<()> {
-    let mut context: Context<'_, N> = Context::new(buffers, kernel.instrs.len());
+    let instrs = kernel.instrs();
+    let mut context: Context<'_, N> = Context::new(buffers, instrs.len());
     let mut current_idx = 0;
 
-    while let Some(instr) = kernel.instrs.get(current_idx) {
+    while let Some(instr) = instrs.get(current_idx) {
         let var_id = VarId::new(current_idx);
         let (value, jump_idx) = match instr {
-            Instr::DefineGlobal { index, dtype: _ } => (Value::Ptr(BufId::new(*index)), None),
+            Instr::DefineGlobal { index, arg_id: _, dtype: _ } => {
+                (Value::Ptr(BufId::new(*index)), None)
+            }
             Instr::Const(Const::BF16(v)) => (Value::BF16(W::splat(*v)), None),
             Instr::Const(Const::F16(v)) => (Value::F16(W::splat(*v)), None),
             Instr::Const(Const::F32(v)) => (Value::F32(W::splat(*v)), None),
