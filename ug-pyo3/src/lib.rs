@@ -333,7 +333,7 @@ mod ssa {
 
         #[staticmethod]
         fn define_global(index: usize, dtype: DType) -> Self {
-            Self(ssa::Instr::DefineGlobal { index, dtype: dtype.0 })
+            Self(ssa::Instr::DefineGlobal { index, dtype: dtype.0, arg_id: ssa::ArgId::new() })
         }
 
         #[staticmethod]
@@ -376,9 +376,9 @@ mod ssa {
     #[pymethods]
     impl Kernel {
         #[new]
-        fn new(instrs: Vec<Instr>) -> Self {
+        fn new(instrs: Vec<Instr>) -> PyResult<Self> {
             let instrs = instrs.into_iter().map(|v| v.0).collect();
-            Self(ssa::Kernel { instrs })
+            Ok(Self(ssa::Kernel::from_instrs(instrs).map_err(w)?))
         }
 
         fn __str__(&self) -> String {
@@ -391,7 +391,7 @@ mod ssa {
         }
 
         fn to_list(&self) -> Vec<Instr> {
-            self.0.instrs.iter().map(|v| Instr(v.clone())).collect()
+            self.0.instrs().iter().map(|v| Instr(v.clone())).collect()
         }
 
         fn cuda_code(&self, name: &str) -> PyResult<String> {

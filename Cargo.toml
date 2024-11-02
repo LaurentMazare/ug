@@ -20,6 +20,7 @@ license = "MIT OR Apache-2.0"
 anyhow = { version = "1", features = ["backtrace"] }
 clap = { version = "4.5.20", features = ["derive"] }
 cudarc = { version = "0.12.1", features = ["f16", "cuda-version-from-build-system"] }
+gemm = { version = "0.18.0", features = ["wasm-simd128-enable"] }
 half = { version = "2.3.1", features = ["num-traits", "use-intrinsics", "rand_distr"] }
 libloading = "0.8.5"
 metal = "0.29.0"
