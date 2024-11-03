@@ -33,6 +33,16 @@ pub enum Error {
     // Box indirection to avoid large variant.
     #[error("{0:?}")]
     MatMulUnexpectedStriding(Box<MatMulUnexpectedStriding>),
+
+    #[error("cannot find tensor {path}")]
+    CannotFindTensor { path: String },
+
+    /// SafeTensor error.
+    #[error(transparent)]
+    SafeTensor(#[from] safetensors::SafeTensorError),
+
+    #[error("unsupported safetensor dtype {0:?}")]
+    UnsupportedSafeTensorDtype(safetensors::Dtype),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
