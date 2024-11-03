@@ -1,4 +1,4 @@
-use crate::{Device, Error, Result, Shape};
+use crate::{Device, Error, Result, Shape, Slice, WithDType};
 use safetensors::tensor as st;
 use safetensors::tensor::SafeTensors;
 use std::collections::HashMap;
@@ -81,9 +81,31 @@ impl MmapedSafetensors {
             st::Dtype::I64 => crate::DType::I64,
             dtype => crate::bail!("unsupported dtype for {name}: {dtype:?}"),
         };
-        let data = unsafe { device.allocate_uninit(dtype, shape.num_elements()) }?;
+        let mut slice = unsafe { device.allocate_uninit(dtype, shape.num_elements()) }?;
+        match dtype {
+            crate::DType::F16 => {
+                let data = convert_slice::<half::f16>(view.data());
+                slice.copy_host_to_device(&data)?
+            }
+            crate::DType::BF16 => {
+                let data = convert_slice::<half::bf16>(view.data());
+                slice.copy_host_to_device(&data)?
+            }
+            crate::DType::F32 => {
+                let data = convert_slice::<f32>(view.data());
+                slice.copy_host_to_device(&data)?
+            }
+            crate::DType::I32 => {
+                let data = convert_slice::<i32>(view.data());
+                slice.copy_host_to_device(&data)?
+            }
+            crate::DType::I64 => {
+                let data = convert_slice::<i64>(view.data());
+                slice.copy_host_to_device(&data)?
+            }
+        };
         // TODO: copy the data.
-        Ok((shape, data))
+        Ok((shape, slice))
     }
 
     pub fn tensors(&self) -> Vec<(String, st::TensorView<'_>)> {
@@ -105,5 +127,58 @@ impl MmapedSafetensors {
             }
         };
         Ok(self.safetensors[index].get().0.tensor(name)?)
+    }
+}
+
+pub fn convert_slice<T: WithDType>(data: &[u8]) -> std::borrow::Cow<'_, [T]> {
+    let size_in_bytes = T::DTYPE.size_in_bytes();
+    let elem_count = data.len() / size_in_bytes;
+    if (data.as_ptr() as usize) % size_in_bytes == 0 {
+        // SAFETY This is safe because we just checked that this
+        // was correctly aligned.
+        let data: &[T] =
+            unsafe { std::slice::from_raw_parts(data.as_ptr() as *const T, elem_count) };
+        std::borrow::Cow::Borrowed(data)
+    } else {
+        // XXX: We need to specify `T` here, otherwise the compiler will infer u8 because of the following cast
+        // Making this vector too small to fit a full f16/f32/f64 weights, resulting in out-of-bounds access
+        let mut c: Vec<T> = Vec::with_capacity(elem_count);
+        // SAFETY: We just created c, so the allocated memory is necessarily
+        // contiguous and non overlapping with the view's data.
+        // We're downgrading the `c` pointer from T to u8, which removes alignment
+        // constraints.
+        unsafe {
+            std::ptr::copy_nonoverlapping(data.as_ptr(), c.as_mut_ptr() as *mut u8, data.len());
+            c.set_len(elem_count)
+        }
+        std::borrow::Cow::Owned(c)
+    }
+}
+
+pub fn convert_slice_with_cast<T: Sized + Copy, U: WithDType, F: Fn(T) -> U>(
+    data: &[u8],
+    conv: F,
+) -> Vec<U> {
+    let size_in_bytes = std::mem::size_of::<T>();
+    let elem_count = data.len() / size_in_bytes;
+    if (data.as_ptr() as usize) % size_in_bytes == 0 {
+        // SAFETY This is safe because we just checked that this
+        // was correctly aligned.
+        let data: &[T] =
+            unsafe { std::slice::from_raw_parts(data.as_ptr() as *const T, elem_count) };
+        data.iter().map(|t| conv(*t)).collect::<Vec<_>>()
+    } else {
+        // XXX: We need to specify `T` here, otherwise the compiler will infer u8 because of the following cast
+        // Making this vector too small to fit a full f16/f32/f64 weights, resulting in out-of-bounds access
+        let mut c: Vec<T> = Vec::with_capacity(elem_count);
+        // SAFETY: We just created c, so the allocated memory is necessarily
+        // contiguous and non overlapping with the view's data.
+        // We're downgrading the `c` pointer from T to u8, which removes alignment
+        // constraints.
+        unsafe {
+            std::ptr::copy_nonoverlapping(data.as_ptr(), c.as_mut_ptr() as *mut u8, data.len());
+            c.set_len(elem_count)
+        }
+        c.into_iter().map(conv).collect::<Vec<_>>()
     }
 }

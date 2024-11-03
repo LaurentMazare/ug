@@ -64,7 +64,6 @@ impl Block {
         Ok(())
     }
 
-    #[allow(unused)]
     pub fn add(&mut self, src_id: Id, v: i32) -> Id {
         if v == 0 {
             src_id
@@ -127,7 +126,6 @@ impl Block {
         id
     }
 
-    #[allow(unused)]
     pub fn empty() -> Self {
         Self(vec![])
     }
