@@ -216,7 +216,7 @@ impl Device {
     }
 
     pub fn slice_from_values<D: WithDType>(&self, vs: &[D]) -> Result<Slice> {
-        let mut slice = unsafe { self.allocate_uninit::<D>(vs.len())? };
+        let mut slice = unsafe { self.allocate_uninit(D::DTYPE, vs.len())? };
         slice.copy_host_to_device(vs)?;
         Ok(slice)
     }
@@ -232,8 +232,8 @@ impl ug::Device for Device {
     type Func = Func;
 
     #[allow(clippy::missing_transmute_annotations)]
-    unsafe fn allocate_uninit<D: WithDType>(&self, len: usize) -> Result<Self::Slice> {
-        let inner = match D::DTYPE {
+    unsafe fn allocate_uninit(&self, dtype: ug::DType, len: usize) -> Result<Self::Slice> {
+        let inner = match dtype {
             ug::DType::F32 => {
                 let slice = self.device.alloc::<f32>(len).w()?;
                 SliceInner::F32(slice)

@@ -48,7 +48,7 @@ pub trait Device: Clone {
     type Func;
 
     #[allow(clippy::missing_safety_doc)]
-    unsafe fn allocate_uninit<DT: WithDType>(&self, len: usize) -> Result<Self::Slice>;
+    unsafe fn allocate_uninit(&self, dtype: DType, len: usize) -> Result<Self::Slice>;
     fn synchronize(&self) -> Result<()>;
     fn compile(&self, kernel: &crate::lang::ssa::Kernel) -> Result<Self::Func>;
     // TODO: currently const parameters are hardcoded in the kernel and new code is generated for

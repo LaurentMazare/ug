@@ -68,13 +68,7 @@ impl<D: Device> LazyBuffer<D> {
         if data.is_none() {
             // TODO: This should only apply to C contiguous tensors.
             let nels = self.layout.num_elements();
-            let v = match self.dtype {
-                DType::BF16 => self.device.allocate_uninit::<half::bf16>(nels)?,
-                DType::F16 => self.device.allocate_uninit::<half::f16>(nels)?,
-                DType::F32 => self.device.allocate_uninit::<f32>(nels)?,
-                DType::I32 => self.device.allocate_uninit::<i32>(nels)?,
-                DType::I64 => self.device.allocate_uninit::<i64>(nels)?,
-            };
+            let v = self.device.allocate_uninit(self.dtype, nels)?;
             *data = Some(v)
         }
         Ok(())
@@ -274,36 +268,17 @@ impl<D: Device> LazyBuffer<D> {
             crate::bail!("unexpected number of elements {} for shape {s:?}", data.len())
         }
         let dtype = data.dtype();
-        let data = match data {
-            crate::CpuStorage::BF16(data) => {
-                let mut slice = unsafe { device.allocate_uninit::<half::bf16>(data.len()) }?;
-                slice.copy_host_to_device(&data)?;
-                slice
-            }
-            crate::CpuStorage::F16(data) => {
-                let mut slice = unsafe { device.allocate_uninit::<half::f16>(data.len()) }?;
-                slice.copy_host_to_device(&data)?;
-                slice
-            }
-            crate::CpuStorage::F32(data) => {
-                let mut slice = unsafe { device.allocate_uninit::<f32>(data.len()) }?;
-                slice.copy_host_to_device(&data)?;
-                slice
-            }
-            crate::CpuStorage::I32(data) => {
-                let mut slice = unsafe { device.allocate_uninit::<i32>(data.len()) }?;
-                slice.copy_host_to_device(&data)?;
-                slice
-            }
-            crate::CpuStorage::I64(data) => {
-                let mut slice = unsafe { device.allocate_uninit::<i64>(data.len()) }?;
-                slice.copy_host_to_device(&data)?;
-                slice
-            }
+        let mut slice = unsafe { device.allocate_uninit(dtype, data.len()) }?;
+        match data {
+            crate::CpuStorage::BF16(data) => slice.copy_host_to_device(&data)?,
+            crate::CpuStorage::F16(data) => slice.copy_host_to_device(&data)?,
+            crate::CpuStorage::F32(data) => slice.copy_host_to_device(&data)?,
+            crate::CpuStorage::I32(data) => slice.copy_host_to_device(&data)?,
+            crate::CpuStorage::I64(data) => slice.copy_host_to_device(&data)?,
         };
         let inner = LazyBufferInner {
             id: Id::new(),
-            data: std::sync::Mutex::new(Some(data)),
+            data: std::sync::Mutex::new(Some(slice)),
             // We don't keep a hold on the Copy data here so as to reduce memory usage.
             op: Op::Copy,
             dtype,

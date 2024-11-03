@@ -41,7 +41,7 @@ fn schedule_cpu() -> Result<()> {
     };
     let ssa = kernel.lower(&Default::default())?;
     let func = cpu.compile(&ssa)?;
-    let mut buffer = unsafe { cpu.allocate_uninit::<f32>(10)? };
+    let mut buffer = unsafe { cpu.allocate_uninit(ug::DType::F32, 10)? };
     cpu.run(&func, &mut [&mut buffer])?;
     let buffer = buffer.to_vec::<f32>()?;
     assert_eq!(buffer, [42., 42., 42., 42., 42., 42., 42., 42., 42., 42.]);

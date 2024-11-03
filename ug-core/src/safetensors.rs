@@ -1,4 +1,4 @@
-use crate::{Error, Result};
+use crate::{Device, Error, Result, Shape};
 use safetensors::tensor as st;
 use safetensors::tensor::SafeTensors;
 use std::collections::HashMap;
@@ -65,9 +65,21 @@ impl MmapedSafetensors {
         Ok(Self { safetensors, routing: Some(routing) })
     }
 
-    // pub fn load(&self, name: &str, dev: &Device) -> Result<Tensor> {
-    //     self.get(name)?.load(dev)
-    // }
+    pub fn load<D: Device>(&self, name: &str, device: &D) -> Result<(Shape, D::Slice)> {
+        let view = self.get(name)?;
+        let shape: Shape = view.shape().into();
+        let dtype = match view.dtype() {
+            st::Dtype::BF16 => crate::DType::BF16,
+            st::Dtype::F16 => crate::DType::F16,
+            st::Dtype::F32 => crate::DType::F32,
+            st::Dtype::I32 => crate::DType::I32,
+            st::Dtype::I64 => crate::DType::I64,
+            dtype => crate::bail!("unsupported dtype for {name}: {dtype:?}"),
+        };
+        let data = unsafe { device.allocate_uninit(dtype, shape.num_elements()) }?;
+        // TODO: copy the data.
+        Ok((shape, data))
+    }
 
     pub fn tensors(&self) -> Vec<(String, st::TensorView<'_>)> {
         let mut tensors = vec![];

@@ -116,8 +116,8 @@ impl crate::Device for CpuDevice {
     type Slice = CpuStorage;
     type Func = Func;
 
-    unsafe fn allocate_uninit<DT: crate::WithDType>(&self, len: usize) -> Result<Self::Slice> {
-        let slice = match DT::DTYPE {
+    unsafe fn allocate_uninit(&self, dtype: DType, len: usize) -> Result<Self::Slice> {
+        let slice = match dtype {
             DType::BF16 => CpuStorage::BF16(vec![bf16::ZERO; len]),
             DType::F16 => CpuStorage::F16(vec![f16::ZERO; len]),
             DType::F32 => CpuStorage::F32(vec![0f32; len]),
