@@ -260,6 +260,28 @@ impl<D: Device> LazyBuffer<D> {
         Ok(lb)
     }
 
+    pub fn from_slice<S: Into<Shape>>(data: D::Slice, s: S) -> Result<Self> {
+        use crate::Slice;
+
+        let s: Shape = s.into();
+        let device = data.device().clone();
+        let dtype = data.dtype();
+        if s.num_elements() != data.len() {
+            crate::bail!("unexpected number of elements {} for shape {s:?}", data.len())
+        }
+        let inner = LazyBufferInner {
+            id: Id::new(),
+            data: std::sync::Mutex::new(Some(data)),
+            // We don't keep a hold on the Copy data here so as to reduce memory usage.
+            op: Op::Copy,
+            dtype,
+            device: device.clone(),
+            layout: Layout::from_shape(s),
+        };
+        let lb = LazyBuffer(std::sync::Arc::new(inner));
+        Ok(lb)
+    }
+
     pub fn copy<S: Into<Shape>>(data: crate::CpuStorage, s: S, device: &D) -> Result<Self> {
         use crate::Slice;
 
