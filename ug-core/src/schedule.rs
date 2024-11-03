@@ -136,6 +136,8 @@ pub struct CompiledSchedule<D: Device> {
 
 impl<D: Device> CompiledSchedule<D> {
     pub fn run(&self) -> Result<()> {
+        // TODO: We should avoid re-running kernels that have unchanged inputs, tracking
+        // variables/copies is likely enough for this.
         for func in self.funcs.iter() {
             match func {
                 Func::Kernel { func, args } => {
