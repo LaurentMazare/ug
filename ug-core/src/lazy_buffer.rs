@@ -30,9 +30,7 @@ pub enum Op<D: Device> {
     MatMul(LazyBuffer<D>, LazyBuffer<D>, (usize, usize, usize, usize)),
     Reduce(crate::lang::ReduceOp, LazyBuffer<D>, usize),
     Const(crate::lang::Const),
-    // TODO: maybe the following should be an Arc<Mutex<...>> or similar so that it can easily be
-    // modified?
-    Copy(crate::CpuStorage),
+    Copy,
     Layout(LayoutOp, LazyBuffer<D>),
 }
 
@@ -266,12 +264,45 @@ impl<D: Device> LazyBuffer<D> {
     }
 
     pub fn copy<S: Into<Shape>>(data: crate::CpuStorage, s: S, device: &D) -> Result<Self> {
+        use crate::Slice;
+
         let s: Shape = s.into();
+        if s.num_elements() != data.len() {
+            crate::bail!("unexpected number of elements {} for shape {s:?}", data.len())
+        }
         let dtype = data.dtype();
+        let data = match data {
+            crate::CpuStorage::BF16(data) => {
+                let mut slice = unsafe { device.allocate_uninit::<half::bf16>(data.len()) }?;
+                slice.copy_host_to_device(&data)?;
+                slice
+            }
+            crate::CpuStorage::F16(data) => {
+                let mut slice = unsafe { device.allocate_uninit::<half::f16>(data.len()) }?;
+                slice.copy_host_to_device(&data)?;
+                slice
+            }
+            crate::CpuStorage::F32(data) => {
+                let mut slice = unsafe { device.allocate_uninit::<f32>(data.len()) }?;
+                slice.copy_host_to_device(&data)?;
+                slice
+            }
+            crate::CpuStorage::I32(data) => {
+                let mut slice = unsafe { device.allocate_uninit::<i32>(data.len()) }?;
+                slice.copy_host_to_device(&data)?;
+                slice
+            }
+            crate::CpuStorage::I64(data) => {
+                let mut slice = unsafe { device.allocate_uninit::<i64>(data.len()) }?;
+                slice.copy_host_to_device(&data)?;
+                slice
+            }
+        };
         let inner = LazyBufferInner {
             id: Id::new(),
-            data: std::sync::Mutex::new(None),
-            op: Op::Copy(data),
+            data: std::sync::Mutex::new(Some(data)),
+            // We don't keep a hold on the Copy data here.
+            op: Op::Copy,
             dtype,
             device: device.clone(),
             layout: Layout::from_shape(s),

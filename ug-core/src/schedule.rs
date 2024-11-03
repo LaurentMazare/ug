@@ -228,10 +228,9 @@ impl<D: Device> Context<D> {
                 crate::lang::op::reduce(*op, ast, *axis)?
             }
             Op::Const(cst) => crate::lang::op::cst(*cst),
-            Op::Copy(_sto) => {
+            Op::Copy => {
                 let arg_id = ArgId::new();
                 self.per_arg_id.insert(arg_id, b.clone());
-                // TODO: Add to args, and handle const properly.
                 crate::lang::op::load(arg_id, Layout::from_shape(shape), dtype)?
             }
             Op::Layout(_op, arg) => {
