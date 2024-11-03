@@ -167,13 +167,16 @@ impl<D: Device> LazyBuffer<D> {
             crate::bail!("shape mismatch in matmul {lhs_dims:?} {rhs_dims:?}")
         }
         let bmnk = (lhs_bsz, m, n, k);
+        let mut shape = lhs_dims[..dim - 2].to_vec();
+        shape.push(m);
+        shape.push(n);
         let inner = LazyBufferInner {
             id: Id::new(),
             data: std::sync::Mutex::new(None),
             op: Op::MatMul(self.clone(), rhs, bmnk),
             dtype: self.dtype,
             device: self.device.clone(),
-            layout: Layout::from_shape((lhs_bsz, m, n)),
+            layout: Layout::from_shape(shape),
         };
         let lb = LazyBuffer(std::sync::Arc::new(inner));
         Ok(lb)
