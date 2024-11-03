@@ -65,7 +65,12 @@ impl MmapedSafetensors {
         Ok(Self { safetensors, routing: Some(routing) })
     }
 
-    pub fn load<D: Device>(&self, name: &str, device: &D) -> Result<(Shape, D::Slice)> {
+    pub fn load<D: Device>(&self, name: &str, device: &D) -> Result<crate::LazyBuffer<D>> {
+        let (shape, slice) = self.load_slice(name, device)?;
+        crate::LazyBuffer::from_slice(slice, shape)
+    }
+
+    pub fn load_slice<D: Device>(&self, name: &str, device: &D) -> Result<(Shape, D::Slice)> {
         let view = self.get(name)?;
         let shape: Shape = view.shape().into();
         let dtype = match view.dtype() {
