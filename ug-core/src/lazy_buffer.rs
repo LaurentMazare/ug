@@ -301,7 +301,7 @@ impl<D: Device> LazyBuffer<D> {
         let inner = LazyBufferInner {
             id: Id::new(),
             data: std::sync::Mutex::new(Some(data)),
-            // We don't keep a hold on the Copy data here.
+            // We don't keep a hold on the Copy data here so as to reduce memory usage.
             op: Op::Copy,
             dtype,
             device: device.clone(),

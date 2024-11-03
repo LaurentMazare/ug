@@ -77,3 +77,42 @@ fn schedule_mm() -> Result<()> {
     assert_eq!(data, [4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0]);
     Ok(())
 }
+
+#[test]
+fn lb_copy() -> Result<()> {
+    let cpu = ug::CpuDevice;
+    let shape = (2, 3);
+    let buf = ug::CpuStorage::F32(vec![0f32, 1f32, 2f32, 3f32, 4f32, 5f32]);
+    let lhs = LB::copy(buf, shape, &cpu)?;
+    let two = LB::cst(2., shape, &cpu)?;
+    let half = LB::cst(0.5, shape, &cpu)?;
+    let lb = lhs.binary(ug::lang::BinaryOp::Add, two)?;
+    let lb = lb.binary(ug::lang::BinaryOp::Mul, half)?;
+    let schedule = ug::Schedule::create_one(&lb)?;
+    let schedule = schedule.compile()?;
+    schedule.run()?;
+    let data = {
+        let d = lb.data().lock()?;
+        d.as_ref().unwrap().to_vec::<f32>()?
+    };
+    assert_eq!(data, [1.0, 1.5, 2.0, 2.5, 3.0, 3.5]);
+
+    {
+        let mut data = lhs.data().lock().unwrap();
+        let data = data.as_mut().unwrap();
+        if let ug::CpuStorage::F32(vs) = data {
+            vs[1] = 0.;
+            vs[2] = -8.;
+            vs[5] = -2.;
+        }
+    }
+
+    schedule.run()?;
+    let data = {
+        let d = lb.data().lock()?;
+        d.as_ref().unwrap().to_vec::<f32>()?
+    };
+    assert_eq!(data, [1.0, 1.0, -3.0, 2.5, 3.0, 0.0]);
+
+    Ok(())
+}
