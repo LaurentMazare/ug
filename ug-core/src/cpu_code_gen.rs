@@ -56,7 +56,7 @@ impl std::fmt::Display for D {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let dtype = match self.0 {
             ssa::DType::BF16 => "__bf16",
-            ssa::DType::F16 => "__fp16", // __fp16 on arm, _Float16 on x86
+            ssa::DType::F16 => "_Float16", // __fp16 on arm, _Float16 on x86
             ssa::DType::F32 => "float",
             ssa::DType::I32 => "int",
             ssa::DType::I64 => "long long",

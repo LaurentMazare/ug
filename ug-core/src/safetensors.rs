@@ -1,4 +1,4 @@
-use crate::{Device, Error, Result, Shape, Slice, WithDType};
+use crate::{DType, Device, Error, Result, Shape, Slice, WithDType};
 use safetensors::tensor as st;
 use safetensors::tensor::SafeTensors;
 use std::collections::HashMap;
@@ -74,37 +74,36 @@ impl MmapedSafetensors {
         let view = self.get(name)?;
         let shape: Shape = view.shape().into();
         let dtype = match view.dtype() {
-            st::Dtype::BF16 => crate::DType::BF16,
-            st::Dtype::F16 => crate::DType::F16,
-            st::Dtype::F32 => crate::DType::F32,
-            st::Dtype::I32 => crate::DType::I32,
-            st::Dtype::I64 => crate::DType::I64,
+            st::Dtype::BF16 => DType::BF16,
+            st::Dtype::F16 => DType::F16,
+            st::Dtype::F32 => DType::F32,
+            st::Dtype::I32 => DType::I32,
+            st::Dtype::I64 => DType::I64,
             dtype => crate::bail!("unsupported dtype for {name}: {dtype:?}"),
         };
         let mut slice = unsafe { device.allocate_uninit(dtype, shape.num_elements()) }?;
         match dtype {
-            crate::DType::F16 => {
+            DType::F16 => {
                 let data = convert_slice::<half::f16>(view.data());
                 slice.copy_host_to_device(&data)?
             }
-            crate::DType::BF16 => {
+            DType::BF16 => {
                 let data = convert_slice::<half::bf16>(view.data());
                 slice.copy_host_to_device(&data)?
             }
-            crate::DType::F32 => {
+            DType::F32 => {
                 let data = convert_slice::<f32>(view.data());
                 slice.copy_host_to_device(&data)?
             }
-            crate::DType::I32 => {
+            DType::I32 => {
                 let data = convert_slice::<i32>(view.data());
                 slice.copy_host_to_device(&data)?
             }
-            crate::DType::I64 => {
+            DType::I64 => {
                 let data = convert_slice::<i64>(view.data());
                 slice.copy_host_to_device(&data)?
             }
         };
-        // TODO: copy the data.
         Ok((shape, slice))
     }
 
@@ -152,33 +151,5 @@ pub fn convert_slice<T: WithDType>(data: &[u8]) -> std::borrow::Cow<'_, [T]> {
             c.set_len(elem_count)
         }
         std::borrow::Cow::Owned(c)
-    }
-}
-
-pub fn convert_slice_with_cast<T: Sized + Copy, U: WithDType, F: Fn(T) -> U>(
-    data: &[u8],
-    conv: F,
-) -> Vec<U> {
-    let size_in_bytes = std::mem::size_of::<T>();
-    let elem_count = data.len() / size_in_bytes;
-    if (data.as_ptr() as usize) % size_in_bytes == 0 {
-        // SAFETY This is safe because we just checked that this
-        // was correctly aligned.
-        let data: &[T] =
-            unsafe { std::slice::from_raw_parts(data.as_ptr() as *const T, elem_count) };
-        data.iter().map(|t| conv(*t)).collect::<Vec<_>>()
-    } else {
-        // XXX: We need to specify `T` here, otherwise the compiler will infer u8 because of the following cast
-        // Making this vector too small to fit a full f16/f32/f64 weights, resulting in out-of-bounds access
-        let mut c: Vec<T> = Vec::with_capacity(elem_count);
-        // SAFETY: We just created c, so the allocated memory is necessarily
-        // contiguous and non overlapping with the view's data.
-        // We're downgrading the `c` pointer from T to u8, which removes alignment
-        // constraints.
-        unsafe {
-            std::ptr::copy_nonoverlapping(data.as_ptr(), c.as_mut_ptr() as *mut u8, data.len());
-            c.set_len(elem_count)
-        }
-        c.into_iter().map(conv).collect::<Vec<_>>()
     }
 }

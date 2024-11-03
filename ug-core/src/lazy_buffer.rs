@@ -125,6 +125,22 @@ impl<D: Device> LazyBuffer<D> {
         Ok(lb)
     }
 
+    pub fn cast(&self, dtype: DType) -> Result<Self> {
+        if self.dtype == dtype {
+            return Ok(self.clone());
+        }
+        let inner = LazyBufferInner {
+            id: Id::new(),
+            data: std::sync::Mutex::new(None),
+            op: Op::Unary(crate::lang::UnaryOp::Cast, self.clone()),
+            dtype,
+            layout: Layout::from_shape(self.shape()),
+            device: self.device.clone(),
+        };
+        let lb = LazyBuffer(std::sync::Arc::new(inner));
+        Ok(lb)
+    }
+
     pub fn binary(&self, op: crate::lang::BinaryOp, rhs: Self) -> Result<Self> {
         // TODO: dtype/op/shape checks.
         let inner = LazyBufferInner {
