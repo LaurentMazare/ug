@@ -70,6 +70,16 @@ impl MmapedSafetensors {
         crate::LazyBuffer::from_slice(slice, shape)
     }
 
+    pub fn load_with_cast<D: Device>(
+        &self,
+        name: &str,
+        dtype: DType,
+        device: &D,
+    ) -> Result<crate::LazyBuffer<D>> {
+        let (shape, slice) = self.load_slice_with_cast(name, dtype, device)?;
+        crate::LazyBuffer::from_slice(slice, shape)
+    }
+
     pub fn load_slice<D: Device>(&self, name: &str, device: &D) -> Result<(Shape, D::Slice)> {
         let view = self.get(name)?;
         let shape: Shape = view.shape().into();
@@ -100,6 +110,159 @@ impl MmapedSafetensors {
                 slice.copy_host_to_device(&data)?
             }
             DType::I64 => {
+                let data = convert_slice::<i64>(view.data());
+                slice.copy_host_to_device(&data)?
+            }
+        };
+        Ok((shape, slice))
+    }
+
+    pub fn load_slice_with_cast<D: Device>(
+        &self,
+        name: &str,
+        dst_dtype: DType,
+        device: &D,
+    ) -> Result<(Shape, D::Slice)> {
+        let view = self.get(name)?;
+        let shape: Shape = view.shape().into();
+        let src_dtype = match view.dtype() {
+            st::Dtype::BF16 => DType::BF16,
+            st::Dtype::F16 => DType::F16,
+            st::Dtype::F32 => DType::F32,
+            st::Dtype::I32 => DType::I32,
+            st::Dtype::I64 => DType::I64,
+            dtype => crate::bail!("unsupported dtype for {name}: {dtype:?}"),
+        };
+        if dst_dtype == src_dtype {
+            return self.load_slice(name, device);
+        }
+        let mut slice = unsafe { device.allocate_uninit(dst_dtype, shape.num_elements()) }?;
+        // The pattern matching below is overly verbose but new dtypes are not added that often
+        match (src_dtype, dst_dtype) {
+            // BF16 convs
+            (DType::BF16, DType::BF16) => {
+                let data = convert_slice::<half::bf16>(view.data());
+                slice.copy_host_to_device(&data)?
+            }
+            (DType::BF16, DType::F16) => {
+                let data = convert_slice::<half::bf16>(view.data());
+                let data: Vec<_> =
+                    data.iter().map(|v| half::f16::from_f32(f32::from(*v))).collect();
+                slice.copy_host_to_device(&data)?
+            }
+            (DType::BF16, DType::F32) => {
+                let data = convert_slice::<half::bf16>(view.data());
+                let data: Vec<_> = data.iter().map(|v| f32::from(*v)).collect();
+                slice.copy_host_to_device(&data)?
+            }
+            (DType::BF16, DType::I32) => {
+                let data = convert_slice::<half::bf16>(view.data());
+                let data: Vec<_> = data.iter().map(|v| f32::from(*v) as i32).collect();
+                slice.copy_host_to_device(&data)?
+            }
+            (DType::BF16, DType::I64) => {
+                let data = convert_slice::<half::bf16>(view.data());
+                let data: Vec<_> = data.iter().map(|v| f32::from(*v) as i32).collect();
+                slice.copy_host_to_device(&data)?
+            }
+            // F16 convs
+            (DType::F16, DType::BF16) => {
+                let data = convert_slice::<half::f16>(view.data());
+                let data: Vec<_> =
+                    data.iter().map(|v| half::bf16::from_f32(f32::from(*v))).collect();
+                slice.copy_host_to_device(&data)?
+            }
+            (DType::F16, DType::F16) => {
+                let data = convert_slice::<half::f16>(view.data());
+                slice.copy_host_to_device(&data)?
+            }
+            (DType::F16, DType::F32) => {
+                let data = convert_slice::<half::f16>(view.data());
+                let data: Vec<_> = data.iter().map(|v| f32::from(*v)).collect();
+                slice.copy_host_to_device(&data)?
+            }
+            (DType::F16, DType::I32) => {
+                let data = convert_slice::<half::f16>(view.data());
+                let data: Vec<_> = data.iter().map(|v| f32::from(*v) as i32).collect();
+                slice.copy_host_to_device(&data)?
+            }
+            (DType::F16, DType::I64) => {
+                let data = convert_slice::<half::f16>(view.data());
+                let data: Vec<_> = data.iter().map(|v| f32::from(*v) as i32).collect();
+                slice.copy_host_to_device(&data)?
+            }
+            // F32 convs
+            (DType::F32, DType::BF16) => {
+                let data = convert_slice::<f32>(view.data());
+                let data: Vec<_> = data.iter().map(|v| half::bf16::from_f32(*v)).collect();
+                slice.copy_host_to_device(&data)?
+            }
+            (DType::F32, DType::F16) => {
+                let data = convert_slice::<f32>(view.data());
+                let data: Vec<_> = data.iter().map(|v| half::f16::from_f32(*v)).collect();
+                slice.copy_host_to_device(&data)?
+            }
+            (DType::F32, DType::F32) => {
+                let data = convert_slice::<f32>(view.data());
+                slice.copy_host_to_device(&data)?
+            }
+            (DType::F32, DType::I32) => {
+                let data = convert_slice::<f32>(view.data());
+                let data: Vec<_> = data.iter().map(|v| *v as i32).collect();
+                slice.copy_host_to_device(&data)?
+            }
+            (DType::F32, DType::I64) => {
+                let data = convert_slice::<f32>(view.data());
+                let data: Vec<_> = data.iter().map(|v| *v as i64).collect();
+                slice.copy_host_to_device(&data)?
+            }
+            // I32 convs
+            (DType::I32, DType::BF16) => {
+                let data = convert_slice::<i32>(view.data());
+                let data: Vec<_> = data.iter().map(|v| half::bf16::from_f32(*v as f32)).collect();
+                slice.copy_host_to_device(&data)?
+            }
+            (DType::I32, DType::F16) => {
+                let data = convert_slice::<i32>(view.data());
+                let data: Vec<_> = data.iter().map(|v| half::f16::from_f32(*v as f32)).collect();
+                slice.copy_host_to_device(&data)?
+            }
+            (DType::I32, DType::F32) => {
+                let data = convert_slice::<i32>(view.data());
+                let data: Vec<_> = data.iter().map(|v| *v as f32).collect();
+                slice.copy_host_to_device(&data)?
+            }
+            (DType::I32, DType::I32) => {
+                let data = convert_slice::<i32>(view.data());
+                slice.copy_host_to_device(&data)?
+            }
+            (DType::I32, DType::I64) => {
+                let data = convert_slice::<i32>(view.data());
+                let data: Vec<_> = data.iter().map(|v| *v as i64).collect();
+                slice.copy_host_to_device(&data)?
+            }
+            // I64 convs
+            (DType::I64, DType::BF16) => {
+                let data = convert_slice::<i64>(view.data());
+                let data: Vec<_> = data.iter().map(|v| half::bf16::from_f32(*v as f32)).collect();
+                slice.copy_host_to_device(&data)?
+            }
+            (DType::I64, DType::F16) => {
+                let data = convert_slice::<i64>(view.data());
+                let data: Vec<_> = data.iter().map(|v| half::f16::from_f32(*v as f32)).collect();
+                slice.copy_host_to_device(&data)?
+            }
+            (DType::I64, DType::F32) => {
+                let data = convert_slice::<i64>(view.data());
+                let data: Vec<_> = data.iter().map(|v| *v as f32).collect();
+                slice.copy_host_to_device(&data)?
+            }
+            (DType::I64, DType::I32) => {
+                let data = convert_slice::<i64>(view.data());
+                let data: Vec<_> = data.iter().map(|v| *v as i32).collect();
+                slice.copy_host_to_device(&data)?
+            }
+            (DType::I64, DType::I64) => {
                 let data = convert_slice::<i64>(view.data());
                 slice.copy_host_to_device(&data)?
             }

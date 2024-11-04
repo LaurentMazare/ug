@@ -12,12 +12,7 @@ fn main() -> Result<()> {
         let data = data.to_vec::<half::bf16>()?;
         println!("{:?}", &data[..10]);
     };
-    let tensor = tensor.cast(ug::DType::F32)?;
-    println!("{:?} {:?} {}", tensor.shape(), tensor.dtype(), tensor.realized());
-
-    let schedule = ug::Schedule::create_one(&tensor)?;
-    let schedule = schedule.compile()?;
-    schedule.run()?;
+    let tensor = st.load_with_cast("model.embed_tokens.weight", ug::DType::F32, dev)?;
     println!("{:?} {:?} {}", tensor.shape(), tensor.dtype(), tensor.realized());
     {
         let data = tensor.data().lock().unwrap();
