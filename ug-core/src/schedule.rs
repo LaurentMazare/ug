@@ -190,9 +190,8 @@ impl<D: Device> CompiledSchedule<D> {
                             Ok(lock)
                         })
                         .collect::<Result<Vec<_>>>()?;
-                    let mut locks =
-                        locks.iter_mut().map(|v| v.as_mut().unwrap()).collect::<Vec<_>>();
-                    f(&mut locks)?
+                    let locks = locks.iter_mut().map(|v| v.as_mut().unwrap()).collect::<Vec<_>>();
+                    f(locks)?
                 }
             }
         }
@@ -269,8 +268,7 @@ impl<D: Device> Context<D> {
                     let arg_id = self.push_schedule_item(arg)?;
                     args.push((arg_id, arg.clone()))
                 }
-                let dst_id = ArgId::new();
-                self.per_arg_id.insert(dst_id, b.clone());
+                let dst_id = args[0].0;
                 self.items.push(ScheduleItem::Custom { f: f.clone(), args });
                 crate::lang::op::load(dst_id, Layout::from_shape(shape), dtype)?
             }

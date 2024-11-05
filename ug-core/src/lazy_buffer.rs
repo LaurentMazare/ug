@@ -1,6 +1,6 @@
 use crate::{Const, DType, Device, Layout, Result, Shape};
 
-pub type CustomF<S> = std::sync::Arc<dyn Fn(&mut [&mut S]) -> Result<()>>;
+pub type CustomF<S> = std::sync::Arc<dyn Fn(Vec<&mut S>) -> Result<()>>;
 
 /// Unique identifier for LazyBuffer.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -150,6 +150,21 @@ impl<D: Device> LazyBuffer<D> {
             id: Id::new(),
             data: std::sync::Mutex::new(None),
             op: Op::Binary(op, self.clone(), rhs),
+            dtype: self.dtype,
+            device: self.device.clone(),
+            layout: Layout::from_shape(self.shape()),
+        };
+        let lb = LazyBuffer(std::sync::Arc::new(inner));
+        Ok(lb)
+    }
+
+    pub fn custom(&self, f: CustomF<D::Slice>, mut args: Vec<Self>) -> Result<Self> {
+        // TODO: dtype/op/shape checks.
+        args.push(self.clone());
+        let inner = LazyBufferInner {
+            id: Id::new(),
+            data: std::sync::Mutex::new(None),
+            op: Op::Custom { f, args },
             dtype: self.dtype,
             device: self.device.clone(),
             layout: Layout::from_shape(self.shape()),

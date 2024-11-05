@@ -116,3 +116,52 @@ fn lb_copy() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn lb_custom() -> Result<()> {
+    let cpu = ug::CpuDevice;
+    let add_one = |mut v: Vec<&mut ug::CpuStorage>| -> Result<()> {
+        match &mut v[0] {
+            ug::CpuStorage::F32(v) => {
+                for elem in v.iter_mut() {
+                    *elem += 1.0
+                }
+            }
+            _ => ug::bail!("unexpected dtype"),
+        }
+        Ok(())
+    };
+    let shape = (2, 3);
+    let buf = ug::CpuStorage::F32(vec![0f32, 1f32, 2f32, 3f32, 4f32, 5f32]);
+    let buf_lb = LB::copy(buf, shape, &cpu)?;
+    let two_lb = LB::cst(2., shape, &cpu)?;
+    let lb = buf_lb.custom(std::sync::Arc::new(add_one), vec![])?;
+    let lb = lb.binary(ug::lang::BinaryOp::Mul, two_lb)?;
+    let schedule = ug::Schedule::create_one(&lb)?;
+    let schedule = schedule.compile()?;
+    schedule.run()?;
+    let data = {
+        let d = lb.data().lock()?;
+        d.as_ref().unwrap().to_vec::<f32>()?
+    };
+    assert_eq!(data, [2., 4., 6., 8., 10., 12.]);
+
+    {
+        let mut data = buf_lb.data().lock().unwrap();
+        let data = data.as_mut().unwrap();
+        if let ug::CpuStorage::F32(vs) = data {
+            vs[1] = 0.;
+            vs[2] = -8.;
+            vs[5] = -2.;
+        }
+    }
+
+    schedule.run()?;
+    let data = {
+        let d = lb.data().lock()?;
+        d.as_ref().unwrap().to_vec::<f32>()?
+    };
+    assert_eq!(data, [4., 2., -14., 10., 12., -2.]);
+
+    Ok(())
+}
