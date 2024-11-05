@@ -1,5 +1,7 @@
 use crate::{Const, DType, Device, Layout, Result, Shape};
 
+pub type CustomF<S> = std::sync::Arc<dyn Fn(&mut [&mut S]) -> Result<()>>;
+
 /// Unique identifier for LazyBuffer.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Id(usize);
@@ -32,6 +34,7 @@ pub enum Op<D: Device> {
     Const(crate::lang::Const),
     Copy,
     Layout(LayoutOp, LazyBuffer<D>),
+    Custom { f: CustomF<D::Slice>, args: Vec<LazyBuffer<D>> },
 }
 
 pub struct LazyBuffer<D: Device>(std::sync::Arc<LazyBufferInner<D>>);

@@ -13,7 +13,7 @@ fn schedule_interpret() -> Result<()> {
     for item in items.iter() {
         let kernel = match item {
             ug::ScheduleItem::Kernel(k) => k.kernel()?,
-            ug::ScheduleItem::MatMul { .. } => ug::bail!("unexpected matmul"),
+            _ => ug::bail!("unexpected item"),
         };
         let ssa = kernel.lower(&Default::default())?;
         println!("{ssa:?}");
@@ -37,7 +37,7 @@ fn schedule_cpu() -> Result<()> {
     assert_eq!(items.len(), 1);
     let kernel = match &items[0] {
         ug::ScheduleItem::Kernel(k) => k.kernel()?,
-        ug::ScheduleItem::MatMul { .. } => ug::bail!("unexpected matmul"),
+        _ => ug::bail!("unexpected item"),
     };
     let ssa = kernel.lower(&Default::default())?;
     let func = cpu.compile(&ssa)?;

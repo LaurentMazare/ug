@@ -41,6 +41,10 @@ pub enum ScheduleItem<D: Device> {
         rhs: LazyBuffer<D>,
         bmnk: (usize, usize, usize, usize),
     },
+    Custom {
+        f: crate::lazy_buffer::CustomF<D::Slice>,
+        args: Args<D>,
+    },
 }
 
 pub struct Schedule<D: Device> {
@@ -96,6 +100,9 @@ impl<D: Device> Schedule<D> {
                     rhs: rhs.clone(),
                     bmnk: *bmnk,
                 },
+                ScheduleItem::Custom { f, args } => {
+                    Func::Custom { f: f.clone(), args: args.to_vec() }
+                }
                 ScheduleItem::Kernel(item) => {
                     let kernel = item.kernel()?;
                     let ssa = kernel.lower(&Default::default())?;
@@ -126,6 +133,10 @@ pub enum Func<D: Device> {
         lhs: LazyBuffer<D>,
         rhs: LazyBuffer<D>,
         bmnk: (usize, usize, usize, usize),
+    },
+    Custom {
+        f: crate::lazy_buffer::CustomF<D::Slice>,
+        args: Args<D>,
     },
 }
 
@@ -169,6 +180,19 @@ impl<D: Device> CompiledSchedule<D> {
                     let rhs = rhs.data().lock()?;
                     let rhs = rhs.as_ref().unwrap();
                     self.device.matmul(dst, lhs, rhs, *bmnk, lhs_l, rhs_l)?;
+                }
+                Func::Custom { f, args } => {
+                    let mut locks = args
+                        .iter()
+                        .map(|(_id, lb)| {
+                            unsafe { lb.maybe_allocate_uninit()? };
+                            let lock = lb.data().lock()?;
+                            Ok(lock)
+                        })
+                        .collect::<Result<Vec<_>>>()?;
+                    let mut locks =
+                        locks.iter_mut().map(|v| v.as_mut().unwrap()).collect::<Vec<_>>();
+                    f(&mut locks)?
                 }
             }
         }
@@ -237,6 +261,17 @@ impl<D: Device> Context<D> {
             }
             Op::Layout(_op, arg) => {
                 let dst_id = self.push_schedule_item(arg)?;
+                crate::lang::op::load(dst_id, Layout::from_shape(shape), dtype)?
+            }
+            Op::Custom { f, args: b_args } => {
+                let mut args = Vec::with_capacity(b_args.len());
+                for arg in b_args.iter() {
+                    let arg_id = self.push_schedule_item(arg)?;
+                    args.push((arg_id, arg.clone()))
+                }
+                let dst_id = ArgId::new();
+                self.per_arg_id.insert(dst_id, b.clone());
+                self.items.push(ScheduleItem::Custom { f: f.clone(), args });
                 crate::lang::op::load(dst_id, Layout::from_shape(shape), dtype)?
             }
         };
