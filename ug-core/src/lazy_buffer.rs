@@ -158,6 +158,20 @@ impl<D: Device> LazyBuffer<D> {
         Ok(lb)
     }
 
+    // TODO: Should this be marked as unsafe?
+    pub fn alloc_uninit<S: Into<Shape>>(dtype: DType, s: S, device: &D) -> Result<Self> {
+        let inner = LazyBufferInner {
+            id: Id::new(),
+            data: std::sync::Mutex::new(None),
+            op: Op::Copy,
+            dtype,
+            device: device.clone(),
+            layout: Layout::from_shape(s.into()),
+        };
+        let lb = LazyBuffer(std::sync::Arc::new(inner));
+        Ok(lb)
+    }
+
     pub fn custom(&self, f: CustomF<D::Slice>, mut args: Vec<Self>) -> Result<Self> {
         // TODO: dtype/op/shape checks.
         args.push(self.clone());
