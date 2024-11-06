@@ -1,6 +1,8 @@
 // wget https://huggingface.co/HuggingFaceTB/SmolLM2-135M/resolve/main/model.safetensors
 #![allow(unused)]
+use rayon::prelude::*;
 use ug::{CpuDevice, CpuStorage, LazyBuffer, Result, Slice, WithDType};
+
 type LB = LazyBuffer<CpuDevice>;
 
 const UNK_TOKEN: u32 = 0;
@@ -23,6 +25,27 @@ fn index_select(src: &LB, ids: &[u32]) -> Result<LB> {
         Ok(())
     };
     let out = out.custom(std::sync::Arc::new(f), vec![src.clone()])?;
+    Ok(out)
+}
+
+fn rms_norm(src: &LB, alpha: &LB, eps: f32) -> Result<LB> {
+    let (d, dim_m1) = src.shape().dims2()?;
+    let out = LB::cst(0f32, (d, dim_m1), &CpuDevice)?;
+    let f = move |mut vs: Vec<&mut CpuStorage>| -> Result<()> {
+        let [src, alpha, mut dst]: [&mut CpuStorage; 3] = vs.try_into().unwrap();
+        let dst = dst.data_mut::<f32>()?;
+        let src = src.data::<f32>()?;
+        let alpha = alpha.data::<f32>()?;
+        src.par_chunks(dim_m1).zip(dst.par_chunks_mut(dim_m1)).for_each(|(src, dst)| {
+            let sum2 = src.iter().map(|&v| v * v).sum::<f32>();
+            let m = (sum2 / dim_m1 as f32 + eps).sqrt();
+            for ((d, s), alpha) in dst.iter_mut().zip(src.iter()).zip(alpha) {
+                *d = *s / m * *alpha
+            }
+        });
+        Ok(())
+    };
+    let out = out.custom(std::sync::Arc::new(f), vec![src.clone(), alpha.clone()])?;
     Ok(out)
 }
 
