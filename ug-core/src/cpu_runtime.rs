@@ -84,6 +84,24 @@ impl CpuStorage {
             Self::I64(v) => CpuStorageRef::I64(v.as_slice()),
         }
     }
+
+    pub fn as_mut_ref(&mut self) -> CpuStorageRefMut<'_> {
+        match self {
+            Self::BF16(v) => CpuStorageRefMut::BF16(v.as_mut_slice()),
+            Self::F16(v) => CpuStorageRefMut::F16(v.as_mut_slice()),
+            Self::F32(v) => CpuStorageRefMut::F32(v.as_mut_slice()),
+            Self::I32(v) => CpuStorageRefMut::I32(v.as_mut_slice()),
+            Self::I64(v) => CpuStorageRefMut::I64(v.as_mut_slice()),
+        }
+    }
+
+    pub fn data<T: crate::WithDType>(&self) -> Result<&[T]> {
+        T::from_cpu_storage(self.as_ref())
+    }
+
+    pub fn data_mut<T: crate::WithDType>(&mut self) -> Result<&mut [T]> {
+        T::from_cpu_storage_mut(self.as_mut_ref())
+    }
 }
 
 impl CpuStorageRef<'_> {

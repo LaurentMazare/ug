@@ -1,6 +1,6 @@
 // wget https://huggingface.co/HuggingFaceTB/SmolLM2-135M/resolve/main/model.safetensors
 #![allow(unused)]
-use ug::{CpuDevice, CpuStorage, LazyBuffer, Result, Slice};
+use ug::{CpuDevice, CpuStorage, LazyBuffer, Result, Slice, WithDType};
 type LB = LazyBuffer<CpuDevice>;
 
 const UNK_TOKEN: u32 = 0;
@@ -14,14 +14,8 @@ fn index_select(src: &LB, ids: &[u32]) -> Result<LB> {
     let ids = ids.to_vec();
     let f = move |mut vs: Vec<&mut CpuStorage>| -> Result<()> {
         let [src, mut dst]: [&mut CpuStorage; 2] = vs.try_into().unwrap();
-        let dst = match &mut dst {
-            CpuStorage::F32(vs) => vs,
-            _ => ug::bail!("unexpected embeddings type"),
-        };
-        let src = match &src {
-            CpuStorage::F32(vs) => vs,
-            _ => ug::bail!("unexpected embeddings type"),
-        };
+        let dst = dst.data_mut::<f32>()?;
+        let src = src.data::<f32>()?;
         for (i, id) in ids.iter().enumerate() {
             let id = *id as usize;
             dst[i * h..(i + 1) * h].copy_from_slice(&src[id * h..(id + 1) * h]);
