@@ -135,7 +135,7 @@ fn lb_custom() -> Result<()> {
     let buf = ug::CpuStorage::F32(vec![0f32, 1f32, 2f32, 3f32, 4f32, 5f32]);
     let buf_lb = LB::copy(buf, shape, &cpu)?;
     let two_lb = LB::cst(2., shape, &cpu)?;
-    let lb = buf_lb.custom(std::sync::Arc::new(add_one), vec![])?;
+    let lb = buf_lb.custom(add_one, vec![])?;
     let lb = lb.binary(ug::lang::BinaryOp::Mul, two_lb)?;
     let schedule = ug::Schedule::create_one(&lb)?;
     let schedule = schedule.compile()?;

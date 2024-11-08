@@ -24,7 +24,7 @@ fn index_select(src: &LB, ids: &[u32]) -> Result<LB> {
         }
         Ok(())
     };
-    let out = out.custom(std::sync::Arc::new(f), vec![src.clone()])?;
+    let out = out.custom(f, vec![src.clone()])?;
     Ok(out)
 }
 
@@ -45,7 +45,7 @@ fn rms_norm(src: &LB, alpha: &LB, eps: f32) -> Result<LB> {
         });
         Ok(())
     };
-    let out = out.custom(std::sync::Arc::new(f), vec![src.clone(), alpha.clone()])?;
+    let out = out.custom(f, vec![src.clone(), alpha.clone()])?;
     Ok(out)
 }
 
@@ -70,7 +70,7 @@ fn rope_i(src: &LB, cos: &LB, sin: &LB, pos: usize) -> Result<LB> {
         });
         Ok(())
     };
-    let out = out.custom(std::sync::Arc::new(f), vec![src.clone(), cos.clone(), sin.clone()])?;
+    let out = out.custom(f, vec![src.clone(), cos.clone(), sin.clone()])?;
     Ok(out)
 }
 
@@ -99,7 +99,7 @@ fn rope(src: &LB, cos: &LB, sin: &LB, pos: usize) -> Result<LB> {
         });
         Ok(())
     };
-    let out = out.custom(std::sync::Arc::new(f), vec![src.clone(), cos.clone(), sin.clone()])?;
+    let out = out.custom(f, vec![src.clone(), cos.clone(), sin.clone()])?;
     Ok(out)
 }
 
@@ -125,7 +125,7 @@ fn softmax(src: &LB) -> Result<LB> {
         });
         Ok(())
     };
-    let out = out.custom(std::sync::Arc::new(f), vec![src.clone()])?;
+    let out = out.custom(f, vec![src.clone()])?;
     Ok(out)
 }
 
@@ -140,7 +140,7 @@ fn silu(src: &LB) -> Result<LB> {
         }
         Ok(())
     };
-    let out = out.custom(std::sync::Arc::new(f), vec![src.clone()])?;
+    let out = out.custom(f, vec![src.clone()])?;
     Ok(out)
 }
 

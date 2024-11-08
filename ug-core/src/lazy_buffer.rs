@@ -1,6 +1,25 @@
 use crate::{Const, DType, Device, Layout, Result, Shape};
 
-pub type CustomF<S> = std::sync::Arc<dyn Fn(Vec<&mut S>) -> Result<()>>;
+pub struct CustomF<S>(std::sync::Arc<dyn Fn(Vec<&mut S>) -> Result<()>>);
+
+impl<S> std::ops::Deref for CustomF<S> {
+    type Target = std::sync::Arc<dyn Fn(Vec<&mut S>) -> Result<()>>;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<S> Clone for CustomF<S> {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
+}
+
+impl<S> CustomF<S> {
+    pub fn new<F: 'static + Fn(Vec<&mut S>) -> Result<()>>(f: F) -> Self {
+        Self(std::sync::Arc::new(f))
+    }
+}
 
 /// Unique identifier for LazyBuffer.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -38,6 +57,13 @@ pub enum Op<D: Device> {
 }
 
 pub struct LazyBuffer<D: Device>(std::sync::Arc<LazyBufferInner<D>>);
+
+impl<D: Device> std::fmt::Debug for LazyBuffer<D> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "[{:?} {:?} {:?}]", self.id(), self.shape(), self.dtype())?;
+        Ok(())
+    }
+}
 
 impl<D: Device> Clone for LazyBuffer<D> {
     fn clone(&self) -> Self {
@@ -172,9 +198,14 @@ impl<D: Device> LazyBuffer<D> {
         Ok(lb)
     }
 
-    pub fn custom(&self, f: CustomF<D::Slice>, mut args: Vec<Self>) -> Result<Self> {
+    pub fn custom<F: 'static + Fn(Vec<&mut D::Slice>) -> Result<()>>(
+        &self,
+        f: F,
+        mut args: Vec<Self>,
+    ) -> Result<Self> {
         // TODO: dtype/op/shape checks.
         args.push(self.clone());
+        let f = CustomF::new(f);
         let inner = LazyBufferInner {
             id: Id::new(),
             data: std::sync::Mutex::new(None),
