@@ -1,6 +1,7 @@
 use crate::{Const, DType, Device, Layout, Result, Shape};
 
-pub struct CustomF<S>(std::sync::Arc<dyn Fn(Vec<&mut S>) -> Result<()>>);
+type Callback<S> = std::sync::Arc<dyn Fn(Vec<&mut S>) -> Result<()>>;
+pub struct CustomF<S>(Callback<S>);
 
 impl<S> std::ops::Deref for CustomF<S> {
     type Target = std::sync::Arc<dyn Fn(Vec<&mut S>) -> Result<()>>;

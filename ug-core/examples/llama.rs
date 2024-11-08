@@ -9,6 +9,73 @@ const UNK_TOKEN: u32 = 0;
 const BOS_TOKEN: u32 = 1;
 const EOS_TOKEN: u32 = 1;
 
+#[derive(Debug, Clone)]
+pub struct Config {
+    // `dim` is `hidden_size` in transformers
+    pub dim: usize,
+    // `hidden_dim` is `intermediate_size` in transformers
+    pub hidden_dim: usize,
+    pub n_layers: usize,
+    pub n_heads: usize,
+    pub n_kv_heads: usize,
+    pub vocab_size: usize,
+    pub norm_eps: f32,
+    pub max_seq_len: usize,
+    pub rope_theta: f32,
+    pub rope_i: bool,
+}
+
+impl Config {
+    pub fn tiny_15m() -> Self {
+        Self {
+            dim: 288,
+            hidden_dim: 768,
+            n_layers: 6,
+            n_heads: 6,
+            n_kv_heads: 6,
+            vocab_size: 32000,
+            norm_eps: 1e-5,
+            max_seq_len: 256,
+            rope_theta: 10000.,
+            rope_i: true,
+        }
+    }
+
+    pub fn tiny_110m() -> Self {
+        Self {
+            dim: 768,
+            hidden_dim: 2048,
+            n_layers: 12,
+            n_heads: 12,
+            n_kv_heads: 12,
+            vocab_size: 32000,
+            norm_eps: 1e-5,
+            max_seq_len: 1024,
+            rope_theta: 10000.,
+            rope_i: true,
+        }
+    }
+
+    pub fn llama2_7b() -> Self {
+        Self {
+            dim: 4096,
+            hidden_dim: 11008,
+            n_layers: 32,
+            n_heads: 32,
+            n_kv_heads: 32,
+            vocab_size: 32000,
+            norm_eps: 1e-5,
+            max_seq_len: 4096,
+            rope_theta: 10000.,
+            rope_i: false,
+        }
+    }
+
+    fn head_dim(&self) -> usize {
+        self.dim / self.n_heads
+    }
+}
+
 fn index_select(src: &LB, ids: &[u32]) -> Result<LB> {
     let seq_len = ids.len();
     let (_, h) = src.shape().dims2()?;
