@@ -4,75 +4,53 @@ use rayon::prelude::*;
 use ug::{CpuDevice, CpuStorage, LazyBuffer, Result, Slice, WithDType};
 
 type LB = LazyBuffer<CpuDevice>;
+type ST = ug::safetensors::MmapedSafetensors;
 
 const UNK_TOKEN: u32 = 0;
 const BOS_TOKEN: u32 = 1;
 const EOS_TOKEN: u32 = 1;
 
 #[derive(Debug, Clone)]
+pub enum HiddenAct {
+    Silu,
+}
+
+#[derive(Debug, Clone)]
 pub struct Config {
-    // `dim` is `hidden_size` in transformers
-    pub dim: usize,
-    // `hidden_dim` is `intermediate_size` in transformers
-    pub hidden_dim: usize,
-    pub n_layers: usize,
-    pub n_heads: usize,
-    pub n_kv_heads: usize,
-    pub vocab_size: usize,
-    pub norm_eps: f32,
-    pub max_seq_len: usize,
-    pub rope_theta: f32,
-    pub rope_i: bool,
+    hidden_act: HiddenAct,
+    hidden_size: usize,
+    intermediate_size: usize,
+    max_position_embeddings: usize,
+    num_attention_heads: usize,
+    num_key_value_heads: usize,
+    num_hidden_layers: usize,
+    rms_norm_eps: f64,
+    rope_interleaved: bool,
+    rope_theta: f64,
+    tie_word_embeddings: bool,
+    vocab_size: usize,
 }
 
 impl Config {
-    pub fn tiny_15m() -> Self {
+    pub fn smollm2_135m() -> Self {
         Self {
-            dim: 288,
-            hidden_dim: 768,
-            n_layers: 6,
-            n_heads: 6,
-            n_kv_heads: 6,
-            vocab_size: 32000,
-            norm_eps: 1e-5,
-            max_seq_len: 256,
-            rope_theta: 10000.,
-            rope_i: true,
-        }
-    }
-
-    pub fn tiny_110m() -> Self {
-        Self {
-            dim: 768,
-            hidden_dim: 2048,
-            n_layers: 12,
-            n_heads: 12,
-            n_kv_heads: 12,
-            vocab_size: 32000,
-            norm_eps: 1e-5,
-            max_seq_len: 1024,
-            rope_theta: 10000.,
-            rope_i: true,
-        }
-    }
-
-    pub fn llama2_7b() -> Self {
-        Self {
-            dim: 4096,
-            hidden_dim: 11008,
-            n_layers: 32,
-            n_heads: 32,
-            n_kv_heads: 32,
-            vocab_size: 32000,
-            norm_eps: 1e-5,
-            max_seq_len: 4096,
-            rope_theta: 10000.,
-            rope_i: false,
+            hidden_act: HiddenAct::Silu,
+            hidden_size: 576,
+            intermediate_size: 1536,
+            max_position_embeddings: 8192,
+            num_attention_heads: 9,
+            num_hidden_layers: 30,
+            num_key_value_heads: 3,
+            rms_norm_eps: 1e-5,
+            rope_interleaved: false,
+            rope_theta: 1e5,
+            tie_word_embeddings: true,
+            vocab_size: 49152,
         }
     }
 
     fn head_dim(&self) -> usize {
-        self.dim / self.n_heads
+        self.hidden_size / self.num_attention_heads
     }
 }
 
@@ -211,8 +189,107 @@ fn silu(src: &LB) -> Result<LB> {
     Ok(out)
 }
 
+struct RmsNorm {
+    alpha: LB,
+    eps: f64,
+}
+
+impl RmsNorm {
+    fn new(dim: usize, eps: f64, name: &str, st: &ST) -> Result<Self> {
+        let alpha = st.load_with_cast(name, ug::DType::F32, &CpuDevice)?;
+        if alpha.dims() != [dim] {
+            ug::bail!("unexpected shape for {name}: {:?}, expected {dim}", alpha.shape())
+        }
+        Ok(Self { alpha, eps })
+    }
+}
+
+struct Linear {
+    w: LB,
+    #[allow(unused)]
+    in_c: usize,
+    #[allow(unused)]
+    out_c: usize,
+}
+
+impl Linear {
+    fn new(in_c: usize, out_c: usize, name: &str, st: &ST) -> Result<Self> {
+        let w = st.load_with_cast(name, ug::DType::F32, &CpuDevice)?;
+        if w.dims() != [out_c, in_c] {
+            ug::bail!("unexpected shape for {name}: {:?}, exp ({out_c}, {in_c})", w.shape())
+        }
+        Ok(Self { w, in_c, out_c })
+    }
+}
+
+struct Mlp {
+    c_fc1: Linear,
+    c_fc2: Linear,
+    c_proj: Linear,
+}
+
+struct Attention {
+    q_proj: Linear,
+    k_proj: Linear,
+    v_proj: Linear,
+    o_proj: Linear,
+    head_dim: usize,
+}
+
+struct Layer {
+    rms1: RmsNorm,
+    attn: Attention,
+    rms2: RmsNorm,
+    mlp: Mlp,
+}
+
+struct Model {
+    embedding: LB,
+    layers: Vec<Layer>,
+    ln_f: RmsNorm,
+    lm_head: Linear,
+    config: Config,
+}
+
+impl Model {
+    fn new(cfg: &Config, st: &ug::safetensors::MmapedSafetensors) -> Result<Model> {
+        let embedding =
+            st.load_with_cast("model.embed_tokens.weight", ug::DType::F32, &CpuDevice)?;
+        let ln_f = RmsNorm::new(cfg.hidden_size, cfg.rms_norm_eps, "model.norm.weight", st)?;
+        let lm_head = if cfg.tie_word_embeddings {
+            Linear { w: embedding.clone(), in_c: cfg.hidden_size, out_c: cfg.vocab_size }
+        } else {
+            ug::bail!("tie_word_embeddings == false is not supported yet")
+        };
+        let i_sz = cfg.intermediate_size;
+        let h_sz = cfg.hidden_size;
+        let kv_sz = cfg.head_dim() * cfg.num_key_value_heads;
+        let eps = cfg.rms_norm_eps;
+
+        let mut layers = Vec::with_capacity(cfg.num_hidden_layers);
+        for layer_idx in 0..cfg.num_hidden_layers {
+            let name = format!("model.layers.{layer_idx}");
+            let rms1 = RmsNorm::new(h_sz, eps, &format!("{name}.input_layernorm.weight"), st)?;
+            let rms2 =
+                RmsNorm::new(h_sz, eps, &format!("{name}.post_attention_layernorm.weight"), st)?;
+            let c_fc1 = Linear::new(h_sz, i_sz, &format!("{name}.mlp.gate_proj.weight"), st)?;
+            let c_fc2 = Linear::new(h_sz, i_sz, &format!("{name}.mlp.up_proj.weight"), st)?;
+            let c_proj = Linear::new(i_sz, h_sz, &format!("{name}.mlp.down_proj.weight"), st)?;
+            let q_proj = Linear::new(h_sz, h_sz, &format!("{name}.self_attn.q_proj.weight"), st)?;
+            let k_proj = Linear::new(h_sz, kv_sz, &format!("{name}.self_attn.k_proj.weight"), st)?;
+            let v_proj = Linear::new(h_sz, kv_sz, &format!("{name}.self_attn.v_proj.weight"), st)?;
+            let o_proj = Linear::new(h_sz, h_sz, &format!("{name}.self_attn.o_proj.weight"), st)?;
+            let attn = Attention { q_proj, k_proj, v_proj, o_proj, head_dim: cfg.head_dim() };
+            let mlp = Mlp { c_fc1, c_fc2, c_proj };
+            layers.push(Layer { rms1, attn, rms2, mlp })
+        }
+        Ok(Self { embedding, layers, ln_f, lm_head, config: cfg.clone() })
+    }
+}
+
 fn main() -> Result<()> {
     let st = unsafe { ug::safetensors::MmapedSafetensors::new("model.safetensors")? };
+    let _model = Model::new(&Config::smollm2_135m(), &st)?;
     let tensor = st.load_with_cast("model.embed_tokens.weight", ug::DType::F32, &CpuDevice)?;
     let tensor = index_select(&tensor, &[BOS_TOKEN])?;
     println!("{:?} {:?} {}", tensor.shape(), tensor.dtype(), tensor.realized());
