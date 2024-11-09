@@ -74,8 +74,9 @@ fn index_select(src: &LB, ids: &[u32]) -> Result<LB> {
 }
 
 fn rms_norm(src: &LB, alpha: &LB, eps: f32) -> Result<LB> {
-    let (d, dim_m1) = src.shape().dims2()?;
-    let out = LB::cst(0f32, (d, dim_m1), &CpuDevice)?;
+    let rank = src.rank();
+    let dim_m1 = src.dims()[rank - 1];
+    let out = LB::cst(0f32, src.shape(), &CpuDevice)?;
     let f = move |mut vs: Vec<&mut CpuStorage>| -> Result<()> {
         let [src, alpha, mut dst]: [&mut CpuStorage; 3] = vs.try_into().unwrap();
         let dst = dst.data_mut::<f32>()?;
@@ -311,6 +312,7 @@ impl Linear {
     fn fwd(&self, xs: &LB) -> Result<LB> {
         let r = self.w.rank();
         let w_t = transpose(&self.w, r - 2, r - 1)?;
+        let w_t = w_t.reshape((1, self.in_c, self.out_c))?;
         xs.matmul(w_t)
     }
 }
@@ -343,35 +345,33 @@ struct Attention {
 
 impl Attention {
     fn fwd(&self, xs: &LB) -> Result<LB> {
-        // TODO: Add the batch dim.
-        let (seq_len, hidden_size) = xs.shape().dims2()?;
+        let (b_sz, seq_len, hidden_size) = xs.shape().dims3()?;
         let q = self.q_proj.fwd(xs)?;
         let k = self.k_proj.fwd(xs)?;
         let v = self.v_proj.fwd(xs)?;
 
-        let q = q.reshape((seq_len, self.num_heads, self.head_dim))?;
-        let q = transpose(&q, 0, 1)?;
-        let k = k.reshape((seq_len, self.num_kv_heads, self.head_dim))?;
-        let k = transpose(&k, 0, 1)?;
-        let v = v.reshape((seq_len, self.num_kv_heads, self.head_dim))?;
-        let v = transpose(&v, 0, 1)?;
+        let q = q.reshape((b_sz, seq_len, self.num_heads, self.head_dim))?;
+        let q = transpose(&q, 2, 1)?;
+        let k = k.reshape((b_sz, seq_len, self.num_kv_heads, self.head_dim))?;
+        let k = transpose(&k, 2, 1)?;
+        let v = v.reshape((b_sz, seq_len, self.num_kv_heads, self.head_dim))?;
+        let v = transpose(&v, 2, 1)?;
 
         // TODO: Rope
         // TODO: KV Cache
         // TODO: Repeat KV
-        let k = repeat(&k, 0, self.num_heads / self.num_kv_heads)?;
-        let v = repeat(&v, 0, self.num_heads / self.num_kv_heads)?;
+        let k = repeat(&k, 1, self.num_heads / self.num_kv_heads)?;
+        let v = repeat(&v, 1, self.num_heads / self.num_kv_heads)?;
 
         // attention
-        println!("{:?} {:?}", q.shape(), k.shape());
-        let k = transpose(&k, 1, 2)?;
+        let k = transpose(&k, 3, 2)?;
         let att = q.matmul(k)?; // TODO: rescale by 1/sqrt(head_dim)
         let att = softmax(&att)?;
         let xs = att.matmul(v)?;
 
         // final proj
-        let xs = transpose(&xs, 0, 1)?;
-        let xs = xs.reshape((seq_len, self.num_heads * self.head_dim))?;
+        let xs = transpose(&xs, 2, 1)?;
+        let xs = xs.reshape((b_sz, seq_len, self.num_heads * self.head_dim))?;
         let xs = self.o_proj.fwd(&xs)?;
         Ok(xs)
     }
@@ -450,7 +450,9 @@ impl Model {
     }
 
     fn fwd(&self, tokens: &[u32]) -> Result<LB> {
-        let mut xs = index_select(&self.embedding, tokens)?;
+        let seq_len = tokens.len();
+        let xs = index_select(&self.embedding, tokens)?;
+        let mut xs = xs.reshape((1, seq_len, self.config.hidden_size))?;
         for layer in self.layers.iter() {
             xs = layer.fwd(&xs)?
         }
