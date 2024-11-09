@@ -148,6 +148,36 @@ fn rope(src: &LB, cos: &LB, sin: &LB, pos: usize) -> Result<LB> {
     Ok(out)
 }
 
+fn repeat(src: &LB, axis: usize, n_rep: usize) -> Result<LB> {
+    if n_rep == 1 {
+        return Ok(src.clone());
+    }
+    let dims = src.dims().to_vec();
+    if axis >= dims.len() {
+        ug::bail!("unexpected axis {axis} for repeat {dims:?}")
+    }
+    let mut dst_dims = dims.clone();
+    dst_dims[axis] *= n_rep;
+    let out = LB::cst(0f32, dst_dims, &CpuDevice)?;
+    let f = move |mut vs: Vec<&mut CpuStorage>| -> Result<()> {
+        let [src, mut dst]: [&mut CpuStorage; 2] = vs.try_into().unwrap();
+        let dst = dst.data_mut::<f32>()?;
+        let src = src.data::<f32>()?;
+        let d_i = dims[..axis].iter().product::<usize>();
+        let d_j = dims[axis..].iter().product::<usize>();
+        for i in 0..d_i {
+            let src = &src[i * d_j..(i + 1) * d_j];
+            let dst = &mut dst[i * d_j * n_rep..(i + 1) * d_j * n_rep];
+            for i_rep in 0..n_rep {
+                dst[i_rep * d_j..(i_rep + 1) * d_j].copy_from_slice(src)
+            }
+        }
+        Ok(())
+    };
+    let out = out.custom(f, vec![src.clone()])?;
+    Ok(out)
+}
+
 fn transpose(src: &LB, dim1: usize, dim2: usize) -> Result<LB> {
     let (dim1, dim2) = (usize::min(dim1, dim2), usize::max(dim1, dim2));
     if dim1 == dim2 {
@@ -201,8 +231,9 @@ fn transpose(src: &LB, dim1: usize, dim2: usize) -> Result<LB> {
 }
 
 fn softmax(src: &LB) -> Result<LB> {
-    let (d, dim_m1) = src.shape().dims2()?;
-    let out = LB::cst(0f32, (d, dim_m1), &CpuDevice)?;
+    let rank = src.rank();
+    let dim_m1 = src.dims()[rank - 1];
+    let out = LB::cst(0f32, src.shape(), &CpuDevice)?;
     let f = move |mut vs: Vec<&mut CpuStorage>| -> Result<()> {
         let [src, mut dst]: [&mut CpuStorage; 2] = vs.try_into().unwrap();
         let dst = dst.data_mut::<f32>()?;
@@ -305,22 +336,43 @@ struct Attention {
     k_proj: Linear,
     v_proj: Linear,
     o_proj: Linear,
+    num_heads: usize,
+    num_kv_heads: usize,
     head_dim: usize,
 }
 
 impl Attention {
     fn fwd(&self, xs: &LB) -> Result<LB> {
+        // TODO: Add the batch dim.
+        let (seq_len, hidden_size) = xs.shape().dims2()?;
         let q = self.q_proj.fwd(xs)?;
         let k = self.k_proj.fwd(xs)?;
         let v = self.v_proj.fwd(xs)?;
 
-        // TODO: Reshape/Transpose
+        let q = q.reshape((seq_len, self.num_heads, self.head_dim))?;
+        let q = transpose(&q, 0, 1)?;
+        let k = k.reshape((seq_len, self.num_kv_heads, self.head_dim))?;
+        let k = transpose(&k, 0, 1)?;
+        let v = v.reshape((seq_len, self.num_kv_heads, self.head_dim))?;
+        let v = transpose(&v, 0, 1)?;
+
         // TODO: Rope
         // TODO: KV Cache
         // TODO: Repeat KV
-        // TODO: Attn
-        // TODO: Transpose/Reshape
-        let xs = self.o_proj.fwd(xs)?;
+        let k = repeat(&k, 0, self.num_heads / self.num_kv_heads)?;
+        let v = repeat(&v, 0, self.num_heads / self.num_kv_heads)?;
+
+        // attention
+        println!("{:?} {:?}", q.shape(), k.shape());
+        let k = transpose(&k, 1, 2)?;
+        let att = q.matmul(k)?; // TODO: rescale by 1/sqrt(head_dim)
+        let att = softmax(&att)?;
+        let xs = att.matmul(v)?;
+
+        // final proj
+        let xs = transpose(&xs, 0, 1)?;
+        let xs = xs.reshape((seq_len, self.num_heads * self.head_dim))?;
+        let xs = self.o_proj.fwd(&xs)?;
         Ok(xs)
     }
 }
@@ -382,7 +434,15 @@ impl Model {
             let k_proj = Linear::new(h_sz, kv_sz, &format!("{name}.self_attn.k_proj.weight"), st)?;
             let v_proj = Linear::new(h_sz, kv_sz, &format!("{name}.self_attn.v_proj.weight"), st)?;
             let o_proj = Linear::new(h_sz, h_sz, &format!("{name}.self_attn.o_proj.weight"), st)?;
-            let attn = Attention { q_proj, k_proj, v_proj, o_proj, head_dim: cfg.head_dim() };
+            let attn = Attention {
+                q_proj,
+                k_proj,
+                v_proj,
+                o_proj,
+                head_dim: cfg.head_dim(),
+                num_heads: cfg.num_attention_heads,
+                num_kv_heads: cfg.num_key_value_heads,
+            };
             let mlp = Mlp { c_fc1, c_fc2, c_proj };
             layers.push(Layer { rms1, attn, rms2, mlp })
         }
@@ -403,7 +463,7 @@ impl Model {
 fn main() -> Result<()> {
     let st = unsafe { ug::safetensors::MmapedSafetensors::new("model.safetensors")? };
     let mut config = Config::smollm2_135m();
-    // config.num_hidden_layers = 1; // TODO: add the layers.
+    config.num_hidden_layers = 1; // TODO: add the layers.
     let model = Model::new(&config, &st)?;
     let tensor = model.fwd(&[BOS_TOKEN])?;
     println!("{:?} {:?} {}", tensor.shape(), tensor.dtype(), tensor.realized());
