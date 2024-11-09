@@ -1,7 +1,7 @@
 //! The shape of a tensor is a tuple with the size of each of its dimensions.
 use crate::{bail, Error, Result};
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Shape(Vec<usize>);
 
 pub const SCALAR: Shape = Shape(vec![]);
@@ -553,7 +553,7 @@ mod tests {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Layout {
     shape: Shape,
     strides: Vec<usize>,

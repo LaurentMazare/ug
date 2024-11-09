@@ -1,7 +1,7 @@
 use crate::DType;
 use half::{bf16, f16};
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub enum Const {
     I32(i32),
     I64(i64),

@@ -390,14 +390,14 @@ pub mod op {
     pub use crate::{Layout, Shape};
     use std::sync::Arc;
 
-    #[derive(Debug, Clone, PartialEq)]
+    #[derive(Debug, Clone, PartialEq, PartialOrd)]
     pub struct Ast {
         pub(crate) inner: Arc<AstInner>,
         pub(crate) dtype: DType,
         pub(crate) shape: Shape,
     }
 
-    #[derive(Debug, Clone, PartialEq)]
+    #[derive(Debug, Clone, PartialEq, PartialOrd)]
     pub enum AstInner {
         // Id nodes are used to share common parts when linearizing the code. Maybe this should be
         // part of a separate type.
@@ -542,7 +542,7 @@ pub mod op {
         }
     }
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, PartialEq)]
     pub struct Store {
         pub(crate) dst: ArgId,
         pub(crate) layout: Layout,
