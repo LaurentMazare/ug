@@ -176,9 +176,9 @@ impl<'a, const N: usize> Context<'a, N> {
     fn get(&self, a: ssa::A) -> Result<Value<N>> {
         let value = match a {
             ssa::A::Var(id) => self.get_id(id)?,
-            ssa::A::Const(Const::BF16(v)) => Value::BF16(W::splat(v)),
-            ssa::A::Const(Const::F16(v)) => Value::F16(W::splat(v)),
-            ssa::A::Const(Const::F32(v)) => Value::F32(W::splat(v)),
+            ssa::A::Const(Const::BF16(v)) => Value::BF16(W::splat(*v)),
+            ssa::A::Const(Const::F16(v)) => Value::F16(W::splat(*v)),
+            ssa::A::Const(Const::F32(v)) => Value::F32(W::splat(*v)),
             ssa::A::Const(Const::I32(v)) => Value::I32(W::splat(v)),
             ssa::A::Const(Const::I64(v)) => Value::I64(W::splat(v)),
         };
@@ -202,9 +202,9 @@ pub fn eval_ssa<const N: usize>(
             Instr::DefineGlobal { index, arg_id: _, dtype: _ } => {
                 (Value::Ptr(BufId::new(*index)), None)
             }
-            Instr::Const(Const::BF16(v)) => (Value::BF16(W::splat(*v)), None),
-            Instr::Const(Const::F16(v)) => (Value::F16(W::splat(*v)), None),
-            Instr::Const(Const::F32(v)) => (Value::F32(W::splat(*v)), None),
+            Instr::Const(Const::BF16(v)) => (Value::BF16(W::splat(**v)), None),
+            Instr::Const(Const::F16(v)) => (Value::F16(W::splat(**v)), None),
+            Instr::Const(Const::F32(v)) => (Value::F32(W::splat(**v)), None),
             Instr::Const(Const::I32(v)) => (Value::I32(W::splat(*v)), None),
             Instr::Const(Const::I64(v)) => (Value::I64(W::splat(*v)), None),
             Instr::If { cond, end_idx } => {
@@ -360,9 +360,9 @@ pub fn eval_ssa<const N: usize>(
             // DefineAcc is handled in the same way as Const, the only difference is that Assign
             // can modify it. This isn't even checked for in this interpreter, all the vars can be
             // assigned but optimizations/code generation might rely on it.
-            Instr::DefineAcc(Const::BF16(v)) => (Value::BF16(W::splat(*v)), None),
-            Instr::DefineAcc(Const::F16(v)) => (Value::F16(W::splat(*v)), None),
-            Instr::DefineAcc(Const::F32(v)) => (Value::F32(W::splat(*v)), None),
+            Instr::DefineAcc(Const::BF16(v)) => (Value::BF16(W::splat(**v)), None),
+            Instr::DefineAcc(Const::F16(v)) => (Value::F16(W::splat(**v)), None),
+            Instr::DefineAcc(Const::F32(v)) => (Value::F32(W::splat(**v)), None),
             Instr::DefineAcc(Const::I32(v)) => (Value::I32(W::splat(*v)), None),
             Instr::DefineAcc(Const::I64(v)) => (Value::I64(W::splat(*v)), None),
             Instr::Special(ssa::Special::LocalIdx) => {

@@ -36,7 +36,7 @@ pub mod ssa {
             /* 2 */ arg(2, DType::F32),
             /* 3 */ I::Const(Const::I32(0)),
             /* 4 */ I::Const(Const::I32(vec_len as i32)),
-            /* 5 */ I::DefineAcc(Const::F32(0.)),
+            /* 5 */ I::DefineAcc(0f32.try_into()?),
             /* 6 */ I::Range { lo: a(3), up: a(4), end_idx: v(12) },
             /* 7 */ I::Load { src: v(1), offset: a(6), dtype },
             /* 8 */ I::Load { src: v(2), offset: a(6), dtype },
@@ -198,7 +198,7 @@ pub mod ssa {
 
         let mut load_is = Vec::with_capacity(per_block);
 
-        let mut max_i = b.push(I::Const(Const::F32(f32::NEG_INFINITY)));
+        let mut max_i = b.push(I::Const(f32::NEG_INFINITY.try_into()?));
         for i in (0..dim2).step_by(block_size) {
             let offset = b.add(global_off_i, i as i32).to_a();
             let load_i = b.push(I::Load { src: src_i.to_varid(), offset, dtype });

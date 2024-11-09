@@ -30,9 +30,9 @@ fn fmt_f32(v: f32, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 impl std::fmt::Display for C {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self.0 {
-            ssa::Const::BF16(v) => fmt_f32(v.into(), f),
-            ssa::Const::F16(v) => fmt_f32(v.into(), f),
-            ssa::Const::F32(v) => fmt_f32(v, f),
+            ssa::Const::BF16(v) => fmt_f32((*v as half::bf16).into(), f),
+            ssa::Const::F16(v) => fmt_f32((*v as half::f16).into(), f),
+            ssa::Const::F32(v) => fmt_f32(*v, f),
             ssa::Const::I32(v) => write!(f, "{v}"),
             ssa::Const::I64(v) => write!(f, "{v}"),
         }

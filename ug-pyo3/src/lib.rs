@@ -215,13 +215,13 @@ mod op {
     }
 
     #[pyfunction]
-    pub fn i32(v: i32) -> Ast {
-        Ast(op::cst(v))
+    pub fn i32(v: i32) -> PyResult<Ast> {
+        Ok(Ast(op::cst(v).map_err(w)?))
     }
 
     #[pyfunction]
-    pub fn f32(v: f32) -> Ast {
-        Ast(op::cst(v))
+    pub fn f32(v: f32) -> PyResult<Ast> {
+        Ok(Ast(op::cst(v).map_err(w)?))
     }
 
     #[pyclass]
@@ -291,8 +291,8 @@ mod ssa {
         }
 
         #[staticmethod]
-        fn const_f32(v: f32) -> Self {
-            Self(ssa::Instr::Const(ssa::Const::F32(v)))
+        fn const_f32(v: f32) -> PyResult<Self> {
+            Ok(Self(ssa::Instr::Const(v.try_into().map_err(w)?)))
         }
 
         #[staticmethod]
@@ -301,8 +301,8 @@ mod ssa {
         }
 
         #[staticmethod]
-        fn define_acc_f32(v: f32) -> Self {
-            Self(ssa::Instr::DefineAcc(ssa::Const::F32(v)))
+        fn define_acc_f32(v: f32) -> PyResult<Self> {
+            Ok(Self(ssa::Instr::Const(v.try_into().map_err(w)?)))
         }
 
         #[staticmethod]

@@ -256,7 +256,7 @@ impl<D: Device> Context<D> {
                 let ast = self.walk(arg)?;
                 crate::lang::op::reduce(*op, ast, *axis)?
             }
-            Op::Const(cst) => crate::lang::op::cst(*cst),
+            Op::Const(cst) => crate::lang::op::cst(*cst)?,
             Op::Copy => {
                 let arg_id = ArgId::new();
                 self.per_arg_id.insert(arg_id, b.clone());

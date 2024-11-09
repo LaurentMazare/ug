@@ -325,8 +325,15 @@ impl<D: Device> LazyBuffer<D> {
         Ok(lb)
     }
 
-    pub fn cst<C: Into<Const>, S: Into<Shape>>(c: C, s: S, device: &D) -> Result<Self> {
-        let c: Const = c.into();
+    pub fn cst<C: TryInto<Const> + std::fmt::Debug + Copy, S: Into<Shape>>(
+        c: C,
+        s: S,
+        device: &D,
+    ) -> Result<Self> {
+        let c: Const = match c.try_into() {
+            Err(_) => crate::bail!("unable to create const for {c:?}"),
+            Ok(v) => v,
+        };
         let s: Shape = s.into();
         let inner = LazyBufferInner {
             id: Id::new(),

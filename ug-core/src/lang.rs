@@ -390,14 +390,14 @@ pub mod op {
     pub use crate::{Layout, Shape};
     use std::sync::Arc;
 
-    #[derive(Debug, Clone, PartialEq, PartialOrd)]
+    #[derive(Debug, Clone, PartialEq, PartialOrd, Ord, Eq, Hash)]
     pub struct Ast {
         pub(crate) inner: Arc<AstInner>,
         pub(crate) dtype: DType,
         pub(crate) shape: Shape,
     }
 
-    #[derive(Debug, Clone, PartialEq, PartialOrd)]
+    #[derive(Debug, Clone, PartialEq, PartialOrd, Ord, Eq, Hash)]
     pub enum AstInner {
         // Id nodes are used to share common parts when linearizing the code. Maybe this should be
         // part of a separate type.
@@ -483,11 +483,14 @@ pub mod op {
         binary(op, lhs, rhs)
     }
 
-    pub fn cst<I: Into<Const>>(v: I) -> Ast {
-        let v: Const = v.into();
+    pub fn cst<I: TryInto<Const> + std::fmt::Debug + Copy>(v: I) -> Result<Ast> {
+        let v: Const = match v.try_into() {
+            Err(_) => crate::bail!("unable to create const for {v:?}"),
+            Ok(v) => v,
+        };
         let dtype = v.dtype();
         let inner = AstInner::Const(v);
-        Ast { inner: Arc::new(inner), dtype, shape: Shape::from(()) }
+        Ok(Ast { inner: Arc::new(inner), dtype, shape: Shape::from(()) })
     }
 
     impl Ast {
@@ -635,21 +638,24 @@ pub mod ssa {
         }
     }
 
-    impl From<half::bf16> for A {
-        fn from(value: half::bf16) -> Self {
-            Self::Const(Const::BF16(value))
+    impl TryFrom<half::bf16> for A {
+        type Error = crate::Error;
+        fn try_from(value: half::bf16) -> std::result::Result<Self, Self::Error> {
+            Ok(Self::Const(value.try_into()?))
         }
     }
 
-    impl From<half::f16> for A {
-        fn from(value: half::f16) -> Self {
-            Self::Const(Const::F16(value))
+    impl TryFrom<half::f16> for A {
+        type Error = crate::Error;
+        fn try_from(value: half::f16) -> std::result::Result<Self, Self::Error> {
+            Ok(Self::Const(value.try_into()?))
         }
     }
 
-    impl From<f32> for A {
-        fn from(value: f32) -> Self {
-            Self::Const(Const::F32(value))
+    impl TryFrom<f32> for A {
+        type Error = crate::Error;
+        fn try_from(value: f32) -> std::result::Result<Self, Self::Error> {
+            Ok(Self::Const(value.try_into()?))
         }
     }
 
