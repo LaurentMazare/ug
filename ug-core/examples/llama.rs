@@ -148,6 +148,58 @@ fn rope(src: &LB, cos: &LB, sin: &LB, pos: usize) -> Result<LB> {
     Ok(out)
 }
 
+fn transpose(src: &LB, dim1: usize, dim2: usize) -> Result<LB> {
+    let (dim1, dim2) = (usize::min(dim1, dim2), usize::max(dim1, dim2));
+    if dim1 == dim2 {
+        return Ok(src.clone());
+    }
+    let dims = src.dims().to_vec();
+    if dim1 >= dims.len() || dim2 >= dims.len() {
+        ug::bail!("unexpected dims ({dim1}, {dim2}) for transpose {dims:?}")
+    }
+    let mut dst_dims = dims.clone();
+    dst_dims.swap(dim1, dim2);
+    let out = LB::cst(0f32, dst_dims, &CpuDevice)?;
+    let f = move |mut vs: Vec<&mut CpuStorage>| -> Result<()> {
+        let [src, mut dst]: [&mut CpuStorage; 2] = vs.try_into().unwrap();
+        let dst = dst.data_mut::<f32>()?;
+        let src = src.data::<f32>()?;
+        let d_i = dims[..dim1].iter().product::<usize>();
+        let d_j = dims[dim1 + 1..dim2].iter().product::<usize>();
+        let d_k = dims[(dim2 + 1)..].iter().product::<usize>();
+        let d1 = dims[dim1];
+        let d2 = dims[dim2];
+        // Inefficient, we should blit the data where possible.
+        // i: pre
+        for i in 0..d_i {
+            for a1 in 0..d1 {
+                // j: mid
+                for j in 0..d_j {
+                    for a2 in 0..d2 {
+                        // k: post
+                        for k in 0..d_k {
+                            let src_idx = i * d1 * d_j * d2 * d_k
+                                + a1 * d_j * d2 * d_k
+                                + j * d2 * d_k
+                                + a2 * d_k
+                                + k;
+                            let dst_idx = i * d2 * d_j * d1 * d_k
+                                + a2 * d_j * d1 * d_k
+                                + j * d1 * d_k
+                                + a1 * d_k
+                                + k;
+                            dst[dst_idx] = src[src_idx]
+                        }
+                    }
+                }
+            }
+        }
+        Ok(())
+    };
+    let out = out.custom(f, vec![src.clone()])?;
+    Ok(out)
+}
+
 fn softmax(src: &LB) -> Result<LB> {
     let (d, dim_m1) = src.shape().dims2()?;
     let out = LB::cst(0f32, (d, dim_m1), &CpuDevice)?;
@@ -202,6 +254,10 @@ impl RmsNorm {
         }
         Ok(Self { alpha, eps })
     }
+
+    fn fwd(&self, xs: &LB) -> Result<LB> {
+        rms_norm(xs, &self.alpha, self.eps as f32)
+    }
 }
 
 struct Linear {
@@ -220,12 +276,28 @@ impl Linear {
         }
         Ok(Self { w, in_c, out_c })
     }
+
+    fn fwd(&self, xs: &LB) -> Result<LB> {
+        let r = self.w.rank();
+        let w_t = transpose(&self.w, r - 2, r - 1)?;
+        xs.matmul(w_t)
+    }
 }
 
 struct Mlp {
     c_fc1: Linear,
     c_fc2: Linear,
     c_proj: Linear,
+}
+
+impl Mlp {
+    fn fwd(&self, xs: &LB) -> Result<LB> {
+        let xs1 = self.c_fc1.fwd(xs)?;
+        let xs2 = self.c_fc2.fwd(xs)?;
+        let xs1 = silu(&xs1)?;
+        let xs = xs1.binary(ug::lang::BinaryOp::Mul, xs2)?;
+        self.c_proj.fwd(&xs)
+    }
 }
 
 struct Attention {
@@ -236,11 +308,42 @@ struct Attention {
     head_dim: usize,
 }
 
+impl Attention {
+    fn fwd(&self, xs: &LB) -> Result<LB> {
+        let q = self.q_proj.fwd(xs)?;
+        let k = self.k_proj.fwd(xs)?;
+        let v = self.v_proj.fwd(xs)?;
+
+        // TODO: Reshape/Transpose
+        // TODO: Rope
+        // TODO: KV Cache
+        // TODO: Repeat KV
+        // TODO: Attn
+        // TODO: Transpose/Reshape
+        let xs = self.o_proj.fwd(xs)?;
+        Ok(xs)
+    }
+}
+
 struct Layer {
     rms1: RmsNorm,
     attn: Attention,
     rms2: RmsNorm,
     mlp: Mlp,
+}
+
+impl Layer {
+    fn fwd(&self, xs: &LB) -> Result<LB> {
+        let residual = xs.clone();
+        let xs = self.rms1.fwd(xs)?;
+        let xs = self.attn.fwd(&xs)?;
+        let xs = xs.binary(ug::lang::BinaryOp::Add, residual)?;
+        let residual = xs.clone();
+        let xs = self.rms2.fwd(&xs)?;
+        let xs = self.mlp.fwd(&xs)?;
+        let xs = xs.binary(ug::lang::BinaryOp::Add, residual)?;
+        Ok(xs)
+    }
 }
 
 struct Model {
@@ -285,13 +388,22 @@ impl Model {
         }
         Ok(Self { embedding, layers, ln_f, lm_head, config: cfg.clone() })
     }
+
+    fn fwd(&self, tokens: &[u32]) -> Result<LB> {
+        let mut xs = index_select(&self.embedding, tokens)?;
+        for layer in self.layers.iter() {
+            xs = layer.fwd(&xs)?
+        }
+        let xs = self.ln_f.fwd(&xs)?;
+        let xs = self.lm_head.fwd(&xs)?;
+        Ok(xs)
+    }
 }
 
 fn main() -> Result<()> {
     let st = unsafe { ug::safetensors::MmapedSafetensors::new("model.safetensors")? };
-    let _model = Model::new(&Config::smollm2_135m(), &st)?;
-    let tensor = st.load_with_cast("model.embed_tokens.weight", ug::DType::F32, &CpuDevice)?;
-    let tensor = index_select(&tensor, &[BOS_TOKEN])?;
+    let model = Model::new(&Config::smollm2_135m(), &st)?;
+    let tensor = model.fwd(&[BOS_TOKEN])?;
     println!("{:?} {:?} {}", tensor.shape(), tensor.dtype(), tensor.realized());
 
     let schedule = ug::Schedule::create_one(&tensor)?;
