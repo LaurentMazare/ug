@@ -365,7 +365,10 @@ impl Attention {
 
         // attention
         let k = transpose(&k, 3, 2)?;
-        let att = q.matmul(k)?; // TODO: rescale by 1/sqrt(head_dim)
+        let att = q.matmul(k)?;
+        let scale = ug::LazyBuffer::cst((self.num_heads as f32).powf(-0.5), (), q.device())?;
+        let scale = scale.broadcast(att.shape())?;
+        let att = att.binary(ug::lang::BinaryOp::Mul, scale)?;
         let att = softmax(&att)?;
         let xs = att.matmul(v)?;
 
