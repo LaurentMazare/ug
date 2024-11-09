@@ -368,8 +368,9 @@ impl Attention {
         // attention
         let k = transpose(&k, 3, 2)?;
         let att = q.matmul(k)?;
-        let scale = ug::LazyBuffer::cst((self.num_heads as f32).powf(-0.5), (), q.device())?;
-        let scale = scale.broadcast(att.shape())?;
+        let scale =
+            ug::LazyBuffer::cst((self.head_dim as f32).powf(-0.5), att.shape(), q.device())?;
+        // TODO: There is a bug when using broadcasting before mul.
         let att = att.binary(ug::lang::BinaryOp::Mul, scale)?;
         let att = softmax(&att)?;
         let xs = att.matmul(v)?;
