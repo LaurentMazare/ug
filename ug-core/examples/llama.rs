@@ -402,12 +402,15 @@ impl Model {
 
 fn main() -> Result<()> {
     let st = unsafe { ug::safetensors::MmapedSafetensors::new("model.safetensors")? };
-    let model = Model::new(&Config::smollm2_135m(), &st)?;
+    let mut config = Config::smollm2_135m();
+    config.num_hidden_layers = 0; // TODO: add the layers.
+    let model = Model::new(&config, &st)?;
     let tensor = model.fwd(&[BOS_TOKEN])?;
     println!("{:?} {:?} {}", tensor.shape(), tensor.dtype(), tensor.realized());
-
     let schedule = ug::Schedule::create_one(&tensor)?;
+    println!("schedule generated");
     let schedule = schedule.compile()?;
+    println!("schedule compiled");
     schedule.run()?;
     println!("{:?} {:?} {}", tensor.shape(), tensor.dtype(), tensor.realized());
 
