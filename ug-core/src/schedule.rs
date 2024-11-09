@@ -293,10 +293,12 @@ impl<D: Device> Context<D> {
 
     fn push_kernel(&mut self, buffer: &LazyBuffer<D>, ast: Ast) -> Result<ArgId> {
         if let crate::lang::op::AstInner::Load { src: src_arg_id, layout } = ast.inner.as_ref() {
-            if layout.c_contiguous() && layout.offset() == 0 {
+            let src = self.get_arg_id(*src_arg_id)?;
+            if src.layout() == layout {
+                // We cannot just return the shortcut arg-id here as other parts of the code relies
+                // upon the buffer associated to the LB to have been filled.
                 // return Ok(*src_arg_id);
             }
-            let src = self.get_arg_id(*src_arg_id)?;
             if src.id() == buffer.id() {
                 // Avoid the cases where we load and store immediately a buffer, this is a no-op
                 // and would result in a deadlock.

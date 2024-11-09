@@ -471,7 +471,7 @@ impl Model {
 fn main() -> Result<()> {
     let st = unsafe { ug::safetensors::MmapedSafetensors::new("model.safetensors")? };
     let mut config = Config::smollm2_135m();
-    config.num_hidden_layers = 1; // TODO: add the layers.
+    // config.num_hidden_layers = 1; // TODO: add the layers.
     let model = Model::new(&config, &st)?;
     let tensor = model.fwd(&[BOS_TOKEN])?;
     println!("{:?} {:?} {}", tensor.shape(), tensor.dtype(), tensor.realized());
@@ -488,7 +488,7 @@ fn main() -> Result<()> {
         let data = tensor.data().lock().unwrap();
         let data = data.as_ref().unwrap();
         let data = data.to_vec::<f32>()?;
-        println!("{} {:?}", data.len(), &data);
+        println!("{} {:?}", data.len(), &data[..10]);
     };
 
     Ok(())
