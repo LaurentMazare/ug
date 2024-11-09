@@ -272,7 +272,10 @@ impl<D: Device> Context<D> {
                     let arg_id = self.push_schedule_item(arg)?;
                     args.push((arg_id, arg.clone()))
                 }
-                let dst_id = args[0].0;
+                let dst_id = match args.last() {
+                    None => crate::bail!("BUG: unexpected empty args in custom op"),
+                    Some(arg) => arg.0,
+                };
                 self.items.push(ScheduleItem::Custom { f: f.clone(), args });
                 crate::lang::op::load(dst_id, Layout::from_shape(shape), dtype)?
             }
@@ -289,7 +292,10 @@ impl<D: Device> Context<D> {
     }
 
     fn push_kernel(&mut self, buffer: &LazyBuffer<D>, ast: Ast) -> Result<ArgId> {
-        if let crate::lang::op::AstInner::Load { src: src_arg_id, layout: _ } = ast.inner.as_ref() {
+        if let crate::lang::op::AstInner::Load { src: src_arg_id, layout } = ast.inner.as_ref() {
+            if layout.c_contiguous() && layout.offset() == 0 {
+                // return Ok(*src_arg_id);
+            }
             let src = self.get_arg_id(*src_arg_id)?;
             if src.id() == buffer.id() {
                 // Avoid the cases where we load and store immediately a buffer, this is a no-op
