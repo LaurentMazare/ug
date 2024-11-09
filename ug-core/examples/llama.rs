@@ -403,7 +403,7 @@ impl Model {
 fn main() -> Result<()> {
     let st = unsafe { ug::safetensors::MmapedSafetensors::new("model.safetensors")? };
     let mut config = Config::smollm2_135m();
-    config.num_hidden_layers = 0; // TODO: add the layers.
+    // config.num_hidden_layers = 1; // TODO: add the layers.
     let model = Model::new(&config, &st)?;
     let tensor = model.fwd(&[BOS_TOKEN])?;
     println!("{:?} {:?} {}", tensor.shape(), tensor.dtype(), tensor.realized());

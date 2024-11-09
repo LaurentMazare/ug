@@ -1,5 +1,6 @@
 use crate::lang::op::{ArgId, Ast};
 use crate::{Device, Layout, LazyBuffer, Result};
+use std::collections::HashMap;
 
 type Args<D> = Vec<(ArgId, LazyBuffer<D>)>;
 
@@ -50,7 +51,7 @@ pub enum ScheduleItem<D: Device> {
 pub struct Schedule<D: Device> {
     /// Elements in `items` are topologically sorted so that they can be run in order.
     items: Vec<ScheduleItem<D>>,
-    per_arg_id: std::collections::HashMap<ArgId, LazyBuffer<D>>,
+    per_arg_id: HashMap<ArgId, LazyBuffer<D>>,
     device: D,
 }
 
@@ -201,14 +202,13 @@ impl<D: Device> CompiledSchedule<D> {
 
 struct Context<D: Device> {
     items: Vec<ScheduleItem<D>>,
-    per_arg_id: std::collections::HashMap<ArgId, LazyBuffer<D>>,
-    // TODO: Detect the shared parts of the computation graphs and ensure that these are realized
-    // and converted to kernel arguments.
+    per_arg_id: HashMap<ArgId, LazyBuffer<D>>,
+    ast_cache: HashMap<crate::lazy_buffer::Id, Ast>,
 }
 
 impl<D: Device> Context<D> {
     fn new() -> Self {
-        Self { items: vec![], per_arg_id: std::collections::HashMap::new() }
+        Self { items: vec![], per_arg_id: HashMap::new(), ast_cache: HashMap::new() }
     }
 
     fn get_arg_id(&self, arg_id: ArgId) -> Result<&LazyBuffer<D>> {
@@ -220,6 +220,11 @@ impl<D: Device> Context<D> {
 
     fn walk(&mut self, b: &LazyBuffer<D>) -> Result<Ast> {
         use crate::lazy_buffer::Op;
+
+        let id = b.id();
+        if let Some(ast) = self.ast_cache.get(&id) {
+            return Ok(ast.clone());
+        }
 
         let dtype = b.dtype();
         let shape = b.shape();
@@ -273,6 +278,7 @@ impl<D: Device> Context<D> {
                 crate::lang::op::load(dst_id, Layout::from_shape(shape), dtype)?
             }
         };
+        self.ast_cache.insert(id, ast.clone());
         Ok(ast)
     }
 
