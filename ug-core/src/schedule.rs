@@ -69,7 +69,11 @@ impl<D: Device> Schedule<D> {
         } else {
             buffers[0].device().clone()
         };
-        let mut context = Context::new();
+        let mut cnts = HashMap::new();
+        for buffer in buffers.iter() {
+            id_cnts(buffer, &mut cnts)
+        }
+        let mut context = Context::new(cnts);
         for &buffer in buffers.iter() {
             context.push_schedule_item(buffer)?;
         }
@@ -77,13 +81,7 @@ impl<D: Device> Schedule<D> {
     }
 
     pub fn create_one(buffer: &LazyBuffer<D>) -> Result<Self> {
-        let mut context = Context::new();
-        context.push_schedule_item(buffer)?;
-        Ok(Self {
-            items: context.items,
-            device: buffer.device().clone(),
-            per_arg_id: context.per_arg_id,
-        })
+        Self::create(&[buffer])
     }
 
     pub fn items(&self) -> &[ScheduleItem<D>] {
@@ -204,11 +202,12 @@ struct Context<D: Device> {
     items: Vec<ScheduleItem<D>>,
     per_arg_id: HashMap<ArgId, LazyBuffer<D>>,
     ast_cache: HashMap<crate::lazy_buffer::Id, Ast>,
+    id_cnts: HashMap<crate::lazy_buffer::Id, usize>,
 }
 
 impl<D: Device> Context<D> {
-    fn new() -> Self {
-        Self { items: vec![], per_arg_id: HashMap::new(), ast_cache: HashMap::new() }
+    fn new(id_cnts: HashMap<crate::lazy_buffer::Id, usize>) -> Self {
+        Self { items: vec![], per_arg_id: HashMap::new(), ast_cache: HashMap::new(), id_cnts }
     }
 
     fn get_arg_id(&self, arg_id: ArgId) -> Result<&LazyBuffer<D>> {
@@ -278,12 +277,18 @@ impl<D: Device> Context<D> {
                 crate::lang::op::load(dst_id, Layout::from_shape(shape), dtype)?
             }
         };
+        // When a subtree appears multiple times in the ast, generate a dedicated kernel.
+        let ast = if self.id_cnts.get(&id).copied().unwrap_or(0) > 1 {
+            let dst_id = self.push_kernel(b, ast)?;
+            crate::lang::op::load(dst_id, Layout::from_shape(shape), dtype)?
+        } else {
+            ast
+        };
         self.ast_cache.insert(id, ast.clone());
         Ok(ast)
     }
 
-    fn push_schedule_item(&mut self, buffer: &LazyBuffer<D>) -> Result<ArgId> {
-        let ast = self.walk(buffer)?;
+    fn push_kernel(&mut self, buffer: &LazyBuffer<D>, ast: Ast) -> Result<ArgId> {
         if let crate::lang::op::AstInner::Load { src: src_arg_id, layout: _ } = ast.inner.as_ref() {
             let src = self.get_arg_id(*src_arg_id)?;
             if src.id() == buffer.id() {
@@ -307,5 +312,34 @@ impl<D: Device> Context<D> {
         let si = KernelItem { ast, dst: (dst_id, buffer.clone()), args };
         self.items.push(ScheduleItem::Kernel(si));
         Ok(dst_id)
+    }
+
+    fn push_schedule_item(&mut self, buffer: &LazyBuffer<D>) -> Result<ArgId> {
+        let ast = self.walk(buffer)?;
+        self.push_kernel(buffer, ast)
+    }
+}
+
+fn id_cnts<D: Device>(b: &LazyBuffer<D>, cnts: &mut HashMap<crate::lazy_buffer::Id, usize>) {
+    use crate::lazy_buffer::Op;
+
+    let id = b.id();
+    let cnt = cnts.entry(id).or_insert(0);
+    *cnt += 1;
+    if *cnt > 1 {
+        return;
+    }
+    match b.op() {
+        Op::Copy | Op::Const(_) => {}
+        Op::Layout(_, arg) | Op::Reduce(_, arg, _) | Op::Unary(_, arg) => id_cnts(arg, cnts),
+        Op::MatMul(arg1, arg2, _) | Op::Binary(_, arg1, arg2) => {
+            id_cnts(arg1, cnts);
+            id_cnts(arg2, cnts);
+        }
+        Op::Custom { f: _, args } => {
+            for arg in args.iter() {
+                id_cnts(arg, cnts);
+            }
+        }
     }
 }

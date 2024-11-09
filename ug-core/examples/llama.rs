@@ -8,7 +8,7 @@ type ST = ug::safetensors::MmapedSafetensors;
 
 const UNK_TOKEN: u32 = 0;
 const BOS_TOKEN: u32 = 1;
-const EOS_TOKEN: u32 = 1;
+const EOS_TOKEN: u32 = 2;
 
 #[derive(Debug, Clone)]
 pub enum HiddenAct {
@@ -346,6 +346,9 @@ struct Attention {
 impl Attention {
     fn fwd(&self, xs: &LB) -> Result<LB> {
         let (b_sz, seq_len, hidden_size) = xs.shape().dims3()?;
+        if seq_len != 1 {
+            ug::bail!("seq_len {seq_len} > 1 is not supported as no causal mask is applied")
+        }
         let q = self.q_proj.fwd(xs)?;
         let k = self.k_proj.fwd(xs)?;
         let v = self.v_proj.fwd(xs)?;
