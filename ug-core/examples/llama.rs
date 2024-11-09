@@ -1,13 +1,15 @@
 // wget https://huggingface.co/HuggingFaceTB/SmolLM2-135M/resolve/main/model.safetensors
-#![allow(unused)]
 use rayon::prelude::*;
-use ug::{CpuDevice, CpuStorage, LazyBuffer, Result, Slice, WithDType};
+use ug::{CpuDevice, CpuStorage, LazyBuffer, Result, Slice};
 
 type LB = LazyBuffer<CpuDevice>;
 type ST = ug::safetensors::MmapedSafetensors;
 
+const NUM_HIDDEN_LAYERS: Option<usize> = Some(1);
+#[allow(unused)]
 const UNK_TOKEN: u32 = 0;
 const BOS_TOKEN: u32 = 1;
+#[allow(unused)]
 const EOS_TOKEN: u32 = 2;
 
 #[derive(Debug, Clone)]
@@ -15,6 +17,7 @@ pub enum HiddenAct {
     Silu,
 }
 
+#[allow(unused)]
 #[derive(Debug, Clone)]
 pub struct Config {
     hidden_act: HiddenAct,
@@ -59,8 +62,8 @@ fn index_select(src: &LB, ids: &[u32]) -> Result<LB> {
     let (_, h) = src.shape().dims2()?;
     let out = LB::cst(0f32, (seq_len, h), &CpuDevice)?;
     let ids = ids.to_vec();
-    let f = move |mut vs: Vec<&mut CpuStorage>| -> Result<()> {
-        let [src, mut dst]: [&mut CpuStorage; 2] = vs.try_into().unwrap();
+    let f = move |vs: Vec<&mut CpuStorage>| -> Result<()> {
+        let [src, dst]: [&mut CpuStorage; 2] = vs.try_into().unwrap();
         let dst = dst.data_mut::<f32>()?;
         let src = src.data::<f32>()?;
         for (i, id) in ids.iter().enumerate() {
@@ -77,8 +80,8 @@ fn rms_norm(src: &LB, alpha: &LB, eps: f32) -> Result<LB> {
     let rank = src.rank();
     let dim_m1 = src.dims()[rank - 1];
     let out = LB::cst(0f32, src.shape(), &CpuDevice)?;
-    let f = move |mut vs: Vec<&mut CpuStorage>| -> Result<()> {
-        let [src, alpha, mut dst]: [&mut CpuStorage; 3] = vs.try_into().unwrap();
+    let f = move |vs: Vec<&mut CpuStorage>| -> Result<()> {
+        let [src, alpha, dst]: [&mut CpuStorage; 3] = vs.try_into().unwrap();
         let dst = dst.data_mut::<f32>()?;
         let src = src.data::<f32>()?;
         let alpha = alpha.data::<f32>()?;
@@ -95,11 +98,12 @@ fn rms_norm(src: &LB, alpha: &LB, eps: f32) -> Result<LB> {
     Ok(out)
 }
 
+#[allow(unused)]
 fn rope_i(src: &LB, cos: &LB, sin: &LB, pos: usize) -> Result<LB> {
     let (b, h, t, d) = src.shape().dims4()?;
     let out = LB::cst(0f32, (b, h, t, d), &CpuDevice)?;
-    let f = move |mut vs: Vec<&mut CpuStorage>| -> Result<()> {
-        let [src, cos, sin, mut dst]: [&mut CpuStorage; 4] = vs.try_into().unwrap();
+    let f = move |vs: Vec<&mut CpuStorage>| -> Result<()> {
+        let [src, cos, sin, dst]: [&mut CpuStorage; 4] = vs.try_into().unwrap();
         let src = src.data::<f32>()?;
         let cos = cos.data::<f32>()?;
         let sin = sin.data::<f32>()?;
@@ -109,7 +113,7 @@ fn rope_i(src: &LB, cos: &LB, sin: &LB, pos: usize) -> Result<LB> {
         dst.par_chunks_mut(t * d).for_each(|dst| {
             for i_over_2 in 0..t * d / 2 {
                 let i = 2 * i_over_2;
-                let (s_i, s_ip) = (dst[i], dst[i + 1]);
+                let (s_i, s_ip) = (src[i], src[i + 1]);
                 dst[i] = s_i * cos[i_over_2] - s_ip * sin[i_over_2];
                 dst[i + 1] = s_i * sin[i_over_2] + s_ip * cos[i_over_2];
             }
@@ -120,11 +124,12 @@ fn rope_i(src: &LB, cos: &LB, sin: &LB, pos: usize) -> Result<LB> {
     Ok(out)
 }
 
+#[allow(unused)]
 fn rope(src: &LB, cos: &LB, sin: &LB, pos: usize) -> Result<LB> {
     let (b, h, t, d) = src.shape().dims4()?;
     let out = LB::cst(0f32, (b, h, t, d), &CpuDevice)?;
-    let f = move |mut vs: Vec<&mut CpuStorage>| -> Result<()> {
-        let [src, cos, sin, mut dst]: [&mut CpuStorage; 4] = vs.try_into().unwrap();
+    let f = move |vs: Vec<&mut CpuStorage>| -> Result<()> {
+        let [src, cos, sin, dst]: [&mut CpuStorage; 4] = vs.try_into().unwrap();
         let src = src.data::<f32>()?;
         let cos = cos.data::<f32>()?;
         let sin = sin.data::<f32>()?;
@@ -137,7 +142,7 @@ fn rope(src: &LB, cos: &LB, sin: &LB, pos: usize) -> Result<LB> {
                     let i1 = i_t * d + i_d;
                     let i2 = i1 + d / 2;
                     let i_cs = i_t * (d / 2) + i_d;
-                    let (src_i1, src_i2) = (dst[i1], dst[i2]);
+                    let (src_i1, src_i2) = (src[i1], src[i2]);
                     dst[i1] = src_i1 * cos[i_cs] - src_i2 * sin[i_cs];
                     dst[i2] = src_i1 * sin[i_cs] + src_i2 * cos[i_cs];
                 }
@@ -160,8 +165,8 @@ fn repeat(src: &LB, axis: usize, n_rep: usize) -> Result<LB> {
     let mut dst_dims = dims.clone();
     dst_dims[axis] *= n_rep;
     let out = LB::cst(0f32, dst_dims, &CpuDevice)?;
-    let f = move |mut vs: Vec<&mut CpuStorage>| -> Result<()> {
-        let [src, mut dst]: [&mut CpuStorage; 2] = vs.try_into().unwrap();
+    let f = move |vs: Vec<&mut CpuStorage>| -> Result<()> {
+        let [src, dst]: [&mut CpuStorage; 2] = vs.try_into().unwrap();
         let dst = dst.data_mut::<f32>()?;
         let src = src.data::<f32>()?;
         let d_i = dims[..(axis + 1)].iter().product::<usize>();
@@ -191,8 +196,8 @@ fn transpose(src: &LB, dim1: usize, dim2: usize) -> Result<LB> {
     let mut dst_dims = dims.clone();
     dst_dims.swap(dim1, dim2);
     let out = LB::cst(0f32, dst_dims, &CpuDevice)?;
-    let f = move |mut vs: Vec<&mut CpuStorage>| -> Result<()> {
-        let [src, mut dst]: [&mut CpuStorage; 2] = vs.try_into().unwrap();
+    let f = move |vs: Vec<&mut CpuStorage>| -> Result<()> {
+        let [src, dst]: [&mut CpuStorage; 2] = vs.try_into().unwrap();
         let dst = dst.data_mut::<f32>()?;
         let src = src.data::<f32>()?;
         let d_i = dims[..dim1].iter().product::<usize>();
@@ -235,8 +240,8 @@ fn softmax(src: &LB) -> Result<LB> {
     let rank = src.rank();
     let dim_m1 = src.dims()[rank - 1];
     let out = LB::cst(0f32, src.shape(), &CpuDevice)?;
-    let f = move |mut vs: Vec<&mut CpuStorage>| -> Result<()> {
-        let [src, mut dst]: [&mut CpuStorage; 2] = vs.try_into().unwrap();
+    let f = move |vs: Vec<&mut CpuStorage>| -> Result<()> {
+        let [src, dst]: [&mut CpuStorage; 2] = vs.try_into().unwrap();
         let dst = dst.data_mut::<f32>()?;
         let src = src.data::<f32>()?;
         src.par_chunks(dim_m1).zip(dst.par_chunks_mut(dim_m1)).for_each(|(src, dst)| {
@@ -260,8 +265,8 @@ fn softmax(src: &LB) -> Result<LB> {
 
 fn silu(src: &LB) -> Result<LB> {
     let out = LB::cst(0f32, src.shape(), &CpuDevice)?;
-    let f = move |mut vs: Vec<&mut CpuStorage>| -> Result<()> {
-        let [src, mut dst]: [&mut CpuStorage; 2] = vs.try_into().unwrap();
+    let f = move |vs: Vec<&mut CpuStorage>| -> Result<()> {
+        let [src, dst]: [&mut CpuStorage; 2] = vs.try_into().unwrap();
         let dst = dst.data_mut::<f32>()?;
         let src = src.data::<f32>()?;
         for (d, s) in dst.iter_mut().zip(src.iter()) {
@@ -345,7 +350,7 @@ struct Attention {
 
 impl Attention {
     fn fwd(&self, xs: &LB) -> Result<LB> {
-        let (b_sz, seq_len, hidden_size) = xs.shape().dims3()?;
+        let (b_sz, seq_len, _hidden_size) = xs.shape().dims3()?;
         if seq_len != 1 {
             ug::bail!("seq_len {seq_len} > 1 is not supported as no causal mask is applied")
         }
@@ -471,7 +476,9 @@ impl Model {
 fn main() -> Result<()> {
     let st = unsafe { ug::safetensors::MmapedSafetensors::new("model.safetensors")? };
     let mut config = Config::smollm2_135m();
-    // config.num_hidden_layers = 1; // TODO: add the layers.
+    if let Some(num_hidden_layers) = NUM_HIDDEN_LAYERS {
+        config.num_hidden_layers = num_hidden_layers;
+    }
     let model = Model::new(&config, &st)?;
     let tensor = model.fwd(&[BOS_TOKEN])?;
     println!("{:?} {:?} {}", tensor.shape(), tensor.dtype(), tensor.realized());
