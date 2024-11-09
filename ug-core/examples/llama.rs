@@ -164,8 +164,8 @@ fn repeat(src: &LB, axis: usize, n_rep: usize) -> Result<LB> {
         let [src, mut dst]: [&mut CpuStorage; 2] = vs.try_into().unwrap();
         let dst = dst.data_mut::<f32>()?;
         let src = src.data::<f32>()?;
-        let d_i = dims[..axis].iter().product::<usize>();
-        let d_j = dims[axis..].iter().product::<usize>();
+        let d_i = dims[..(axis + 1)].iter().product::<usize>();
+        let d_j = dims[(axis + 1)..].iter().product::<usize>();
         for i in 0..d_i {
             let src = &src[i * d_j..(i + 1) * d_j];
             let dst = &mut dst[i * d_j * n_rep..(i + 1) * d_j * n_rep];
@@ -362,7 +362,6 @@ impl Attention {
 
         // TODO: Rope
         // TODO: KV Cache
-        // TODO: Repeat KV
         let k = repeat(&k, 1, self.num_heads / self.num_kv_heads)?;
         let v = repeat(&v, 1, self.num_heads / self.num_kv_heads)?;
 
@@ -475,10 +474,12 @@ fn main() -> Result<()> {
     let model = Model::new(&config, &st)?;
     let tensor = model.fwd(&[BOS_TOKEN])?;
     println!("{:?} {:?} {}", tensor.shape(), tensor.dtype(), tensor.realized());
+    let start_time = std::time::Instant::now();
     let schedule = ug::Schedule::create_one(&tensor)?;
-    println!("schedule generated");
+    println!("schedule generated in {:.2}s", start_time.elapsed().as_secs_f32());
+    let start_time = std::time::Instant::now();
     let schedule = schedule.compile()?;
-    println!("schedule compiled");
+    println!("schedule generated in {:.2}s", start_time.elapsed().as_secs_f32());
     schedule.run()?;
     println!("{:?} {:?} {}", tensor.shape(), tensor.dtype(), tensor.realized());
 
@@ -486,7 +487,7 @@ fn main() -> Result<()> {
         let data = tensor.data().lock().unwrap();
         let data = data.as_ref().unwrap();
         let data = data.to_vec::<f32>()?;
-        println!("{:?}", &data[..10]);
+        println!("{} {:?}", data.len(), &data);
     };
 
     Ok(())
