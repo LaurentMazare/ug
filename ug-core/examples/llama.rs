@@ -77,7 +77,9 @@ fn index_select(src: &LB, ids: &[u32]) -> Result<LB> {
 fn rms_norm(src: &LB, alpha: &LB, eps: f32) -> Result<LB> {
     let rank = src.rank();
     let dim_m1 = src.dims()[rank - 1];
+    let span_rms = tracing::span!(tracing::Level::TRACE, "rms");
     let f = move |vs: Vec<&mut CpuStorage>| -> Result<()> {
+        let _guard = span_rms.enter();
         let [src, alpha, dst]: [&mut CpuStorage; 3] = vs.try_into().unwrap();
         let dst = dst.data_mut::<f32>()?;
         let src = src.data::<f32>()?;
@@ -237,7 +239,9 @@ fn transpose(src: &LB, dim1: usize, dim2: usize) -> Result<LB> {
 fn softmax(src: &LB) -> Result<LB> {
     let rank = src.rank();
     let dim_m1 = src.dims()[rank - 1];
+    let span_sm = tracing::span!(tracing::Level::TRACE, "softmax");
     let f = move |vs: Vec<&mut CpuStorage>| -> Result<()> {
+        let _guard = span_sm.enter();
         let [src, dst]: [&mut CpuStorage; 2] = vs.try_into().unwrap();
         let dst = dst.data_mut::<f32>()?;
         let src = src.data::<f32>()?;
@@ -554,7 +558,7 @@ fn main() -> Result<()> {
         config.num_hidden_layers = num_hidden_layers;
     }
     let model = Model::new(&config, &st)?;
-    let tensor = model.fwd(&[BOS_TOKEN, 216], 0)?;
+    let tensor = model.fwd(&[BOS_TOKEN], 0)?;
     println!("{:?} {:?} {}", tensor.shape(), tensor.dtype(), tensor.realized());
     let start_time = std::time::Instant::now();
     let schedule = ug::Schedule::create_one(&tensor)?;
@@ -579,7 +583,7 @@ fn main() -> Result<()> {
         let data = data.as_ref().unwrap();
         let data = data.to_vec::<f32>()?;
         println!("{} {:?}", data.len(), &data[..10]);
-        println!("{} {:?}", data.len(), &data[config.vocab_size..config.vocab_size + 10]);
+        // println!("{} {:?}", data.len(), &data[config.vocab_size..config.vocab_size + 10]);
     };
 
     Ok(())

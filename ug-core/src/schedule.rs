@@ -82,7 +82,6 @@ impl<D: Device> Schedule<D> {
         }
         let span_compile = tracing::span!(tracing::Level::TRACE, "compile");
         let span_kernel = tracing::span!(tracing::Level::TRACE, "kernel");
-
         Ok(Self {
             items: context.items,
             device,
@@ -178,11 +177,15 @@ pub struct CompiledSchedule<D: Device> {
 
 impl<D: Device> CompiledSchedule<D> {
     pub fn run(&self) -> Result<()> {
+        let span_mm = tracing::span!(tracing::Level::TRACE, "mm");
+        let span_k = tracing::span!(tracing::Level::TRACE, "kernel");
+        let span_custom = tracing::span!(tracing::Level::TRACE, "custom");
         // TODO: We should avoid re-running kernels that have unchanged inputs, tracking
         // variables/copies is likely enough for this.
         for func in self.funcs.iter() {
             match func {
                 Func::Kernel { func, args } => {
+                    let _guard = span_k.enter();
                     // Should we do some deadlock detection?
                     let mut locks = args
                         .iter()
@@ -197,6 +200,7 @@ impl<D: Device> CompiledSchedule<D> {
                     self.device.run(func, &mut locks)?
                 }
                 Func::MatMul { dst, lhs, rhs, bmnk } => {
+                    let _guard = span_mm.enter();
                     let lhs_l = crate::Layout::from_shape(lhs.shape());
                     let rhs_l = crate::Layout::from_shape(rhs.shape());
                     // TODO: provide a nicer api on LazyBuffer to get the underlying buffer and
@@ -213,6 +217,7 @@ impl<D: Device> CompiledSchedule<D> {
                     self.device.matmul(dst, lhs, rhs, *bmnk, &lhs_l, &rhs_l)?;
                 }
                 Func::Custom { f, args } => {
+                    let _guard = span_custom.enter();
                     let mut locks = args
                         .iter()
                         .map(|(_id, lb)| {
