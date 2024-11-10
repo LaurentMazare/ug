@@ -526,12 +526,26 @@ impl Model {
     }
 }
 
-fn main() -> Result<()> {
-    use tracing_chrome::ChromeLayerBuilder;
-    use tracing_subscriber::prelude::*;
+#[derive(clap::Parser, Debug)]
+struct Args {
+    #[arg(long)]
+    tracing: bool,
+}
 
-    let (chrome_layer, _guard) = ChromeLayerBuilder::new().build();
-    tracing_subscriber::registry().with(chrome_layer).init();
+fn main() -> Result<()> {
+    use clap::Parser;
+    let args = Args::parse();
+
+    let _guard = if args.tracing {
+        use tracing_chrome::ChromeLayerBuilder;
+        use tracing_subscriber::prelude::*;
+
+        let (chrome_layer, guard) = ChromeLayerBuilder::new().build();
+        tracing_subscriber::registry().with(chrome_layer).init();
+        Some(guard)
+    } else {
+        None
+    };
 
     let st = unsafe { ug::safetensors::MmapedSafetensors::new("model.safetensors")? };
     let mut config = Config::smollm2_135m();

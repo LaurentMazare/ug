@@ -23,5 +23,6 @@ tracing = { workspace = true }
 yoke = { workspace = true }
 
 [dev-dependencies]
+clap = { workspace = true }
 tracing-chrome = { workspace = true }
 tracing-subscriber = { workspace = true }
