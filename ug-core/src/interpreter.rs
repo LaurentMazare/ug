@@ -31,6 +31,12 @@ impl<T: num::traits::real::Real + Copy, const N: usize> W<T, N> {
     fn exp(&self) -> Self {
         Self(self.0.map(|v| v.exp()))
     }
+    fn sin(&self) -> Self {
+        Self(self.0.map(|v| v.sin()))
+    }
+    fn cos(&self) -> Self {
+        Self(self.0.map(|v| v.cos()))
+    }
 }
 
 pub trait MinMax {
@@ -343,6 +349,10 @@ pub fn eval_ssa<const N: usize>(
                     (U::Neg, _) => crate::bail!("dtype mismatch for {op:?} {arg:?}"),
                     (U::Exp, Value::F32(v)) => Value::F32(v.exp()),
                     (U::Exp, _) => crate::bail!("dtype mismatch for {op:?} {arg:?}"),
+                    (U::Sin, Value::F32(v)) => Value::F32(v.sin()),
+                    (U::Sin, _) => crate::bail!("dtype mismatch for {op:?} {arg:?}"),
+                    (U::Cos, Value::F32(v)) => Value::F32(v.cos()),
+                    (U::Cos, _) => crate::bail!("dtype mismatch for {op:?} {arg:?}"),
                     (U::Cast, Value::F32(v)) => match dtype {
                         ssa::DType::F32 => Value::F32(*v),
                         ssa::DType::I32 => Value::I32(W(v.0.map(|v| v as i32))),

@@ -30,6 +30,36 @@ pub enum CpuStorageRefMut<'a> {
     I64(&'a mut [i64]),
 }
 
+impl From<Vec<bf16>> for CpuStorage {
+    fn from(value: Vec<bf16>) -> Self {
+        Self::BF16(value)
+    }
+}
+
+impl From<Vec<f16>> for CpuStorage {
+    fn from(value: Vec<f16>) -> Self {
+        Self::F16(value)
+    }
+}
+
+impl From<Vec<f32>> for CpuStorage {
+    fn from(value: Vec<f32>) -> Self {
+        Self::F32(value)
+    }
+}
+
+impl From<Vec<i32>> for CpuStorage {
+    fn from(value: Vec<i32>) -> Self {
+        Self::I32(value)
+    }
+}
+
+impl From<Vec<i64>> for CpuStorage {
+    fn from(value: Vec<i64>) -> Self {
+        Self::I64(value)
+    }
+}
+
 impl CpuStorage {
     pub fn as_mut_ptr(&mut self) -> *mut std::ffi::c_void {
         match self {

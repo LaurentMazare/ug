@@ -13,6 +13,8 @@ pub enum ReduceOp {
 pub enum UnaryOp {
     Id,
     Exp,
+    Sin,
+    Cos,
     Neg,
     Cast,
 }

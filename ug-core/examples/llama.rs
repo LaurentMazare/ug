@@ -29,7 +29,7 @@ pub struct Config {
     num_hidden_layers: usize,
     rms_norm_eps: f64,
     rope_interleaved: bool,
-    rope_theta: f64,
+    rope_theta: f32,
     tie_word_embeddings: bool,
     vocab_size: usize,
 }
@@ -409,8 +409,35 @@ impl Layer {
     }
 }
 
+struct Rope {
+    cos: LB,
+    sin: LB,
+}
+
+impl Rope {
+    fn new(cfg: &Config) -> Result<Self> {
+        let head_dim = cfg.head_dim();
+        let max_seq_len = cfg.max_position_embeddings;
+        let theta: Vec<_> = (0..head_dim)
+            .step_by(2)
+            .map(|i| 1f32 / cfg.rope_theta.powf(i as f32 / head_dim as f32))
+            .collect();
+        let theta = LB::from_slice(theta.into(), (1, head_dim / 2))?;
+        let idx_theta = LB::from_slice(
+            (0..max_seq_len).map(|v| v as f32).collect::<Vec<_>>().into(),
+            (max_seq_len, 1),
+        )?;
+        let mm = idx_theta.matmul(theta)?;
+        // TODO: Use the proper sin/cos functions.
+        let cos = mm.unary(ug::lang::UnaryOp::Cos)?;
+        let sin = mm.unary(ug::lang::UnaryOp::Sin)?;
+        Ok(Self { cos, sin })
+    }
+}
+
 struct Model {
     embedding: LB,
+    rope: Rope,
     layers: Vec<Layer>,
     ln_f: RmsNorm,
     lm_head: Linear,
@@ -457,7 +484,8 @@ impl Model {
             let mlp = Mlp { c_fc1, c_fc2, c_proj };
             layers.push(Layer { rms1, attn, rms2, mlp })
         }
-        Ok(Self { embedding, layers, ln_f, lm_head, config: cfg.clone() })
+        let rope = Rope::new(cfg)?;
+        Ok(Self { embedding, layers, ln_f, lm_head, config: cfg.clone(), rope })
     }
 
     fn fwd(&self, tokens: &[u32]) -> Result<LB> {
