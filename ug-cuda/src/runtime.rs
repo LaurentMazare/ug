@@ -95,14 +95,14 @@ impl Func {
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Device {
     device: Arc<cudarc::driver::CudaDevice>,
     blas: Arc<cudarc::cublas::CudaBlas>,
 }
 
 // A GADT based solution would seem better than this variant but not sure how to do this in rust.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub enum SliceInner {
     F32(cudarc::driver::CudaSlice<f32>),
     F16(cudarc::driver::CudaSlice<half::f16>),
@@ -111,7 +111,7 @@ pub enum SliceInner {
     I64(cudarc::driver::CudaSlice<i64>),
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Slice {
     pub(crate) inner: SliceInner,
     device: Device,

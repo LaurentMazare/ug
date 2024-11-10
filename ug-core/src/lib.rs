@@ -24,7 +24,7 @@ pub use lazy_buffer::LazyBuffer;
 pub use r#const::Const;
 pub use schedule::{Schedule, ScheduleItem};
 
-pub trait Slice {
+pub trait Slice: std::fmt::Debug {
     type Device: Device<Slice = Self>;
 
     fn device(&self) -> &Self::Device;
@@ -44,7 +44,7 @@ pub trait Slice {
     }
 }
 
-pub trait Device: Clone {
+pub trait Device: Clone + std::fmt::Debug {
     type Slice: Slice<Device = Self>;
     type Func;
 

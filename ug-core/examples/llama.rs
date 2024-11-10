@@ -60,7 +60,6 @@ impl Config {
 fn index_select(src: &LB, ids: &[u32]) -> Result<LB> {
     let seq_len = ids.len();
     let (_, h) = src.shape().dims2()?;
-    let out = LB::cst(0f32, (seq_len, h), &CpuDevice)?;
     let ids = ids.to_vec();
     let f = move |vs: Vec<&mut CpuStorage>| -> Result<()> {
         let [src, dst]: [&mut CpuStorage; 2] = vs.try_into().unwrap();
@@ -72,14 +71,12 @@ fn index_select(src: &LB, ids: &[u32]) -> Result<LB> {
         }
         Ok(())
     };
-    let out = out.custom(f, vec![src.clone()])?;
-    Ok(out)
+    LB::custom(f, vec![src.clone()], (seq_len, h), src.dtype(), src.device())
 }
 
 fn rms_norm(src: &LB, alpha: &LB, eps: f32) -> Result<LB> {
     let rank = src.rank();
     let dim_m1 = src.dims()[rank - 1];
-    let out = LB::cst(0f32, src.shape(), &CpuDevice)?;
     let f = move |vs: Vec<&mut CpuStorage>| -> Result<()> {
         let [src, alpha, dst]: [&mut CpuStorage; 3] = vs.try_into().unwrap();
         let dst = dst.data_mut::<f32>()?;
@@ -94,13 +91,11 @@ fn rms_norm(src: &LB, alpha: &LB, eps: f32) -> Result<LB> {
         });
         Ok(())
     };
-    let out = out.custom(f, vec![src.clone(), alpha.clone()])?;
-    Ok(out)
+    LB::custom(f, vec![src.clone(), alpha.clone()], src.shape(), src.dtype(), src.device())
 }
 
 fn rope_i(src: &LB, cos: &LB, sin: &LB, pos: usize) -> Result<LB> {
     let (b, h, t, d) = src.shape().dims4()?;
-    let out = LB::cst(0f32, (b, h, t, d), &CpuDevice)?;
     let f = move |vs: Vec<&mut CpuStorage>| -> Result<()> {
         let [src, cos, sin, dst]: [&mut CpuStorage; 4] = vs.try_into().unwrap();
         let src = src.data::<f32>()?;
@@ -119,13 +114,17 @@ fn rope_i(src: &LB, cos: &LB, sin: &LB, pos: usize) -> Result<LB> {
         });
         Ok(())
     };
-    let out = out.custom(f, vec![src.clone(), cos.clone(), sin.clone()])?;
-    Ok(out)
+    LB::custom(
+        f,
+        vec![src.clone(), cos.clone(), sin.clone()],
+        (b, h, t, d),
+        src.dtype(),
+        src.device(),
+    )
 }
 
 fn rope(src: &LB, cos: &LB, sin: &LB, pos: usize) -> Result<LB> {
     let (b, h, t, d) = src.shape().dims4()?;
-    let out = LB::cst(0f32, (b, h, t, d), &CpuDevice)?;
     let f = move |vs: Vec<&mut CpuStorage>| -> Result<()> {
         let [src, cos, sin, dst]: [&mut CpuStorage; 4] = vs.try_into().unwrap();
         let src = src.data::<f32>()?;
@@ -148,8 +147,13 @@ fn rope(src: &LB, cos: &LB, sin: &LB, pos: usize) -> Result<LB> {
         });
         Ok(())
     };
-    let out = out.custom(f, vec![src.clone(), cos.clone(), sin.clone()])?;
-    Ok(out)
+    LB::custom(
+        f,
+        vec![src.clone(), cos.clone(), sin.clone()],
+        (b, h, t, d),
+        src.dtype(),
+        src.device(),
+    )
 }
 
 fn repeat(src: &LB, axis: usize, n_rep: usize) -> Result<LB> {
@@ -162,7 +166,6 @@ fn repeat(src: &LB, axis: usize, n_rep: usize) -> Result<LB> {
     }
     let mut dst_dims = dims.clone();
     dst_dims[axis] *= n_rep;
-    let out = LB::cst(0f32, dst_dims, &CpuDevice)?;
     let f = move |vs: Vec<&mut CpuStorage>| -> Result<()> {
         let [src, dst]: [&mut CpuStorage; 2] = vs.try_into().unwrap();
         let dst = dst.data_mut::<f32>()?;
@@ -178,8 +181,7 @@ fn repeat(src: &LB, axis: usize, n_rep: usize) -> Result<LB> {
         }
         Ok(())
     };
-    let out = out.custom(f, vec![src.clone()])?;
-    Ok(out)
+    LB::custom(f, vec![src.clone()], dst_dims, src.dtype(), src.device())
 }
 
 fn transpose(src: &LB, dim1: usize, dim2: usize) -> Result<LB> {
@@ -193,7 +195,6 @@ fn transpose(src: &LB, dim1: usize, dim2: usize) -> Result<LB> {
     }
     let mut dst_dims = dims.clone();
     dst_dims.swap(dim1, dim2);
-    let out = LB::cst(0f32, dst_dims, &CpuDevice)?;
     let f = move |vs: Vec<&mut CpuStorage>| -> Result<()> {
         let [src, dst]: [&mut CpuStorage; 2] = vs.try_into().unwrap();
         let dst = dst.data_mut::<f32>()?;
@@ -230,14 +231,12 @@ fn transpose(src: &LB, dim1: usize, dim2: usize) -> Result<LB> {
         }
         Ok(())
     };
-    let out = out.custom(f, vec![src.clone()])?;
-    Ok(out)
+    LB::custom(f, vec![src.clone()], dst_dims, src.dtype(), src.device())
 }
 
 fn softmax(src: &LB) -> Result<LB> {
     let rank = src.rank();
     let dim_m1 = src.dims()[rank - 1];
-    let out = LB::cst(0f32, src.shape(), &CpuDevice)?;
     let f = move |vs: Vec<&mut CpuStorage>| -> Result<()> {
         let [src, dst]: [&mut CpuStorage; 2] = vs.try_into().unwrap();
         let dst = dst.data_mut::<f32>()?;
@@ -257,13 +256,11 @@ fn softmax(src: &LB) -> Result<LB> {
         });
         Ok(())
     };
-    let out = out.custom(f, vec![src.clone()])?;
-    Ok(out)
+    LB::custom(f, vec![src.clone()], src.shape(), src.dtype(), src.device())
 }
 
 fn causal_mask(src: &LB) -> Result<LB> {
     let (_b_sz, _num_heads, s1, s2) = src.dims4()?;
-    let out = LB::cst(0f32, src.shape(), &CpuDevice)?;
     let f = move |vs: Vec<&mut CpuStorage>| -> Result<()> {
         let [src, dst]: [&mut CpuStorage; 2] = vs.try_into().unwrap();
         let dst = dst.data_mut::<f32>()?;
@@ -282,12 +279,10 @@ fn causal_mask(src: &LB) -> Result<LB> {
         });
         Ok(())
     };
-    let out = out.custom(f, vec![src.clone()])?;
-    Ok(out)
+    LB::custom(f, vec![src.clone()], src.shape(), src.dtype(), src.device())
 }
 
 fn silu(src: &LB) -> Result<LB> {
-    let out = LB::cst(0f32, src.shape(), &CpuDevice)?;
     let f = move |vs: Vec<&mut CpuStorage>| -> Result<()> {
         let [src, dst]: [&mut CpuStorage; 2] = vs.try_into().unwrap();
         let dst = dst.data_mut::<f32>()?;
@@ -297,8 +292,7 @@ fn silu(src: &LB) -> Result<LB> {
         }
         Ok(())
     };
-    let out = out.custom(f, vec![src.clone()])?;
-    Ok(out)
+    LB::custom(f, vec![src.clone()], src.shape(), src.dtype(), src.device())
 }
 
 struct RmsNorm {

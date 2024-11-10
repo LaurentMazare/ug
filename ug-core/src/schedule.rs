@@ -319,15 +319,14 @@ impl<D: Device> Context<D> {
                 }
             }
             Op::Custom { f, args: b_args } => {
-                let mut args = Vec::with_capacity(b_args.len());
+                let mut args = Vec::with_capacity(b_args.len() + 1);
                 for arg in b_args.iter() {
                     let arg_id = self.push_schedule_item(arg)?;
                     args.push((arg_id, arg.clone()))
                 }
-                let dst_id = match args.last() {
-                    None => crate::bail!("BUG: unexpected empty args in custom op"),
-                    Some(arg) => arg.0,
-                };
+                let dst_id = ArgId::new();
+                self.per_arg_id.insert(dst_id, b.clone());
+                args.push((dst_id, b.clone()));
                 self.items.push(ScheduleItem::Custom { f: f.clone(), args });
                 crate::lang::op::load(dst_id, Layout::from_shape(shape), dtype)?
             }

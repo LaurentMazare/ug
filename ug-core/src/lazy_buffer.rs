@@ -3,6 +3,12 @@ use crate::{Const, DType, Device, Layout, Result, Shape};
 type Callback<S> = std::sync::Arc<dyn Fn(Vec<&mut S>) -> Result<()>>;
 pub struct CustomF<S>(Callback<S>);
 
+impl<S> std::fmt::Debug for CustomF<S> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "<func>")
+    }
+}
+
 impl<S> std::ops::Deref for CustomF<S> {
     type Target = std::sync::Arc<dyn Fn(Vec<&mut S>) -> Result<()>>;
     fn deref(&self) -> &Self::Target {
@@ -46,6 +52,7 @@ pub enum LayoutOp {
     Noop,
 }
 
+#[derive(Debug)]
 pub enum Op<D: Device> {
     Unary(crate::lang::UnaryOp, LazyBuffer<D>),
     Binary(crate::lang::BinaryOp, LazyBuffer<D>, LazyBuffer<D>),
@@ -219,21 +226,21 @@ impl<D: Device> LazyBuffer<D> {
         Ok(lb)
     }
 
-    pub fn custom<F: 'static + Fn(Vec<&mut D::Slice>) -> Result<()>>(
-        &self,
+    pub fn custom<F: 'static + Fn(Vec<&mut D::Slice>) -> Result<()>, S: Into<Shape>>(
         f: F,
-        mut args: Vec<Self>,
+        args: Vec<Self>,
+        s: S,
+        dtype: DType,
+        device: &D,
     ) -> Result<Self> {
-        // TODO: dtype/op/shape checks.
-        args.push(self.clone());
         let f = CustomF::new(f);
         let inner = LazyBufferInner {
             id: Id::new(),
             data: std::sync::Mutex::new(None),
             op: Op::Custom { f, args },
-            dtype: self.dtype,
-            device: self.device.clone(),
-            layout: Layout::from_shape(self.shape()),
+            dtype,
+            device: device.clone(),
+            layout: Layout::from_shape(s.into()),
         };
         let lb = LazyBuffer(std::sync::Arc::new(inner));
         Ok(lb)
