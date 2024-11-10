@@ -112,6 +112,7 @@ impl<D: Device> Schedule<D> {
                         args.push((arg_id, arg.clone()))
                     }
                     let func = self.device.compile(&ssa)?;
+                    let func = std::sync::Arc::new(func);
                     Func::Kernel { func, args }
                 }
             };
@@ -124,7 +125,7 @@ impl<D: Device> Schedule<D> {
 
 pub enum Func<D: Device> {
     Kernel {
-        func: D::Func,
+        func: std::sync::Arc<D::Func>,
         args: Args<D>,
     },
     MatMul {

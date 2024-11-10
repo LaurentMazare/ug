@@ -74,6 +74,10 @@ impl ArgId {
         Self(COUNTER.fetch_add(1, atomic::Ordering::Relaxed))
     }
 
+    pub fn from_usize(v: usize) -> Self {
+        Self(v)
+    }
+
     pub fn as_usize(&self) -> usize {
         self.0
     }
@@ -545,7 +549,7 @@ pub mod op {
         }
     }
 
-    #[derive(Debug, Clone, PartialEq)]
+    #[derive(Debug, Clone, PartialEq, Eq, Hash)]
     pub struct Store {
         pub(crate) dst: ArgId,
         pub(crate) layout: Layout,
@@ -562,7 +566,7 @@ pub mod op {
         }
     }
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, PartialEq, Eq, Hash)]
     pub struct Kernel {
         name: String,
         pub(crate) args: Vec<Arg>,
