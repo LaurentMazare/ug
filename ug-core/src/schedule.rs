@@ -280,9 +280,30 @@ impl<D: Device> Context<D> {
                 self.per_arg_id.insert(arg_id, b.clone());
                 crate::lang::op::load(arg_id, Layout::from_shape(shape), dtype)?
             }
-            Op::Layout(_op, arg) => {
-                let dst_id = self.push_schedule_item(arg)?;
-                crate::lang::op::load(dst_id, Layout::from_shape(shape), dtype)?
+            Op::Layout(op, arg) => {
+                use crate::lazy_buffer::LayoutOp as L;
+                match op {
+                    L::Noop => {
+                        let dst_id = self.push_schedule_item(arg)?;
+                        crate::lang::op::load(dst_id, Layout::from_shape(shape), dtype)?
+                    }
+                    L::Reshape => {
+                        if arg.layout().c_contiguous()
+                            && b.layout().c_contiguous()
+                            && arg.layout().offset() == b.layout().offset()
+                        {
+                            let dst_id = self.push_schedule_item(arg)?;
+                            crate::lang::op::load(dst_id, Layout::from_shape(shape), dtype)?
+                        } else {
+                            crate::bail!("unsupported reshape {:?} {:?}", arg.layout(), b.layout())
+                        }
+                    }
+                    L::Broadcast => {
+                        // TODO: Check that the layout is C contiguous.
+                        let ast = self.walk(arg)?;
+                        crate::lang::op::broadcast(ast, b.shape())?
+                    }
+                }
             }
             Op::Custom { f, args: b_args } => {
                 let mut args = Vec::with_capacity(b_args.len());

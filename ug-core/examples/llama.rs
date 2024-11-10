@@ -403,8 +403,8 @@ impl Attention {
         // attention
         let k = transpose(&k, 3, 2)?;
         let att = q.matmul(k)?;
-        let scale =
-            ug::LazyBuffer::cst((self.head_dim as f32).powf(-0.5), att.shape(), q.device())?;
+        let scale = ug::LazyBuffer::cst((self.head_dim as f32).powf(-0.5), (), q.device())?;
+        let scale = scale.broadcast(att.shape())?;
         // TODO: There is a bug when using broadcasting before mul.
         let att = att.binary(ug::lang::BinaryOp::Mul, scale)?;
         let att = if seq_len == 1 { att } else { causal_mask(&att)? };
@@ -552,7 +552,12 @@ fn main() -> Result<()> {
     let start_time = std::time::Instant::now();
     let schedule = schedule.compile()?;
     println!("schedule compiled in {:.2}s", start_time.elapsed().as_secs_f32());
+    let start_time = std::time::Instant::now();
     schedule.run()?;
+    println!("schedule executed in {:.2}s", start_time.elapsed().as_secs_f32());
+    let start_time = std::time::Instant::now();
+    schedule.run()?;
+    println!("schedule executed in {:.2}s", start_time.elapsed().as_secs_f32());
     println!("{:?} {:?} {}", tensor.shape(), tensor.dtype(), tensor.realized());
 
     {
