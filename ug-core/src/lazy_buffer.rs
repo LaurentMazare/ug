@@ -56,7 +56,7 @@ pub enum LayoutOp {
 pub enum Op<D: Device> {
     Unary(crate::lang::UnaryOp, LazyBuffer<D>),
     Binary(crate::lang::BinaryOp, LazyBuffer<D>, LazyBuffer<D>),
-    MatMul(LazyBuffer<D>, LazyBuffer<D>, (usize, usize, usize, usize)),
+    MatMul(LazyBuffer<D>, LazyBuffer<D>, (usize, usize, usize, usize), bool),
     Reduce(crate::lang::ReduceOp, LazyBuffer<D>, usize),
     Const(crate::lang::Const),
     Copy,
@@ -243,6 +243,14 @@ impl<D: Device> LazyBuffer<D> {
     }
 
     pub fn matmul(&self, rhs: Self) -> Result<Self> {
+        self.matmul_(rhs, false)
+    }
+
+    pub fn matmul_t(&self, rhs: Self) -> Result<Self> {
+        self.matmul_(rhs, true)
+    }
+
+    pub fn matmul_(&self, rhs: Self, transpose: bool) -> Result<Self> {
         let lhs_dims = self.dims();
         let rhs_dims = rhs.dims();
         let dim = lhs_dims.len();
@@ -253,8 +261,11 @@ impl<D: Device> LazyBuffer<D> {
 
         let m = lhs_dims[dim - 2];
         let k = lhs_dims[dim - 1];
-        let k2 = rhs_dims[dim - 2];
-        let n = rhs_dims[dim - 1];
+        let (k2, n) = if transpose {
+            (rhs_dims[dim - 1], rhs_dims[dim - 2])
+        } else {
+            (rhs_dims[dim - 2], rhs_dims[dim - 1])
+        };
 
         let lhs_bsz: usize = lhs_dims[..dim - 2].iter().product();
         let rhs_bsz: usize = rhs_dims[..dim - 2].iter().product();
@@ -268,7 +279,7 @@ impl<D: Device> LazyBuffer<D> {
         let inner = LazyBufferInner {
             id: Id::new(),
             data: std::sync::Mutex::new(None),
-            op: Op::MatMul(self.clone(), rhs, bmnk),
+            op: Op::MatMul(self.clone(), rhs, bmnk, transpose),
             dtype: self.dtype,
             device: self.device.clone(),
             shape: shape.into(),

@@ -573,6 +573,18 @@ impl Layout {
         Self { shape, strides, offset: 0 }
     }
 
+    pub fn transpose(&self) -> Self {
+        let r = self.rank();
+        if r < 2 {
+            return self.clone();
+        }
+        let mut dims = self.dims().to_vec();
+        let mut strides = self.strides.to_vec();
+        dims.swap(r - 2, r - 1);
+        strides.swap(r - 2, r - 1);
+        Self { shape: dims.into(), offset: self.offset, strides }
+    }
+
     pub fn num_elements(&self) -> usize {
         self.shape.num_elements()
     }

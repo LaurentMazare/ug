@@ -42,6 +42,7 @@ pub enum ScheduleItem<D: Device> {
         lhs: LazyBuffer<D>,
         rhs: LazyBuffer<D>,
         bmnk: (usize, usize, usize, usize),
+        transpose: bool,
     },
     Custom {
         f: crate::lazy_buffer::CustomF<D::Slice>,
@@ -108,11 +109,12 @@ impl<D: Device> Schedule<D> {
             HashMap::new();
         for item in self.items() {
             let call = match item {
-                ScheduleItem::MatMul { dst, lhs, rhs, bmnk } => Func::MatMul {
+                ScheduleItem::MatMul { dst, lhs, rhs, bmnk, transpose } => Func::MatMul {
                     dst: dst.clone(),
                     lhs: lhs.clone(),
                     rhs: rhs.clone(),
                     bmnk: *bmnk,
+                    transpose: *transpose,
                 },
                 ScheduleItem::Custom { f, args } => {
                     Func::Custom { f: f.clone(), args: args.to_vec() }
@@ -163,6 +165,7 @@ pub enum Func<D: Device> {
         lhs: LazyBuffer<D>,
         rhs: LazyBuffer<D>,
         bmnk: (usize, usize, usize, usize),
+        transpose: bool,
     },
     Custom {
         f: crate::lazy_buffer::CustomF<D::Slice>,
@@ -199,10 +202,11 @@ impl<D: Device> CompiledSchedule<D> {
                         locks.iter_mut().map(|v| v.as_mut().unwrap()).collect::<Vec<_>>();
                     self.device.run(func, &mut locks)?
                 }
-                Func::MatMul { dst, lhs, rhs, bmnk } => {
+                Func::MatMul { dst, lhs, rhs, bmnk, transpose } => {
                     let _guard = span_mm.enter();
                     let lhs_l = crate::Layout::from_shape(lhs.shape());
                     let rhs_l = crate::Layout::from_shape(rhs.shape());
+                    let rhs_l = if *transpose { rhs_l.transpose() } else { rhs_l };
                     // TODO: provide a nicer api on LazyBuffer to get the underlying buffer and
                     // have it created if necessary.
                     unsafe { dst.maybe_allocate_uninit()? };
@@ -274,7 +278,7 @@ impl<D: Device> Context<D> {
                 let rhs = self.walk(rhs)?;
                 crate::lang::op::binary(*op, lhs, rhs)?
             }
-            Op::MatMul(lhs, rhs, bmnk) => {
+            Op::MatMul(lhs, rhs, bmnk, transpose) => {
                 // MatMul currently aren't fused with the rest of the graph. Maybe we should
                 // allow for custom ops that would be handled in the same way.
                 let _lhs_id = self.push_schedule_item(lhs)?;
@@ -286,6 +290,7 @@ impl<D: Device> Context<D> {
                     lhs: lhs.clone(),
                     rhs: rhs.clone(),
                     bmnk: *bmnk,
+                    transpose: *transpose,
                 });
                 crate::lang::op::load(dst_id, Layout::from_shape(shape), dtype)?
             }
@@ -380,7 +385,7 @@ fn id_cnts<D: Device>(b: &LazyBuffer<D>, cnts: &mut HashMap<crate::lazy_buffer::
     match b.op() {
         Op::Copy | Op::Const(_) => {}
         Op::Layout(_, arg) | Op::Reduce(_, arg, _) | Op::Unary(_, arg) => id_cnts(arg, cnts),
-        Op::MatMul(arg1, arg2, _) | Op::Binary(_, arg1, arg2) => {
+        Op::MatMul(arg1, arg2, _, _) | Op::Binary(_, arg1, arg2) => {
             id_cnts(arg1, cnts);
             id_cnts(arg2, cnts);
         }

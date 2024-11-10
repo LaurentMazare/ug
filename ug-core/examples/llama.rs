@@ -336,10 +336,8 @@ impl Linear {
     }
 
     fn fwd(&self, xs: &LB) -> Result<LB> {
-        let r = self.w.rank();
-        let w_t = transpose(&self.w, r - 2, r - 1)?;
-        let w_t = w_t.reshape((1, self.in_c, self.out_c))?;
-        xs.matmul(w_t)
+        let w = self.w.reshape((1, self.out_c, self.in_c))?;
+        xs.matmul_t(w)
     }
 }
 
