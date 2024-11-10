@@ -89,8 +89,11 @@ impl<D: Device> Schedule<D> {
     }
 
     pub fn compile(&self) -> Result<CompiledSchedule<D>> {
-        // TODO: compilation cache.
+        use crate::cache::NormalizedKernel;
+
         let mut funcs = Vec::with_capacity(self.items().len());
+        let mut compilation_cache: HashMap<NormalizedKernel, std::sync::Arc<D::Func>> =
+            HashMap::new();
         for item in self.items() {
             let call = match item {
                 ScheduleItem::MatMul { dst, lhs, rhs, bmnk } => Func::MatMul {
@@ -104,16 +107,30 @@ impl<D: Device> Schedule<D> {
                 }
                 ScheduleItem::Kernel(item) => {
                     let kernel = item.kernel()?;
-                    let ssa = kernel.lower(&Default::default())?;
-                    let mut args = vec![];
-                    for arg in ssa.args().iter() {
-                        let arg_id = arg.0.id();
-                        let arg = self.get_arg_id(arg_id)?;
-                        args.push((arg_id, arg.clone()))
+                    let norm_kernel = crate::cache::NormalizedKernel::new(&kernel)?;
+                    if let Some(func) = compilation_cache.get(&norm_kernel) {
+                        // TODO: Simplify args handling so as to ensure that this matches the
+                        // construction of args using ssa.args() below.
+                        let mut args = vec![];
+                        for arg in kernel.args.iter() {
+                            let arg_id = arg.id();
+                            let arg = self.get_arg_id(arg_id)?;
+                            args.push((arg_id, arg.clone()))
+                        }
+                        Func::Kernel { func: func.clone(), args }
+                    } else {
+                        let ssa = kernel.lower(&Default::default())?;
+                        let mut args = vec![];
+                        for arg in ssa.args().iter() {
+                            let arg_id = arg.0.id();
+                            let arg = self.get_arg_id(arg_id)?;
+                            args.push((arg_id, arg.clone()))
+                        }
+                        let func = self.device.compile(&ssa)?;
+                        let func = std::sync::Arc::new(func);
+                        compilation_cache.insert(norm_kernel, func.clone());
+                        Func::Kernel { func, args }
                     }
-                    let func = self.device.compile(&ssa)?;
-                    let func = std::sync::Arc::new(func);
-                    Func::Kernel { func, args }
                 }
             };
             funcs.push(call)
