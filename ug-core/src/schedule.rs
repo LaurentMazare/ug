@@ -204,8 +204,23 @@ impl<D: Device> CompiledSchedule<D> {
                 }
                 Func::MatMul { dst, lhs, rhs, bmnk, transpose } => {
                     let _guard = span_mm.enter();
-                    let lhs_l = crate::Layout::from_shape(lhs.shape());
-                    let rhs_l = crate::Layout::from_shape(rhs.shape());
+                    let lhs_dims = lhs.dims();
+                    let lhs_rank = lhs.rank();
+                    let rhs_dims = rhs.dims();
+                    let rhs_rank = rhs.rank();
+
+                    let lhs_l = if lhs_rank < rhs_rank {
+                        let lhs_dims = [&vec![1; rhs_rank - lhs_rank], lhs_dims].concat();
+                        crate::Layout::from_shape(lhs_dims)
+                    } else {
+                        crate::Layout::from_shape(lhs_dims)
+                    };
+                    let rhs_l = if rhs_rank < lhs_rank {
+                        let rhs_dims = [&vec![1; lhs_rank - rhs_rank], rhs_dims].concat();
+                        crate::Layout::from_shape(rhs_dims)
+                    } else {
+                        crate::Layout::from_shape(rhs_dims)
+                    };
                     let rhs_l = if *transpose { rhs_l.transpose() } else { rhs_l };
                     // TODO: provide a nicer api on LazyBuffer to get the underlying buffer and
                     // have it created if necessary.

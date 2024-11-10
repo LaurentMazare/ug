@@ -254,21 +254,22 @@ impl<D: Device> LazyBuffer<D> {
         let lhs_dims = self.dims();
         let rhs_dims = rhs.dims();
         let dim = lhs_dims.len();
+        let rdim = rhs_dims.len();
 
-        if dim < 2 || rhs_dims.len() != dim {
+        if dim < 2 || rdim < 2 {
             crate::bail!("shape mismatch in matmul {lhs_dims:?} {rhs_dims:?}")
         }
 
         let m = lhs_dims[dim - 2];
         let k = lhs_dims[dim - 1];
         let (k2, n) = if transpose {
-            (rhs_dims[dim - 1], rhs_dims[dim - 2])
+            (rhs_dims[rdim - 1], rhs_dims[rdim - 2])
         } else {
-            (rhs_dims[dim - 2], rhs_dims[dim - 1])
+            (rhs_dims[rdim - 2], rhs_dims[rdim - 1])
         };
 
         let lhs_bsz: usize = lhs_dims[..dim - 2].iter().product();
-        let rhs_bsz: usize = rhs_dims[..dim - 2].iter().product();
+        let rhs_bsz: usize = rhs_dims[..rdim - 2].iter().product();
         if k != k2 || lhs_bsz != rhs_bsz {
             crate::bail!("shape mismatch in matmul {lhs_dims:?} {rhs_dims:?}")
         }

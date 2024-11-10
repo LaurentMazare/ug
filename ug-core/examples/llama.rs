@@ -336,8 +336,7 @@ impl Linear {
     }
 
     fn fwd(&self, xs: &LB) -> Result<LB> {
-        let w = self.w.reshape((1, self.out_c, self.in_c))?;
-        xs.matmul_t(w)
+        xs.matmul_t(self.w.clone())
     }
 }
 
@@ -567,13 +566,13 @@ fn main() -> Result<()> {
     );
     let start_time = std::time::Instant::now();
     let schedule = schedule.compile()?;
-    println!("schedule compiled in {:.2}s", start_time.elapsed().as_secs_f32());
+    println!("schedule compiled in {:.2}ms", start_time.elapsed().as_secs_f32() * 1000.);
     let start_time = std::time::Instant::now();
     schedule.run()?;
-    println!("schedule executed in {:.2}s", start_time.elapsed().as_secs_f32());
+    println!("schedule executed in {:.2}ms", start_time.elapsed().as_secs_f32() * 1000.);
     let start_time = std::time::Instant::now();
     schedule.run()?;
-    println!("schedule executed in {:.2}s", start_time.elapsed().as_secs_f32());
+    println!("schedule executed in {:.2}ms", start_time.elapsed().as_secs_f32() * 1000.);
     println!("{:?} {:?} {}", tensor.shape(), tensor.dtype(), tensor.realized());
 
     {
