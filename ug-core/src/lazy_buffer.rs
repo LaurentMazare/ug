@@ -1,4 +1,4 @@
-use crate::{Const, DType, Device, Layout, Result, Shape};
+use crate::{Const, DType, Device, Result, Shape};
 
 type Callback<S> = std::sync::Arc<dyn Fn(Vec<&mut S>) -> Result<()>>;
 pub struct CustomF<S>(Callback<S>);
@@ -94,7 +94,8 @@ pub struct LazyBufferInner<D: Device> {
     data: std::sync::Mutex<Option<D::Slice>>,
     op: Op<D>,
     dtype: crate::DType,
-    layout: Layout,
+    /// The shape for the buffer, the buffer always uses a C style memory layout.
+    shape: Shape,
     device: D,
 }
 
@@ -103,8 +104,7 @@ impl<D: Device> LazyBuffer<D> {
     pub unsafe fn maybe_allocate_uninit(&self) -> Result<()> {
         let mut data = self.data.lock()?;
         if data.is_none() {
-            // TODO: This should only apply to C contiguous tensors.
-            let nels = self.layout.num_elements();
+            let nels = self.shape.num_elements();
             let v = self.device.allocate_uninit(self.dtype, nels)?;
             *data = Some(v)
         }
@@ -132,40 +132,36 @@ impl<D: Device> LazyBuffer<D> {
         self.dtype
     }
 
-    pub fn layout(&self) -> &Layout {
-        &self.layout
-    }
-
     pub fn shape(&self) -> &Shape {
-        self.layout.shape()
+        &self.shape
     }
 
     pub fn dims(&self) -> &[usize] {
-        self.layout.shape().dims()
+        self.shape().dims()
     }
 
     pub fn dims0(&self) -> Result<()> {
-        self.layout.shape().dims0()
+        self.shape().dims0()
     }
 
     pub fn dims1(&self) -> Result<usize> {
-        self.layout.shape().dims1()
+        self.shape().dims1()
     }
 
     pub fn dims2(&self) -> Result<(usize, usize)> {
-        self.layout.shape().dims2()
+        self.shape().dims2()
     }
 
     pub fn dims3(&self) -> Result<(usize, usize, usize)> {
-        self.layout.shape().dims3()
+        self.shape().dims3()
     }
 
     pub fn dims4(&self) -> Result<(usize, usize, usize, usize)> {
-        self.layout.shape().dims4()
+        self.shape().dims4()
     }
 
     pub fn rank(&self) -> usize {
-        self.layout.shape().rank()
+        self.shape().rank()
     }
 
     pub fn unary(&self, op: crate::lang::UnaryOp) -> Result<Self> {
@@ -175,7 +171,7 @@ impl<D: Device> LazyBuffer<D> {
             data: std::sync::Mutex::new(None),
             op: Op::Unary(op, self.clone()),
             dtype: self.dtype,
-            layout: Layout::from_shape(self.shape()),
+            shape: self.shape.clone(),
             device: self.device.clone(),
         };
         let lb = LazyBuffer(std::sync::Arc::new(inner));
@@ -191,7 +187,7 @@ impl<D: Device> LazyBuffer<D> {
             data: std::sync::Mutex::new(None),
             op: Op::Unary(crate::lang::UnaryOp::Cast, self.clone()),
             dtype,
-            layout: Layout::from_shape(self.shape()),
+            shape: self.shape.clone(),
             device: self.device.clone(),
         };
         let lb = LazyBuffer(std::sync::Arc::new(inner));
@@ -206,7 +202,7 @@ impl<D: Device> LazyBuffer<D> {
             op: Op::Binary(op, self.clone(), rhs),
             dtype: self.dtype,
             device: self.device.clone(),
-            layout: Layout::from_shape(self.shape()),
+            shape: self.shape.clone(),
         };
         let lb = LazyBuffer(std::sync::Arc::new(inner));
         Ok(lb)
@@ -220,7 +216,7 @@ impl<D: Device> LazyBuffer<D> {
             op: Op::Copy,
             dtype,
             device: device.clone(),
-            layout: Layout::from_shape(s.into()),
+            shape: s.into(),
         };
         let lb = LazyBuffer(std::sync::Arc::new(inner));
         Ok(lb)
@@ -240,17 +236,15 @@ impl<D: Device> LazyBuffer<D> {
             op: Op::Custom { f, args },
             dtype,
             device: device.clone(),
-            layout: Layout::from_shape(s.into()),
+            shape: s.into(),
         };
         let lb = LazyBuffer(std::sync::Arc::new(inner));
         Ok(lb)
     }
 
     pub fn matmul(&self, rhs: Self) -> Result<Self> {
-        let lhs_l = self.layout();
-        let rhs_l = rhs.layout();
-        let lhs_dims = lhs_l.dims();
-        let rhs_dims = rhs_l.dims();
+        let lhs_dims = self.dims();
+        let rhs_dims = rhs.dims();
         let dim = lhs_dims.len();
 
         if dim < 2 || rhs_dims.len() != dim {
@@ -277,7 +271,7 @@ impl<D: Device> LazyBuffer<D> {
             op: Op::MatMul(self.clone(), rhs, bmnk),
             dtype: self.dtype,
             device: self.device.clone(),
-            layout: Layout::from_shape(shape),
+            shape: shape.into(),
         };
         let lb = LazyBuffer(std::sync::Arc::new(inner));
         Ok(lb)
@@ -292,7 +286,7 @@ impl<D: Device> LazyBuffer<D> {
             op: Op::Reduce(op, self.clone(), axis),
             dtype: self.dtype,
             device: self.device.clone(),
-            layout: Layout::from_shape(shape),
+            shape: shape.clone(),
         };
         let lb = LazyBuffer(std::sync::Arc::new(inner));
         Ok(lb)
@@ -318,7 +312,7 @@ impl<D: Device> LazyBuffer<D> {
             op: Op::Layout(LayoutOp::Reshape, self.clone()),
             dtype: self.dtype,
             device: self.device.clone(),
-            layout: Layout::from_shape(s),
+            shape: s,
         };
         let lb = LazyBuffer(std::sync::Arc::new(inner));
         Ok(lb)
@@ -346,7 +340,7 @@ impl<D: Device> LazyBuffer<D> {
             op: Op::Layout(LayoutOp::Broadcast, self.clone()),
             dtype: self.dtype,
             device: self.device.clone(),
-            layout: Layout::from_shape(s),
+            shape: s,
         };
         let lb = LazyBuffer(std::sync::Arc::new(inner));
         Ok(lb)
@@ -368,7 +362,7 @@ impl<D: Device> LazyBuffer<D> {
             op: Op::Const(c),
             dtype: c.dtype(),
             device: device.clone(),
-            layout: Layout::from_shape(s),
+            shape: s,
         };
         let lb = LazyBuffer(std::sync::Arc::new(inner));
         Ok(lb)
@@ -390,7 +384,7 @@ impl<D: Device> LazyBuffer<D> {
             op: Op::Copy,
             dtype,
             device: device.clone(),
-            layout: Layout::from_shape(s),
+            shape: s,
         };
         let lb = LazyBuffer(std::sync::Arc::new(inner));
         Ok(lb)
@@ -419,7 +413,7 @@ impl<D: Device> LazyBuffer<D> {
             op: Op::Copy,
             dtype,
             device: device.clone(),
-            layout: Layout::from_shape(s),
+            shape: s,
         };
         let lb = LazyBuffer(std::sync::Arc::new(inner));
         Ok(lb)

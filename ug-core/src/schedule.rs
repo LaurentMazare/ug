@@ -28,7 +28,8 @@ impl<D: Device> KernelItem<D> {
             .iter()
             .map(|(id, lb)| op::Arg::new(*id, crate::lang::Type::Ptr(lb.dtype())))
             .collect::<Vec<_>>();
-        let sto = op::store(dst.0, dst.1.layout().clone(), ast.clone())?;
+        let dst_layout = Layout::from_shape(dst.1.shape());
+        let sto = op::store(dst.0, dst_layout, ast.clone())?;
         let kernel = op::Kernel::new(format!("realize_{:?}", dst.1.id()), args, vec![sto]);
         Ok(kernel)
     }
@@ -196,8 +197,8 @@ impl<D: Device> CompiledSchedule<D> {
                     self.device.run(func, &mut locks)?
                 }
                 Func::MatMul { dst, lhs, rhs, bmnk } => {
-                    let lhs_l = lhs.layout();
-                    let rhs_l = rhs.layout();
+                    let lhs_l = crate::Layout::from_shape(lhs.shape());
+                    let rhs_l = crate::Layout::from_shape(rhs.shape());
                     // TODO: provide a nicer api on LazyBuffer to get the underlying buffer and
                     // have it created if necessary.
                     unsafe { dst.maybe_allocate_uninit()? };
@@ -209,7 +210,7 @@ impl<D: Device> CompiledSchedule<D> {
                     let lhs = lhs.as_ref().unwrap();
                     let rhs = rhs.data().lock()?;
                     let rhs = rhs.as_ref().unwrap();
-                    self.device.matmul(dst, lhs, rhs, *bmnk, lhs_l, rhs_l)?;
+                    self.device.matmul(dst, lhs, rhs, *bmnk, &lhs_l, &rhs_l)?;
                 }
                 Func::Custom { f, args } => {
                     let mut locks = args
@@ -296,23 +297,11 @@ impl<D: Device> Context<D> {
             Op::Layout(op, arg) => {
                 use crate::lazy_buffer::LayoutOp as L;
                 match op {
-                    L::Noop => {
+                    L::Noop | L::Reshape => {
                         let dst_id = self.push_schedule_item(arg)?;
                         crate::lang::op::load(dst_id, Layout::from_shape(shape), dtype)?
                     }
-                    L::Reshape => {
-                        if arg.layout().c_contiguous()
-                            && b.layout().c_contiguous()
-                            && arg.layout().offset() == b.layout().offset()
-                        {
-                            let dst_id = self.push_schedule_item(arg)?;
-                            crate::lang::op::load(dst_id, Layout::from_shape(shape), dtype)?
-                        } else {
-                            crate::bail!("unsupported reshape {:?} {:?}", arg.layout(), b.layout())
-                        }
-                    }
                     L::Broadcast => {
-                        // TODO: Check that the layout is C contiguous.
                         let ast = self.walk(arg)?;
                         crate::lang::op::broadcast(ast, b.shape())?
                     }
@@ -343,13 +332,8 @@ impl<D: Device> Context<D> {
     }
 
     fn push_kernel(&mut self, buffer: &LazyBuffer<D>, ast: Ast) -> Result<ArgId> {
-        if let crate::lang::op::AstInner::Load { src: src_arg_id, layout } = ast.inner.as_ref() {
+        if let crate::lang::op::AstInner::Load { src: src_arg_id, .. } = ast.inner.as_ref() {
             let src = self.get_arg_id(*src_arg_id)?;
-            if src.layout() == layout {
-                // We cannot just return the shortcut arg-id here as other parts of the code relies
-                // upon the buffer associated to the LB to have been filled.
-                // return Ok(*src_arg_id);
-            }
             if src.id() == buffer.id() {
                 // Avoid the cases where we load and store immediately a buffer, this is a no-op
                 // and would result in a deadlock.
