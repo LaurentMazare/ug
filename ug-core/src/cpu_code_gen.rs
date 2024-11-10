@@ -71,6 +71,7 @@ pub fn gen<W: std::io::Write>(w: &mut W, func_name: &str, kernel: &ssa::Kernel) 
     if contains_reduce_local {
         bail!("TODO: add the reduce code if needed")
     }
+    writeln!(w, "#include<math.h>")?;
     writeln!(w, "void {func_name}(")?;
     for (arg_idx, &(arg, var_id)) in kernel.args().iter().enumerate() {
         let is_last = arg_idx == kernel.args().len() - 1;

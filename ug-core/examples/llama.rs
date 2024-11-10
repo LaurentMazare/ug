@@ -346,10 +346,11 @@ struct Attention {
     num_heads: usize,
     num_kv_heads: usize,
     head_dim: usize,
+    rope_interleaved: bool,
 }
 
 impl Attention {
-    fn fwd(&self, xs: &LB) -> Result<LB> {
+    fn fwd(&self, xs: &LB, r: &Rope) -> Result<LB> {
         let (b_sz, seq_len, _hidden_size) = xs.shape().dims3()?;
         if seq_len != 1 {
             ug::bail!("seq_len {seq_len} > 1 is not supported as no causal mask is applied")
@@ -365,7 +366,16 @@ impl Attention {
         let v = v.reshape((b_sz, seq_len, self.num_kv_heads, self.head_dim))?;
         let v = transpose(&v, 2, 1)?;
 
-        // TODO: Rope
+        let q = if self.rope_interleaved {
+            rope_i(&q, &r.cos, &r.sin, 0)?
+        } else {
+            rope(&q, &r.cos, &r.sin, 0)?
+        };
+        let k = if self.rope_interleaved {
+            rope_i(&k, &r.cos, &r.sin, 0)?
+        } else {
+            rope(&k, &r.cos, &r.sin, 0)?
+        };
         // TODO: KV Cache
         let k = repeat(&k, 1, self.num_heads / self.num_kv_heads)?;
         let v = repeat(&v, 1, self.num_heads / self.num_kv_heads)?;
@@ -396,10 +406,10 @@ struct Layer {
 }
 
 impl Layer {
-    fn fwd(&self, xs: &LB) -> Result<LB> {
+    fn fwd(&self, xs: &LB, rope: &Rope) -> Result<LB> {
         let residual = xs.clone();
         let xs = self.rms1.fwd(xs)?;
-        let xs = self.attn.fwd(&xs)?;
+        let xs = self.attn.fwd(&xs, rope)?;
         let xs = xs.binary(ug::lang::BinaryOp::Add, residual)?;
         let residual = xs.clone();
         let xs = self.rms2.fwd(&xs)?;
@@ -428,7 +438,6 @@ impl Rope {
             (max_seq_len, 1),
         )?;
         let mm = idx_theta.matmul(theta)?;
-        // TODO: Use the proper sin/cos functions.
         let cos = mm.unary(ug::lang::UnaryOp::Cos)?;
         let sin = mm.unary(ug::lang::UnaryOp::Sin)?;
         Ok(Self { cos, sin })
@@ -480,6 +489,7 @@ impl Model {
                 head_dim: cfg.head_dim(),
                 num_heads: cfg.num_attention_heads,
                 num_kv_heads: cfg.num_key_value_heads,
+                rope_interleaved: cfg.rope_interleaved,
             };
             let mlp = Mlp { c_fc1, c_fc2, c_proj };
             layers.push(Layer { rms1, attn, rms2, mlp })
@@ -493,7 +503,7 @@ impl Model {
         let xs = index_select(&self.embedding, tokens)?;
         let mut xs = xs.reshape((1, seq_len, self.config.hidden_size))?;
         for layer in self.layers.iter() {
-            xs = layer.fwd(&xs)?
+            xs = layer.fwd(&xs, &self.rope)?
         }
         let xs = self.ln_f.fwd(&xs)?;
         let xs = self.lm_head.fwd(&xs)?;

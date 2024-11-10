@@ -380,6 +380,7 @@ impl crate::CpuDevice {
                 .arg(tmp_c)
                 .args([
                     "-shared",
+                    "-lm",
                     "-O3",
                     "-march=native",
                     "-ffast-math",
