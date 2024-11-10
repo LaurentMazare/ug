@@ -5,7 +5,7 @@ use ug::{CpuDevice, CpuStorage, LazyBuffer, Result, Slice};
 type LB = LazyBuffer<CpuDevice>;
 type ST = ug::safetensors::MmapedSafetensors;
 
-const NUM_HIDDEN_LAYERS: Option<usize> = Some(1);
+const NUM_HIDDEN_LAYERS: Option<usize> = None;
 #[allow(unused)]
 const UNK_TOKEN: u32 = 0;
 const BOS_TOKEN: u32 = 1;
@@ -485,10 +485,14 @@ fn main() -> Result<()> {
     println!("{:?} {:?} {}", tensor.shape(), tensor.dtype(), tensor.realized());
     let start_time = std::time::Instant::now();
     let schedule = ug::Schedule::create_one(&tensor)?;
-    println!("schedule generated in {:.2}s", start_time.elapsed().as_secs_f32());
+    println!(
+        "schedule with {} kernels generated in {:.2}s",
+        schedule.items().len(),
+        start_time.elapsed().as_secs_f32()
+    );
     let start_time = std::time::Instant::now();
     let schedule = schedule.compile()?;
-    println!("schedule generated in {:.2}s", start_time.elapsed().as_secs_f32());
+    println!("schedule compiled in {:.2}s", start_time.elapsed().as_secs_f32());
     schedule.run()?;
     println!("{:?} {:?} {}", tensor.shape(), tensor.dtype(), tensor.realized());
 
