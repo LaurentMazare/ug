@@ -350,7 +350,7 @@ struct Attention {
 }
 
 impl Attention {
-    fn fwd(&self, xs: &LB, r: &Rope) -> Result<LB> {
+    fn fwd(&self, xs: &LB, r: &Rope, pos: usize) -> Result<LB> {
         let (b_sz, seq_len, _hidden_size) = xs.shape().dims3()?;
         if seq_len != 1 {
             ug::bail!("seq_len {seq_len} > 1 is not supported as no causal mask is applied")
@@ -367,14 +367,14 @@ impl Attention {
         let v = transpose(&v, 2, 1)?;
 
         let q = if self.rope_interleaved {
-            rope_i(&q, &r.cos, &r.sin, 0)?
+            rope_i(&q, &r.cos, &r.sin, pos)?
         } else {
-            rope(&q, &r.cos, &r.sin, 0)?
+            rope(&q, &r.cos, &r.sin, pos)?
         };
         let k = if self.rope_interleaved {
-            rope_i(&k, &r.cos, &r.sin, 0)?
+            rope_i(&k, &r.cos, &r.sin, pos)?
         } else {
-            rope(&k, &r.cos, &r.sin, 0)?
+            rope(&k, &r.cos, &r.sin, pos)?
         };
         // TODO: KV Cache
         let k = repeat(&k, 1, self.num_heads / self.num_kv_heads)?;
@@ -406,10 +406,10 @@ struct Layer {
 }
 
 impl Layer {
-    fn fwd(&self, xs: &LB, rope: &Rope) -> Result<LB> {
+    fn fwd(&self, xs: &LB, rope: &Rope, pos: usize) -> Result<LB> {
         let residual = xs.clone();
         let xs = self.rms1.fwd(xs)?;
-        let xs = self.attn.fwd(&xs, rope)?;
+        let xs = self.attn.fwd(&xs, rope, pos)?;
         let xs = xs.binary(ug::lang::BinaryOp::Add, residual)?;
         let residual = xs.clone();
         let xs = self.rms2.fwd(&xs)?;
@@ -498,12 +498,12 @@ impl Model {
         Ok(Self { embedding, layers, ln_f, lm_head, config: cfg.clone(), rope })
     }
 
-    fn fwd(&self, tokens: &[u32]) -> Result<LB> {
+    fn fwd(&self, tokens: &[u32], pos: usize) -> Result<LB> {
         let seq_len = tokens.len();
         let xs = index_select(&self.embedding, tokens)?;
         let mut xs = xs.reshape((1, seq_len, self.config.hidden_size))?;
         for layer in self.layers.iter() {
-            xs = layer.fwd(&xs, &self.rope)?
+            xs = layer.fwd(&xs, &self.rope, pos)?
         }
         let xs = self.ln_f.fwd(&xs)?;
         let xs = self.lm_head.fwd(&xs)?;
@@ -519,7 +519,7 @@ fn main() -> Result<()> {
         config.num_hidden_layers = num_hidden_layers;
     }
     let model = Model::new(&config, &st)?;
-    let tensor = model.fwd(&[BOS_TOKEN])?;
+    let tensor = model.fwd(&[BOS_TOKEN], 0)?;
     println!("{:?} {:?} {}", tensor.shape(), tensor.dtype(), tensor.realized());
     let start_time = std::time::Instant::now();
     let schedule = ug::Schedule::create_one(&tensor)?;
