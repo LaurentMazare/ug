@@ -477,6 +477,7 @@ fn main() -> Result<()> {
     let st = unsafe { ug::safetensors::MmapedSafetensors::new("model.safetensors")? };
     let mut config = Config::smollm2_135m();
     if let Some(num_hidden_layers) = NUM_HIDDEN_LAYERS {
+        println!("overriding num layers: {num_hidden_layers}");
         config.num_hidden_layers = num_hidden_layers;
     }
     let model = Model::new(&config, &st)?;
