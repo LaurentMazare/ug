@@ -137,6 +137,26 @@ impl<D: Device> LazyBuffer<D> {
         self.layout.shape().dims()
     }
 
+    pub fn dims0(&self) -> Result<()> {
+        self.layout.shape().dims0()
+    }
+
+    pub fn dims1(&self) -> Result<usize> {
+        self.layout.shape().dims1()
+    }
+
+    pub fn dims2(&self) -> Result<(usize, usize)> {
+        self.layout.shape().dims2()
+    }
+
+    pub fn dims3(&self) -> Result<(usize, usize, usize)> {
+        self.layout.shape().dims3()
+    }
+
+    pub fn dims4(&self) -> Result<(usize, usize, usize, usize)> {
+        self.layout.shape().dims4()
+    }
+
     pub fn rank(&self) -> usize {
         self.layout.shape().rank()
     }

@@ -98,7 +98,6 @@ fn rms_norm(src: &LB, alpha: &LB, eps: f32) -> Result<LB> {
     Ok(out)
 }
 
-#[allow(unused)]
 fn rope_i(src: &LB, cos: &LB, sin: &LB, pos: usize) -> Result<LB> {
     let (b, h, t, d) = src.shape().dims4()?;
     let out = LB::cst(0f32, (b, h, t, d), &CpuDevice)?;
@@ -110,7 +109,7 @@ fn rope_i(src: &LB, cos: &LB, sin: &LB, pos: usize) -> Result<LB> {
         let dst = dst.data_mut::<f32>()?;
         let cos = &cos[pos * d / 2..];
         let sin = &sin[pos * d / 2..];
-        dst.par_chunks_mut(t * d).for_each(|dst| {
+        dst.par_chunks_mut(t * d).zip(src.par_chunks(t * d)).for_each(|(dst, src)| {
             for i_over_2 in 0..t * d / 2 {
                 let i = 2 * i_over_2;
                 let (s_i, s_ip) = (src[i], src[i + 1]);
@@ -124,7 +123,6 @@ fn rope_i(src: &LB, cos: &LB, sin: &LB, pos: usize) -> Result<LB> {
     Ok(out)
 }
 
-#[allow(unused)]
 fn rope(src: &LB, cos: &LB, sin: &LB, pos: usize) -> Result<LB> {
     let (b, h, t, d) = src.shape().dims4()?;
     let out = LB::cst(0f32, (b, h, t, d), &CpuDevice)?;
@@ -136,7 +134,7 @@ fn rope(src: &LB, cos: &LB, sin: &LB, pos: usize) -> Result<LB> {
         let dst = dst.data_mut::<f32>()?;
         let cos = &cos[pos * d / 2..];
         let sin = &sin[pos * d / 2..];
-        dst.par_chunks_mut(t * d).for_each(|dst| {
+        dst.par_chunks_mut(t * d).zip(src.par_chunks(t * d)).for_each(|(dst, src)| {
             for i_t in 0..t {
                 for i_d in 0..d / 2 {
                     let i1 = i_t * d + i_d;
@@ -263,6 +261,31 @@ fn softmax(src: &LB) -> Result<LB> {
     Ok(out)
 }
 
+fn causal_mask(src: &LB) -> Result<LB> {
+    let (_b_sz, _num_heads, s1, s2) = src.dims4()?;
+    let out = LB::cst(0f32, src.shape(), &CpuDevice)?;
+    let f = move |vs: Vec<&mut CpuStorage>| -> Result<()> {
+        let [src, dst]: [&mut CpuStorage; 2] = vs.try_into().unwrap();
+        let dst = dst.data_mut::<f32>()?;
+        let src = src.data::<f32>()?;
+        src.par_chunks(s1 * s2).zip(dst.par_chunks_mut(s1 * s2)).for_each(|(src, dst)| {
+            for i1 in 0..s1 {
+                for i2 in 0..=i1 {
+                    let index = i1 * s2 + i2;
+                    dst[index] = src[index];
+                }
+                for i2 in (i1 + 1)..s2 {
+                    let index = i1 * s2 + i2;
+                    dst[index] = f32::NEG_INFINITY;
+                }
+            }
+        });
+        Ok(())
+    };
+    let out = out.custom(f, vec![src.clone()])?;
+    Ok(out)
+}
+
 fn silu(src: &LB) -> Result<LB> {
     let out = LB::cst(0f32, src.shape(), &CpuDevice)?;
     let f = move |vs: Vec<&mut CpuStorage>| -> Result<()> {
@@ -352,9 +375,6 @@ struct Attention {
 impl Attention {
     fn fwd(&self, xs: &LB, r: &Rope, pos: usize) -> Result<LB> {
         let (b_sz, seq_len, _hidden_size) = xs.shape().dims3()?;
-        if seq_len != 1 {
-            ug::bail!("seq_len {seq_len} > 1 is not supported as no causal mask is applied")
-        }
         let q = self.q_proj.fwd(xs)?;
         let k = self.k_proj.fwd(xs)?;
         let v = self.v_proj.fwd(xs)?;
@@ -387,6 +407,7 @@ impl Attention {
             ug::LazyBuffer::cst((self.head_dim as f32).powf(-0.5), att.shape(), q.device())?;
         // TODO: There is a bug when using broadcasting before mul.
         let att = att.binary(ug::lang::BinaryOp::Mul, scale)?;
+        let att = if seq_len == 1 { att } else { causal_mask(&att)? };
         let att = softmax(&att)?;
         let xs = att.matmul(v)?;
 
@@ -519,7 +540,7 @@ fn main() -> Result<()> {
         config.num_hidden_layers = num_hidden_layers;
     }
     let model = Model::new(&config, &st)?;
-    let tensor = model.fwd(&[BOS_TOKEN], 0)?;
+    let tensor = model.fwd(&[BOS_TOKEN, 216], 0)?;
     println!("{:?} {:?} {}", tensor.shape(), tensor.dtype(), tensor.realized());
     let start_time = std::time::Instant::now();
     let schedule = ug::Schedule::create_one(&tensor)?;
@@ -539,6 +560,7 @@ fn main() -> Result<()> {
         let data = data.as_ref().unwrap();
         let data = data.to_vec::<f32>()?;
         println!("{} {:?}", data.len(), &data[..10]);
+        println!("{} {:?}", data.len(), &data[config.vocab_size..config.vocab_size + 10]);
     };
 
     Ok(())
