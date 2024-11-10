@@ -52,6 +52,8 @@ pub struct Schedule<D: Device> {
     /// Elements in `items` are topologically sorted so that they can be run in order.
     items: Vec<ScheduleItem<D>>,
     per_arg_id: HashMap<ArgId, LazyBuffer<D>>,
+    span_compile: tracing::Span,
+    span_kernel: tracing::Span,
     device: D,
 }
 
@@ -77,7 +79,16 @@ impl<D: Device> Schedule<D> {
         for &buffer in buffers.iter() {
             context.push_schedule_item(buffer)?;
         }
-        Ok(Self { items: context.items, device, per_arg_id: context.per_arg_id })
+        let span_compile = tracing::span!(tracing::Level::TRACE, "compile");
+        let span_kernel = tracing::span!(tracing::Level::TRACE, "kernel");
+
+        Ok(Self {
+            items: context.items,
+            device,
+            per_arg_id: context.per_arg_id,
+            span_compile,
+            span_kernel,
+        })
     }
 
     pub fn create_one(buffer: &LazyBuffer<D>) -> Result<Self> {
@@ -91,6 +102,7 @@ impl<D: Device> Schedule<D> {
     pub fn compile(&self) -> Result<CompiledSchedule<D>> {
         use crate::cache::NormalizedKernel;
 
+        let _guard = self.span_compile.enter();
         let mut funcs = Vec::with_capacity(self.items().len());
         let mut compilation_cache: HashMap<NormalizedKernel, std::sync::Arc<D::Func>> =
             HashMap::new();
@@ -119,6 +131,7 @@ impl<D: Device> Schedule<D> {
                         }
                         Func::Kernel { func: func.clone(), args }
                     } else {
+                        let _guard = self.span_kernel.enter();
                         let ssa = kernel.lower(&Default::default())?;
                         let mut args = vec![];
                         for arg in ssa.args().iter() {

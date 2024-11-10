@@ -533,6 +533,12 @@ impl Model {
 }
 
 fn main() -> Result<()> {
+    use tracing_chrome::ChromeLayerBuilder;
+    use tracing_subscriber::prelude::*;
+
+    let (chrome_layer, _guard) = ChromeLayerBuilder::new().build();
+    tracing_subscriber::registry().with(chrome_layer).init();
+
     let st = unsafe { ug::safetensors::MmapedSafetensors::new("model.safetensors")? };
     let mut config = Config::smollm2_135m();
     if let Some(num_hidden_layers) = NUM_HIDDEN_LAYERS {

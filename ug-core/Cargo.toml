@@ -19,4 +19,9 @@ rayon = { workspace = true }
 safetensors = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
+tracing = { workspace = true }
 yoke = { workspace = true }
+
+[dev-dependencies]
+tracing-chrome = { workspace = true }
+tracing-subscriber = { workspace = true }

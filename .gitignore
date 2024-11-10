@@ -19,3 +19,4 @@ py_src/ug/*.so
 *.nsys-rep
 model.safetensors
 flamegraph.svg
+trace*.json
