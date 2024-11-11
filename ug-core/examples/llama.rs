@@ -596,6 +596,9 @@ struct Args {
 
     #[arg(short, long)]
     verbose: bool,
+
+    #[arg(short, long, default_value_t = 20)]
+    n_steps: usize,
 }
 
 fn main() -> Result<()> {
@@ -632,7 +635,7 @@ fn main() -> Result<()> {
     let mut rng = rand::rngs::StdRng::seed_from_u64(42);
     let mut last_token = BOS_TOKEN;
     let mut ccache = ug::cache::CompilationCache::default();
-    for pos in 1..20 {
+    for pos in 0..args.n_steps {
         let tensor = model.fwd(&[last_token], pos, &mut cache)?;
         let tensor = softmax(&tensor)?;
 
@@ -665,11 +668,12 @@ fn main() -> Result<()> {
         } else if let Some(token) = token {
             use std::io::Write;
 
-            let token = token.replace('Ġ', " ");
+            let token = token.replace('Ġ', " ").replace('Ċ', "\n");
             print!("{token}");
             std::io::stdout().flush().map_err(Error::wrap)?;
         }
     }
+    println!();
 
     Ok(())
 }
