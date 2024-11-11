@@ -283,66 +283,72 @@ impl<D: Device> Context<D> {
 
         let dtype = b.dtype();
         let shape = b.shape();
-        let ast = match b.op() {
-            Op::Unary(op, arg) => {
-                let ast = self.walk(arg)?;
-                crate::lang::op::unary(*op, ast)?
-            }
-            Op::Binary(op, lhs, rhs) => {
-                let lhs = self.walk(lhs)?;
-                let rhs = self.walk(rhs)?;
-                crate::lang::op::binary(*op, lhs, rhs)?
-            }
-            Op::MatMul(lhs, rhs, bmnk, transpose) => {
-                // MatMul currently aren't fused with the rest of the graph. Maybe we should
-                // allow for custom ops that would be handled in the same way.
-                let _lhs_id = self.push_schedule_item(lhs)?;
-                let _rhs_id = self.push_schedule_item(rhs)?;
-                let dst_id = ArgId::new();
-                self.per_arg_id.insert(dst_id, b.clone());
-                self.items.push(ScheduleItem::MatMul {
-                    dst: b.clone(),
-                    lhs: lhs.clone(),
-                    rhs: rhs.clone(),
-                    bmnk: *bmnk,
-                    transpose: *transpose,
-                });
-                crate::lang::op::load(dst_id, Layout::from_shape(shape), dtype)?
-            }
-            Op::Reduce(op, arg, axis) => {
-                let ast = self.walk(arg)?;
-                crate::lang::op::reduce(*op, ast, *axis)?
-            }
-            Op::Const(cst) => crate::lang::op::cst(*cst)?,
-            Op::Copy => {
-                let arg_id = ArgId::new();
-                self.per_arg_id.insert(arg_id, b.clone());
-                crate::lang::op::load(arg_id, Layout::from_shape(shape), dtype)?
-            }
-            Op::Layout(op, arg) => {
-                use crate::lazy_buffer::LayoutOp as L;
-                match op {
-                    L::Noop | L::Reshape => {
-                        let dst_id = self.push_schedule_item(arg)?;
-                        crate::lang::op::load(dst_id, Layout::from_shape(shape), dtype)?
-                    }
-                    L::Broadcast => {
-                        let ast = self.walk(arg)?;
-                        crate::lang::op::broadcast(ast, b.shape())?
+        let ast = if b.realized() {
+            let arg_id = ArgId::new();
+            self.per_arg_id.insert(arg_id, b.clone());
+            crate::lang::op::load(arg_id, Layout::from_shape(shape), dtype)?
+        } else {
+            match b.op() {
+                Op::Unary(op, arg) => {
+                    let ast = self.walk(arg)?;
+                    crate::lang::op::unary(*op, ast)?
+                }
+                Op::Binary(op, lhs, rhs) => {
+                    let lhs = self.walk(lhs)?;
+                    let rhs = self.walk(rhs)?;
+                    crate::lang::op::binary(*op, lhs, rhs)?
+                }
+                Op::MatMul(lhs, rhs, bmnk, transpose) => {
+                    // MatMul currently aren't fused with the rest of the graph. Maybe we should
+                    // allow for custom ops that would be handled in the same way.
+                    let _lhs_id = self.push_schedule_item(lhs)?;
+                    let _rhs_id = self.push_schedule_item(rhs)?;
+                    let dst_id = ArgId::new();
+                    self.per_arg_id.insert(dst_id, b.clone());
+                    self.items.push(ScheduleItem::MatMul {
+                        dst: b.clone(),
+                        lhs: lhs.clone(),
+                        rhs: rhs.clone(),
+                        bmnk: *bmnk,
+                        transpose: *transpose,
+                    });
+                    crate::lang::op::load(dst_id, Layout::from_shape(shape), dtype)?
+                }
+                Op::Reduce(op, arg, axis) => {
+                    let ast = self.walk(arg)?;
+                    crate::lang::op::reduce(*op, ast, *axis)?
+                }
+                Op::Const(cst) => crate::lang::op::cst(*cst)?,
+                Op::Copy => {
+                    let arg_id = ArgId::new();
+                    self.per_arg_id.insert(arg_id, b.clone());
+                    crate::lang::op::load(arg_id, Layout::from_shape(shape), dtype)?
+                }
+                Op::Layout(op, arg) => {
+                    use crate::lazy_buffer::LayoutOp as L;
+                    match op {
+                        L::Noop | L::Reshape => {
+                            let dst_id = self.push_schedule_item(arg)?;
+                            crate::lang::op::load(dst_id, Layout::from_shape(shape), dtype)?
+                        }
+                        L::Broadcast => {
+                            let ast = self.walk(arg)?;
+                            crate::lang::op::broadcast(ast, b.shape())?
+                        }
                     }
                 }
-            }
-            Op::Custom { f, args: b_args } => {
-                let mut args = Vec::with_capacity(b_args.len() + 1);
-                for arg in b_args.iter() {
-                    let arg_id = self.push_schedule_item(arg)?;
-                    args.push((arg_id, arg.clone()))
+                Op::Custom { f, args: b_args } => {
+                    let mut args = Vec::with_capacity(b_args.len() + 1);
+                    for arg in b_args.iter() {
+                        let arg_id = self.push_schedule_item(arg)?;
+                        args.push((arg_id, arg.clone()))
+                    }
+                    let dst_id = ArgId::new();
+                    self.per_arg_id.insert(dst_id, b.clone());
+                    args.push((dst_id, b.clone()));
+                    self.items.push(ScheduleItem::Custom { f: f.clone(), args });
+                    crate::lang::op::load(dst_id, Layout::from_shape(shape), dtype)?
                 }
-                let dst_id = ArgId::new();
-                self.per_arg_id.insert(dst_id, b.clone());
-                args.push((dst_id, b.clone()));
-                self.items.push(ScheduleItem::Custom { f: f.clone(), args });
-                crate::lang::op::load(dst_id, Layout::from_shape(shape), dtype)?
             }
         };
         // When a subtree appears multiple times in the ast, generate a dedicated kernel.
