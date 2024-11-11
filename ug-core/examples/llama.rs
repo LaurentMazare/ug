@@ -57,20 +57,20 @@ fn index_select(src: &LB, ids: &[u32]) -> Result<LB> {
     LB::custom(f, vec![src.clone()], (seq_len, h), src.dtype(), src.device())
 }
 
-fn _rms_norm(src: &LB, alpha: &LB, eps: f32) -> Result<LB> {
+fn rms_norm(src: &LB, alpha: &LB, eps: f32) -> Result<LB> {
     use ug::lang::{BinaryOp as B, ReduceOp as R, UnaryOp as U};
     let rank = src.rank();
     let dim_m1 = src.dims()[rank - 1];
     let sum2 = src.binary(B::Mul, src.clone())?.reduce(R::Sum, rank - 1)?;
     let s2s = sum2.shape();
     let m = sum2
-        .binary(B::Div, LB::cst(1f32 / dim_m1 as f32, s2s, &CpuDevice)?)?
+        .binary(B::Mul, LB::cst(1f32 / dim_m1 as f32, s2s, &CpuDevice)?)?
         .binary(B::Add, LB::cst(eps, s2s, &CpuDevice)?)?
         .unary(U::Sqrt)?;
     src.binary(B::Div, m.broadcast(src.shape())?)?.binary(B::Mul, alpha.broadcast(src.shape())?)
 }
 
-fn rms_norm(src: &LB, alpha: &LB, eps: f32) -> Result<LB> {
+fn _rms_norm(src: &LB, alpha: &LB, eps: f32) -> Result<LB> {
     let rank = src.rank();
     let dim_m1 = src.dims()[rank - 1];
     let span_rms = tracing::span!(tracing::Level::TRACE, "rms");
