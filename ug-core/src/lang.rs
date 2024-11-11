@@ -529,8 +529,10 @@ pub mod op {
             ops
         }
 
-        pub fn arg_ids(&self) -> std::collections::HashSet<ArgId> {
-            fn visit(ast: &Ast, ids: &mut std::collections::HashSet<ArgId>) {
+        // We use a BTreeSet rather than a HashSet here to ensure consistent ordering
+        // when converting the result to a Vec.
+        pub fn arg_ids(&self) -> std::collections::BTreeSet<ArgId> {
+            fn visit(ast: &Ast, ids: &mut std::collections::BTreeSet<ArgId>) {
                 match ast.inner.as_ref() {
                     AstInner::Reduce { op: _, axis: _, arg } => visit(arg, ids),
                     AstInner::Unary { op: _, arg } => visit(arg, ids),
@@ -545,7 +547,7 @@ pub mod op {
                     AstInner::Id { .. } | AstInner::Const(_) => {}
                 }
             }
-            let mut ids = std::collections::HashSet::new();
+            let mut ids = std::collections::BTreeSet::new();
             visit(self, &mut ids);
             ids
         }
