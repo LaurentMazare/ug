@@ -49,18 +49,19 @@ struct Indexes(Vec<Index>);
 impl lang::op::Layout {
     fn lower(&self, idxs: &Indexes) -> Result<(Id, Block)> {
         let strides = self.strides();
-        if idxs.0.len() != strides.len() {
-            crate::bail!("len mismatch between strides {} and idxs {}", strides.len(), idxs.0.len())
+        let n_real_dims = idxs.0.iter().filter(|v| !v.broadcast).count();
+        if n_real_dims != strides.len() {
+            crate::bail!("len mismatch between strides {self:?} and idxs {idxs:?}")
         }
         let off = self.offset() as i32;
-        if idxs.0.iter().filter(|v| !v.broadcast).count() == 0 {
+        if n_real_dims == 0 {
             let acc_id = Id::new();
             let block = Block::new(vec![(acc_id, SsaI::Const(off.into()))]);
             Ok((acc_id, block))
         } else {
             let mut acc_id = None;
             let mut block = Block::empty();
-            for (idx, &stride) in idxs.0.iter().zip(strides.iter()) {
+            for (idx, &stride) in idxs.0.iter().filter(|v| !v.broadcast).zip(strides.iter()) {
                 if idx.broadcast {
                     continue;
                 }
