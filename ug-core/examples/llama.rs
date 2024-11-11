@@ -162,6 +162,47 @@ fn rope(src: &LB, cos: &LB, sin: &LB, pos: usize) -> Result<LB> {
     )
 }
 
+fn cat(lhs: &LB, rhs: &LB, axis: usize) -> Result<LB> {
+    let l_dims = lhs.dims();
+    let r_dims = rhs.dims();
+    if axis >= l_dims.len() {
+        ug::bail!("unexpected axis {axis} for cat {l_dims:?}")
+    }
+    if l_dims.len() != r_dims.len() {
+        ug::bail!("unexpected shapes for cat {l_dims:?} {r_dims:?} axis: {axis}")
+    }
+    for (i, (l, r)) in l_dims.iter().zip(r_dims.iter()).enumerate() {
+        if axis != i && *l != *r {
+            ug::bail!("unexpected shapes for cat {l_dims:?} {r_dims:?} axis: {axis}")
+        }
+    }
+    let mut dst_dims = l_dims.to_vec();
+    dst_dims[axis] = l_dims[axis] + r_dims[axis];
+    let span = tracing::span!(tracing::Level::TRACE, "cat");
+    let l_dims = l_dims.to_vec();
+    let r_dims = r_dims.to_vec();
+    let f = move |vs: Vec<&mut CpuStorage>| -> Result<()> {
+        let _guard = span.enter();
+        let [lhs, rhs, dst]: [&mut CpuStorage; 3] = vs.try_into().unwrap();
+        let dst = dst.data_mut::<f32>()?;
+        let lhs = lhs.data::<f32>()?;
+        let rhs = rhs.data::<f32>()?;
+        let d1 = l_dims[..axis].iter().product::<usize>();
+        let d2_l = l_dims[axis..].iter().product::<usize>();
+        let d2_r = r_dims[axis..].iter().product::<usize>();
+        let d2_lr = d2_l + d2_r;
+        for i1 in 0..d1 {
+            let lhs = &lhs[i1 * d2_l..(i1 + 1) * d2_l];
+            let rhs = &rhs[i1 * d2_r..(i1 + 1) * d2_r];
+            let dst = &mut dst[i1 * d2_lr..(i1 + 1) * d2_lr];
+            dst[..lhs.len()].copy_from_slice(lhs);
+            dst[lhs.len()..].copy_from_slice(rhs);
+        }
+        Ok(())
+    };
+    LB::custom(f, vec![lhs.clone(), rhs.clone()], dst_dims, lhs.dtype(), lhs.device())
+}
+
 fn repeat(src: &LB, axis: usize, n_rep: usize) -> Result<LB> {
     if n_rep == 1 {
         return Ok(src.clone());
@@ -410,6 +451,8 @@ impl Attention {
         } else {
             rope(&k, &r.cos, &r.sin, pos)?
         };
+        let k = cat(&cache.prev_k, &k, 2)?;
+        let v = cat(&cache.prev_v, &v, 2)?;
 
         cache.prev_k = k.clone();
         cache.prev_v = v.clone();
