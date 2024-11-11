@@ -63,3 +63,23 @@ impl NormalizedKernel {
         Ok(Self { args, ops })
     }
 }
+
+pub struct CompilationCache<D: crate::Device> {
+    data: HashMap<NormalizedKernel, std::sync::Arc<D::Func>>,
+}
+
+impl<D: crate::Device> Default for CompilationCache<D> {
+    fn default() -> Self {
+        Self { data: Default::default() }
+    }
+}
+
+impl<D: crate::Device> CompilationCache<D> {
+    pub fn get(&self, kernel: &NormalizedKernel) -> Option<std::sync::Arc<D::Func>> {
+        self.data.get(kernel).cloned()
+    }
+
+    pub fn insert(&mut self, kernel: NormalizedKernel, func: std::sync::Arc<D::Func>) {
+        self.data.insert(kernel, func);
+    }
+}

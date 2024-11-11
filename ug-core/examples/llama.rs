@@ -593,6 +593,9 @@ impl Model {
 struct Args {
     #[arg(long)]
     tracing: bool,
+
+    #[arg(short, long)]
+    verbose: bool,
 }
 
 fn main() -> Result<()> {
@@ -628,12 +631,22 @@ fn main() -> Result<()> {
     }
     let mut rng = rand::rngs::StdRng::seed_from_u64(42);
     let mut last_token = BOS_TOKEN;
+    let mut ccache = ug::cache::CompilationCache::default();
     for pos in 1..20 {
         let tensor = model.fwd(&[last_token], pos, &mut cache)?;
         let tensor = softmax(&tensor)?;
+
+        let start_time = std::time::Instant::now();
         let schedule = ug::Schedule::create_one(&tensor)?;
-        let schedule = schedule.compile()?;
+        let dt_schedule = start_time.elapsed();
+
+        let start_time = std::time::Instant::now();
+        let schedule = schedule.compile_with_cache(&mut ccache)?;
+        let dt_compile = start_time.elapsed();
+
+        let start_time = std::time::Instant::now();
         schedule.run()?;
+        let dt_run = start_time.elapsed();
         let prs = {
             let data = tensor.data().lock().unwrap();
             let data = data.as_ref().unwrap();
@@ -642,7 +655,20 @@ fn main() -> Result<()> {
         let dist = rand_distr::WeightedIndex::new(prs).map_err(Error::wrap)?;
         last_token = dist.sample(&mut rng) as u32;
         let token = tokenizer.id_to_token(last_token);
-        println!("{token:?}");
+        if args.verbose {
+            println!(
+                "gen {:.2}ms, comp: {:.2}ms, run: {:.2}ms, generated {token:?}",
+                dt_schedule.as_secs_f32() * 1000.,
+                dt_compile.as_secs_f32() * 1000.,
+                dt_run.as_secs_f32() * 1000.,
+            );
+        } else if let Some(token) = token {
+            use std::io::Write;
+
+            let token = token.replace('Ġ', " ");
+            print!("{token}");
+            std::io::stdout().flush().map_err(Error::wrap)?;
+        }
     }
 
     Ok(())

@@ -101,12 +101,15 @@ impl<D: Device> Schedule<D> {
     }
 
     pub fn compile(&self) -> Result<CompiledSchedule<D>> {
-        use crate::cache::NormalizedKernel;
+        self.compile_with_cache(&mut Default::default())
+    }
 
+    pub fn compile_with_cache(
+        &self,
+        compilation_cache: &mut crate::cache::CompilationCache<D>,
+    ) -> Result<CompiledSchedule<D>> {
         let _guard = self.span_compile.enter();
         let mut funcs = Vec::with_capacity(self.items().len());
-        let mut compilation_cache: HashMap<NormalizedKernel, std::sync::Arc<D::Func>> =
-            HashMap::new();
         for item in self.items() {
             let call = match item {
                 ScheduleItem::MatMul { dst, lhs, rhs, bmnk, transpose } => Func::MatMul {
@@ -131,7 +134,7 @@ impl<D: Device> Schedule<D> {
                             let arg = self.get_arg_id(arg_id)?;
                             args.push((arg_id, arg.clone()))
                         }
-                        Func::Kernel { func: func.clone(), args }
+                        Func::Kernel { func, args }
                     } else {
                         let _guard = self.span_kernel.enter();
                         let ssa = kernel.lower(&Default::default())?;
