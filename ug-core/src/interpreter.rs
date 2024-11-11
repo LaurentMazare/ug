@@ -28,6 +28,9 @@ impl<T: num::traits::Signed + Copy, const N: usize> W<T, N> {
 }
 
 impl<T: num::traits::real::Real + Copy, const N: usize> W<T, N> {
+    fn sqrt(&self) -> Self {
+        Self(self.0.map(|v| v.sqrt()))
+    }
     fn exp(&self) -> Self {
         Self(self.0.map(|v| v.exp()))
     }
@@ -349,6 +352,8 @@ pub fn eval_ssa<const N: usize>(
                     (U::Neg, _) => crate::bail!("dtype mismatch for {op:?} {arg:?}"),
                     (U::Exp, Value::F32(v)) => Value::F32(v.exp()),
                     (U::Exp, _) => crate::bail!("dtype mismatch for {op:?} {arg:?}"),
+                    (U::Sqrt, Value::F32(v)) => Value::F32(v.sqrt()),
+                    (U::Sqrt, _) => crate::bail!("dtype mismatch for {op:?} {arg:?}"),
                     (U::Sin, Value::F32(v)) => Value::F32(v.sin()),
                     (U::Sin, _) => crate::bail!("dtype mismatch for {op:?} {arg:?}"),
                     (U::Cos, Value::F32(v)) => Value::F32(v.cos()),

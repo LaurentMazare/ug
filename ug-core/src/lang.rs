@@ -16,6 +16,7 @@ pub enum UnaryOp {
     Sin,
     Cos,
     Neg,
+    Sqrt,
     Cast,
 }
 

@@ -145,6 +145,7 @@ pub fn gen<W: std::io::Write>(w: &mut W, func_name: &str, kernel: &ssa::Kernel) 
             I::Unary { op, arg, dtype } => {
                 let op = match op {
                     ssa::UnaryOp::Exp => "exp",
+                    ssa::UnaryOp::Sqrt => "sqrt",
                     ssa::UnaryOp::Sin => "sin",
                     ssa::UnaryOp::Cos => "cos",
                     ssa::UnaryOp::Neg => "-",

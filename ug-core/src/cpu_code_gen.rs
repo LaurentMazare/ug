@@ -146,6 +146,7 @@ pub fn gen<W: std::io::Write>(w: &mut W, func_name: &str, kernel: &ssa::Kernel) 
             I::Unary { op, arg, dtype } => {
                 use std::borrow::Cow;
                 let op = match op {
+                    ssa::UnaryOp::Sqrt => Cow::Borrowed("sqrtf"),
                     ssa::UnaryOp::Exp => Cow::Borrowed("expf"),
                     ssa::UnaryOp::Sin => Cow::Borrowed("sinf"),
                     ssa::UnaryOp::Cos => Cow::Borrowed("cosf"),
