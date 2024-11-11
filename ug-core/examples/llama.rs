@@ -337,18 +337,11 @@ fn causal_mask(src: &LB) -> Result<LB> {
 }
 
 fn silu(src: &LB) -> Result<LB> {
-    let span = tracing::span!(tracing::Level::TRACE, "silu");
-    let f = move |vs: Vec<&mut CpuStorage>| -> Result<()> {
-        let _guard = span.enter();
-        let [src, dst]: [&mut CpuStorage; 2] = vs.try_into().unwrap();
-        let dst = dst.data_mut::<f32>()?;
-        let src = src.data::<f32>()?;
-        for (d, s) in dst.iter_mut().zip(src.iter()) {
-            *d = *s / (1. + f32::exp(-*s))
-        }
-        Ok(())
-    };
-    LB::custom(f, vec![src.clone()], src.shape(), src.dtype(), src.device())
+    use ug::lang::{BinaryOp as B, UnaryOp as U};
+    let exp_m = src.unary(U::Neg)?.unary(U::Exp)?;
+    let one = LB::cst(1f32, (), &CpuDevice)?.broadcast(exp_m.shape())?;
+    let den = exp_m.binary(B::Add, one)?;
+    src.binary(B::Div, den)
 }
 
 struct RmsNorm {
