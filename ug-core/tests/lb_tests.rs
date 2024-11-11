@@ -132,3 +132,48 @@ fn schedule_broadcast() -> Result<()> {
     assert_eq!(data, [42., 42., 42., 42., 42., 42., 42., 42., 42., 42.]);
     Ok(())
 }
+
+#[test]
+fn lb_custom() -> Result<()> {
+    let cpu = ug::CpuDevice;
+    let add_one = |vs: Vec<&mut ug::CpuStorage>| -> Result<()> {
+        let [src, dst]: [&mut ug::CpuStorage; 2] = vs.try_into().unwrap();
+        let dst = dst.data_mut::<f32>()?;
+        let src = src.data::<f32>()?;
+        dst.iter_mut().zip(src.iter()).for_each(|(d, s)| *d = *s + 1.0);
+        Ok(())
+    };
+    let shape = (2, 3);
+    let buf = ug::CpuStorage::F32(vec![0f32, 1f32, 2f32, 3f32, 4f32, 5f32]);
+    let buf_lb = LB::copy(buf, shape, &cpu)?;
+    let two_lb = LB::cst(2., shape, &cpu)?;
+    let lb = LB::custom(add_one, vec![buf_lb.clone()], shape, ug::DType::F32, &cpu)?;
+    let lb = lb.binary(ug::lang::BinaryOp::Mul, two_lb)?;
+    let schedule = ug::Schedule::create_one(&lb)?;
+    let schedule = schedule.compile()?;
+    schedule.run()?;
+    let data = {
+        let d = lb.data().lock()?;
+        d.as_ref().unwrap().to_vec::<f32>()?
+    };
+    assert_eq!(data, [2., 4., 6., 8., 10., 12.]);
+
+    {
+        let mut data = buf_lb.data().lock().unwrap();
+        let data = data.as_mut().unwrap();
+        if let ug::CpuStorage::F32(vs) = data {
+            vs[1] = 0.;
+            vs[2] = -8.;
+            vs[5] = -2.;
+        }
+    }
+
+    schedule.run()?;
+    let data = {
+        let d = lb.data().lock()?;
+        d.as_ref().unwrap().to_vec::<f32>()?
+    };
+    assert_eq!(data, [2., 2., -14., 8., 10., -2.]);
+
+    Ok(())
+}

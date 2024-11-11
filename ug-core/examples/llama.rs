@@ -98,7 +98,7 @@ fn rms_norm(src: &LB, alpha: &LB, eps: f32) -> Result<LB> {
 
 fn rope_i(src: &LB, cos: &LB, sin: &LB, pos: usize) -> Result<LB> {
     let (b, h, t, d) = src.shape().dims4()?;
-    let span = tracing::span!(tracing::Level::TRACE, "rope");
+    let span = tracing::span!(tracing::Level::TRACE, "ropei");
     let f = move |vs: Vec<&mut CpuStorage>| -> Result<()> {
         let _guard = span.enter();
         let [src, cos, sin, dst]: [&mut CpuStorage; 4] = vs.try_into().unwrap();
@@ -272,8 +272,10 @@ fn softmax(src: &LB) -> Result<LB> {
 }
 
 fn causal_mask(src: &LB) -> Result<LB> {
+    let span = tracing::span!(tracing::Level::TRACE, "mask");
     let (_b_sz, _num_heads, s1, s2) = src.dims4()?;
     let f = move |vs: Vec<&mut CpuStorage>| -> Result<()> {
+        let _guard = span.enter();
         let [src, dst]: [&mut CpuStorage; 2] = vs.try_into().unwrap();
         let dst = dst.data_mut::<f32>()?;
         let src = src.data::<f32>()?;
