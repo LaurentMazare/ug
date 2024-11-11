@@ -379,8 +379,15 @@ struct Attention {
     rope_interleaved: bool,
 }
 
+struct Cache {
+    prev_k: LB,
+    prev_v: LB,
+}
+
 impl Attention {
-    fn fwd(&self, xs: &LB, r: &Rope, pos: usize) -> Result<LB> {
+    // We use a mutable cache rather than returning an updated value. This makes the function
+    // signatures slightly simpler but introduces more mutability.
+    fn fwd(&self, xs: &LB, r: &Rope, pos: usize, cache: &mut Cache) -> Result<LB> {
         let (b_sz, seq_len, _hidden_size) = xs.shape().dims3()?;
         let q = self.q_proj.fwd(xs)?;
         let k = self.k_proj.fwd(xs)?;
@@ -403,7 +410,9 @@ impl Attention {
         } else {
             rope(&k, &r.cos, &r.sin, pos)?
         };
-        // TODO: KV Cache
+
+        cache.prev_k = k.clone();
+        cache.prev_v = v.clone();
         let k = repeat(&k, 1, self.num_heads / self.num_kv_heads)?;
         let v = repeat(&v, 1, self.num_heads / self.num_kv_heads)?;
 
@@ -433,10 +442,10 @@ struct Layer {
 }
 
 impl Layer {
-    fn fwd(&self, xs: &LB, rope: &Rope, pos: usize) -> Result<LB> {
+    fn fwd(&self, xs: &LB, rope: &Rope, pos: usize, cache: &mut Cache) -> Result<LB> {
         let residual = xs.clone();
         let xs = self.rms1.fwd(xs)?;
-        let xs = self.attn.fwd(&xs, rope, pos)?;
+        let xs = self.attn.fwd(&xs, rope, pos, cache)?;
         let xs = xs.binary(ug::lang::BinaryOp::Add, residual)?;
         let residual = xs.clone();
         let xs = self.rms2.fwd(&xs)?;
@@ -525,12 +534,12 @@ impl Model {
         Ok(Self { embedding, layers, ln_f, lm_head, config: cfg.clone(), rope })
     }
 
-    fn fwd(&self, tokens: &[u32], pos: usize) -> Result<LB> {
+    fn fwd(&self, tokens: &[u32], pos: usize, cache: &mut [Cache]) -> Result<LB> {
         let seq_len = tokens.len();
         let xs = index_select(&self.embedding, tokens)?;
         let mut xs = xs.reshape((1, seq_len, self.config.hidden_size))?;
-        for layer in self.layers.iter() {
-            xs = layer.fwd(&xs, &self.rope, pos)?
+        for (layer, cache) in self.layers.iter().zip(cache) {
+            xs = layer.fwd(&xs, &self.rope, pos, cache)?
         }
         let xs = self.ln_f.fwd(&xs)?;
         let xs = self.lm_head.fwd(&xs)?;
@@ -560,13 +569,19 @@ fn main() -> Result<()> {
     };
 
     let st = unsafe { ug::safetensors::MmapedSafetensors::new("model.safetensors")? };
-    let mut config = Config::smollm2_135m();
+    let mut cfg = Config::smollm2_135m();
     if let Some(num_hidden_layers) = NUM_HIDDEN_LAYERS {
         println!("overriding num layers: {num_hidden_layers}");
-        config.num_hidden_layers = num_hidden_layers;
+        cfg.num_hidden_layers = num_hidden_layers;
     }
-    let model = Model::new(&config, &st)?;
-    let tensor = model.fwd(&[BOS_TOKEN], 0)?;
+    let model = Model::new(&cfg, &st)?;
+    let mut cache = Vec::with_capacity(cfg.num_hidden_layers);
+    for _ in 0..cfg.num_hidden_layers {
+        let prev_k = LB::cst(0f32, (1, cfg.num_key_value_heads, 0, cfg.head_dim()), &CpuDevice)?;
+        let prev_v = LB::cst(0f32, (1, cfg.num_key_value_heads, 0, cfg.head_dim()), &CpuDevice)?;
+        cache.push(Cache { prev_k, prev_v });
+    }
+    let tensor = model.fwd(&[BOS_TOKEN], 0, &mut cache)?;
     println!("{:?} {:?} {}", tensor.shape(), tensor.dtype(), tensor.realized());
     let start_time = std::time::Instant::now();
     let schedule = ug::Schedule::create_one(&tensor)?;
