@@ -35,23 +35,6 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn smollm2_135m() -> Self {
-        Self {
-            hidden_act: HiddenAct::Silu,
-            hidden_size: 576,
-            intermediate_size: 1536,
-            max_position_embeddings: 8192,
-            num_attention_heads: 9,
-            num_hidden_layers: 30,
-            num_key_value_heads: 3,
-            rms_norm_eps: 1e-5,
-            rope_interleaved: Some(false),
-            rope_theta: 1e5,
-            tie_word_embeddings: true,
-            vocab_size: 49152,
-        }
-    }
-
     fn head_dim(&self) -> usize {
         self.hidden_size / self.num_attention_heads
     }
@@ -591,6 +574,10 @@ enum Which {
     Smol2_360M,
     #[value(name = "smol2-1.7b")]
     Smol2_1B7,
+    #[value(name = "3.2-1b")]
+    L32_1B,
+    #[value(name = "3.2-3b")]
+    L32_3B,
 }
 
 #[derive(clap::Parser, Debug)]
@@ -628,6 +615,8 @@ fn main() -> Result<()> {
         Which::Smol2_135M => "HuggingFaceTB/SmolLM2-135M",
         Which::Smol2_360M => "HuggingFaceTB/SmolLM2-360M",
         Which::Smol2_1B7 => "HuggingFaceTB/SmolLM2-1.7B",
+        Which::L32_1B => "meta-llama/Llama-3.2-1B",
+        Which::L32_3B => "meta-llama/Llama-3.2-3B",
     };
     let api = api.model(hf_repo.to_string());
     let model_file = api.get("model.safetensors").map_err(Error::wrap)?;
