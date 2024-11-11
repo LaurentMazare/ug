@@ -22,6 +22,7 @@ clap = { version = "4.5.20", features = ["derive"] }
 cudarc = { version = "0.12.1", features = ["f16", "cuda-version-from-build-system"] }
 gemm = { version = "0.18.0", features = ["wasm-simd128-enable"] }
 half = { version = "2.3.1", features = ["num-traits", "use-intrinsics", "rand_distr"] }
+hf-hub = "0.3.2"
 libloading = "0.8.5"
 memmap2 = { version = "0.9.5", features = ["stable_deref_trait"] }
 metal = "0.29.0"
@@ -31,10 +32,12 @@ objc = "0.2.7"
 ug = { path = "./ug-core", version = "0.1.0" }
 ug-cuda = { path = "./ug-cuda", version = "0.1.0" }
 rand = "0.8.5"
+rand_distr = "0.4.3"
 rayon = "1.7.0"
 safetensors = "0.4.5"
 serde = { version = "1.0.198", features = ["derive"] }
 thiserror = "1"
+tokenizers = "0.20.3"
 tracing = "0.1.40"
 tracing-chrome = "0.7.2"
 tracing-subscriber = "0.3.18"

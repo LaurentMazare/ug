@@ -1,11 +1,10 @@
-// wget https://huggingface.co/HuggingFaceTB/SmolLM2-135M/resolve/main/model.safetensors
+use rand::prelude::*;
 use rayon::prelude::*;
-use ug::{CpuDevice, CpuStorage, LazyBuffer, Result, Slice};
+use ug::{CpuDevice, CpuStorage, Error, LazyBuffer, Result, Slice};
 
 type LB = LazyBuffer<CpuDevice>;
 type ST = ug::safetensors::MmapedSafetensors;
 
-const NUM_HIDDEN_LAYERS: Option<usize> = None;
 #[allow(unused)]
 const UNK_TOKEN: u32 = 0;
 const BOS_TOKEN: u32 = 1;
@@ -611,12 +610,15 @@ fn main() -> Result<()> {
         None
     };
 
-    let st = unsafe { ug::safetensors::MmapedSafetensors::new("model.safetensors")? };
-    let mut cfg = Config::smollm2_135m();
-    if let Some(num_hidden_layers) = NUM_HIDDEN_LAYERS {
-        println!("overriding num layers: {num_hidden_layers}");
-        cfg.num_hidden_layers = num_hidden_layers;
-    }
+    let api = hf_hub::api::sync::Api::new().map_err(Error::wrap)?;
+    let api = api.model("HuggingFaceTB/SmolLM2-135M".to_string());
+    let model_file = api.get("model.safetensors").map_err(Error::wrap)?;
+    let tokenizer_file = api.get("tokenizer.json").map_err(Error::wrap)?;
+
+    let tokenizer = tokenizers::Tokenizer::from_file(tokenizer_file)
+        .map_err(|v| Error::debug(format!("{v:?}")))?;
+    let st = unsafe { ug::safetensors::MmapedSafetensors::new(model_file)? };
+    let cfg = Config::smollm2_135m();
     let model = Model::new(&cfg, &st)?;
     let mut cache = Vec::with_capacity(cfg.num_hidden_layers);
     for _ in 0..cfg.num_hidden_layers {
@@ -624,33 +626,24 @@ fn main() -> Result<()> {
         let prev_v = LB::cst(0f32, (1, cfg.num_key_value_heads, 0, cfg.head_dim()), &CpuDevice)?;
         cache.push(Cache { prev_k, prev_v });
     }
-    let tensor = model.fwd(&[BOS_TOKEN], 0, &mut cache)?;
-    println!("{:?} {:?} {}", tensor.shape(), tensor.dtype(), tensor.realized());
-    let start_time = std::time::Instant::now();
-    let schedule = ug::Schedule::create_one(&tensor)?;
-    println!(
-        "schedule with {} kernels generated in {:.2}s",
-        schedule.items().len(),
-        start_time.elapsed().as_secs_f32()
-    );
-    let start_time = std::time::Instant::now();
-    let schedule = schedule.compile()?;
-    println!("schedule compiled in {:.2}ms", start_time.elapsed().as_secs_f32() * 1000.);
-    let start_time = std::time::Instant::now();
-    schedule.run()?;
-    println!("schedule executed in {:.2}ms", start_time.elapsed().as_secs_f32() * 1000.);
-    let start_time = std::time::Instant::now();
-    schedule.run()?;
-    println!("schedule executed in {:.2}ms", start_time.elapsed().as_secs_f32() * 1000.);
-    println!("{:?} {:?} {}", tensor.shape(), tensor.dtype(), tensor.realized());
-
-    {
-        let data = tensor.data().lock().unwrap();
-        let data = data.as_ref().unwrap();
-        let data = data.to_vec::<f32>()?;
-        println!("{} {:?}", data.len(), &data[..10]);
-        // println!("{} {:?}", data.len(), &data[config.vocab_size..config.vocab_size + 10]);
-    };
+    let mut rng = rand::rngs::StdRng::seed_from_u64(42);
+    let mut last_token = BOS_TOKEN;
+    for pos in 1..20 {
+        let tensor = model.fwd(&[last_token], pos, &mut cache)?;
+        let tensor = softmax(&tensor)?;
+        let schedule = ug::Schedule::create_one(&tensor)?;
+        let schedule = schedule.compile()?;
+        schedule.run()?;
+        let prs = {
+            let data = tensor.data().lock().unwrap();
+            let data = data.as_ref().unwrap();
+            data.to_vec::<f32>()?
+        };
+        let dist = rand_distr::WeightedIndex::new(prs).map_err(Error::wrap)?;
+        last_token = dist.sample(&mut rng) as u32;
+        let token = tokenizer.id_to_token(last_token);
+        println!("{token:?}");
+    }
 
     Ok(())
 }
