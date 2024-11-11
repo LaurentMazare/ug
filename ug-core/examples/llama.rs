@@ -11,13 +11,14 @@ const BOS_TOKEN: u32 = 1;
 #[allow(unused)]
 const EOS_TOKEN: u32 = 2;
 
-#[derive(Debug, Clone)]
+#[derive(serde::Deserialize, Debug, Clone)]
+#[serde(rename_all = "snake_case")]
 pub enum HiddenAct {
     Silu,
 }
 
 #[allow(unused)]
-#[derive(Debug, Clone)]
+#[derive(serde::Deserialize, Debug, Clone)]
 pub struct Config {
     hidden_act: HiddenAct,
     hidden_size: usize,
@@ -27,7 +28,7 @@ pub struct Config {
     num_key_value_heads: usize,
     num_hidden_layers: usize,
     rms_norm_eps: f64,
-    rope_interleaved: bool,
+    rope_interleaved: Option<bool>,
     rope_theta: f32,
     tie_word_embeddings: bool,
     vocab_size: usize,
@@ -44,7 +45,7 @@ impl Config {
             num_hidden_layers: 30,
             num_key_value_heads: 3,
             rms_norm_eps: 1e-5,
-            rope_interleaved: false,
+            rope_interleaved: Some(false),
             rope_theta: 1e5,
             tie_word_embeddings: true,
             vocab_size: 49152,
@@ -560,7 +561,7 @@ impl Model {
                 head_dim: cfg.head_dim(),
                 num_heads: cfg.num_attention_heads,
                 num_kv_heads: cfg.num_key_value_heads,
-                rope_interleaved: cfg.rope_interleaved,
+                rope_interleaved: cfg.rope_interleaved.unwrap_or(false),
             };
             let mlp = Mlp { c_fc1, c_fc2, c_proj };
             layers.push(Layer { rms1, attn, rms2, mlp })
@@ -582,6 +583,16 @@ impl Model {
     }
 }
 
+#[derive(Clone, Debug, Copy, PartialEq, Eq, clap::ValueEnum)]
+enum Which {
+    #[value(name = "smol2-135m")]
+    Smol2_135M,
+    #[value(name = "smol2-360m")]
+    Smol2_360M,
+    #[value(name = "smol2-1.7b")]
+    Smol2_1B7,
+}
+
 #[derive(clap::Parser, Debug)]
 struct Args {
     #[arg(long)]
@@ -589,6 +600,9 @@ struct Args {
 
     #[arg(short, long)]
     verbose: bool,
+
+    #[arg(long, default_value = "smol2-135m")]
+    which: Which,
 
     #[arg(short, long, default_value_t = 20)]
     n_steps: usize,
@@ -610,14 +624,20 @@ fn main() -> Result<()> {
     };
 
     let api = hf_hub::api::sync::Api::new().map_err(Error::wrap)?;
-    let api = api.model("HuggingFaceTB/SmolLM2-135M".to_string());
+    let hf_repo = match args.which {
+        Which::Smol2_135M => "HuggingFaceTB/SmolLM2-135M",
+        Which::Smol2_360M => "HuggingFaceTB/SmolLM2-360M",
+        Which::Smol2_1B7 => "HuggingFaceTB/SmolLM2-1.7B",
+    };
+    let api = api.model(hf_repo.to_string());
     let model_file = api.get("model.safetensors").map_err(Error::wrap)?;
     let tokenizer_file = api.get("tokenizer.json").map_err(Error::wrap)?;
+    let config_file = api.get("config.json").map_err(Error::wrap)?;
 
+    let cfg = serde_json::from_slice(&std::fs::read(config_file)?).map_err(Error::wrap)?;
     let tokenizer = tokenizers::Tokenizer::from_file(tokenizer_file)
         .map_err(|v| Error::debug(format!("{v:?}")))?;
     let st = unsafe { ug::safetensors::MmapedSafetensors::new(model_file)? };
-    let cfg = Config::smollm2_135m();
     let model = Model::new(&cfg, &st)?;
     let mut cache = Vec::with_capacity(cfg.num_hidden_layers);
     for _ in 0..cfg.num_hidden_layers {
