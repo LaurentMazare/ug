@@ -93,15 +93,17 @@ fn _rms_norm(src: &LB, alpha: &LB, eps: f32) -> Result<LB> {
     LB::custom(f, vec![src.clone(), alpha.clone()], src.shape(), src.dtype(), src.device())
 }
 
-fn rope_i(src: &LB, cos: &LB, sin: &LB, pos: usize) -> Result<LB> {
+fn rope_i(src: &LB, cos: &LB, sin: &LB, pos: &LB) -> Result<LB> {
     let (b, h, t, d) = src.shape().dims4()?;
     let span = tracing::span!(tracing::Level::TRACE, "ropei");
     let f = move |vs: Vec<&mut CpuStorage>| -> Result<()> {
         let _guard = span.enter();
-        let [src, cos, sin, dst]: [&mut CpuStorage; 4] = vs.try_into().unwrap();
+        let [src, cos, sin, pos, dst]: [&mut CpuStorage; 5] = vs.try_into().unwrap();
         let src = src.data::<f32>()?;
         let cos = cos.data::<f32>()?;
         let sin = sin.data::<f32>()?;
+        // TODO: this only work for single positions.
+        let pos = pos.data::<i32>()?[0] as usize;
         let dst = dst.data_mut::<f32>()?;
         let cos = &cos[pos * d / 2..];
         let sin = &sin[pos * d / 2..];
@@ -117,22 +119,24 @@ fn rope_i(src: &LB, cos: &LB, sin: &LB, pos: usize) -> Result<LB> {
     };
     LB::custom(
         f,
-        vec![src.clone(), cos.clone(), sin.clone()],
+        vec![src.clone(), cos.clone(), sin.clone(), pos.clone()],
         (b, h, t, d),
         src.dtype(),
         src.device(),
     )
 }
 
-fn rope(src: &LB, cos: &LB, sin: &LB, pos: usize) -> Result<LB> {
+fn rope(src: &LB, cos: &LB, sin: &LB, pos: &LB) -> Result<LB> {
     let (b, h, t, d) = src.shape().dims4()?;
     let span = tracing::span!(tracing::Level::TRACE, "rope");
     let f = move |vs: Vec<&mut CpuStorage>| -> Result<()> {
         let _guard = span.enter();
-        let [src, cos, sin, dst]: [&mut CpuStorage; 4] = vs.try_into().unwrap();
+        let [src, cos, sin, pos, dst]: [&mut CpuStorage; 5] = vs.try_into().unwrap();
         let src = src.data::<f32>()?;
         let cos = cos.data::<f32>()?;
         let sin = sin.data::<f32>()?;
+        // TODO: this only work for single positions.
+        let pos = pos.data::<i32>()?[0] as usize;
         let dst = dst.data_mut::<f32>()?;
         let cos = &cos[pos * d / 2..];
         let sin = &sin[pos * d / 2..];
@@ -152,7 +156,7 @@ fn rope(src: &LB, cos: &LB, sin: &LB, pos: usize) -> Result<LB> {
     };
     LB::custom(
         f,
-        vec![src.clone(), cos.clone(), sin.clone()],
+        vec![src.clone(), cos.clone(), sin.clone(), pos.clone()],
         (b, h, t, d),
         src.dtype(),
         src.device(),
@@ -259,20 +263,11 @@ fn transpose(src: &LB, dim1: usize, dim2: usize) -> Result<LB> {
                 // j: mid
                 for j in 0..d_j {
                     for a2 in 0..d2 {
-                        // k: post
-                        for k in 0..d_k {
-                            let src_idx = i * d1 * d_j * d2 * d_k
-                                + a1 * d_j * d2 * d_k
-                                + j * d2 * d_k
-                                + a2 * d_k
-                                + k;
-                            let dst_idx = i * d2 * d_j * d1 * d_k
-                                + a2 * d_j * d1 * d_k
-                                + j * d1 * d_k
-                                + a1 * d_k
-                                + k;
-                            dst[dst_idx] = src[src_idx]
-                        }
+                        let src_idx =
+                            i * d1 * d_j * d2 * d_k + a1 * d_j * d2 * d_k + j * d2 * d_k + a2 * d_k;
+                        let dst_idx =
+                            i * d2 * d_j * d1 * d_k + a2 * d_j * d1 * d_k + j * d1 * d_k + a1 * d_k;
+                        dst[dst_idx..dst_idx + d_k].copy_from_slice(&src[src_idx..src_idx + d_k])
                     }
                 }
             }
@@ -421,7 +416,7 @@ struct Cache {
 impl Attention {
     // We use a mutable cache rather than returning an updated value. This makes the function
     // signatures slightly simpler but introduces more mutability.
-    fn fwd(&self, xs: &LB, r: &Rope, pos: usize, cache: &mut Cache) -> Result<LB> {
+    fn fwd(&self, xs: &LB, r: &Rope, pos: &LB, cache: &mut Cache) -> Result<LB> {
         let (b_sz, seq_len, _hidden_size) = xs.shape().dims3()?;
         let q = self.q_proj.fwd(xs)?;
         let k = self.k_proj.fwd(xs)?;
@@ -478,7 +473,7 @@ struct Layer {
 }
 
 impl Layer {
-    fn fwd(&self, xs: &LB, rope: &Rope, pos: usize, cache: &mut Cache) -> Result<LB> {
+    fn fwd(&self, xs: &LB, rope: &Rope, pos: &LB, cache: &mut Cache) -> Result<LB> {
         let residual = xs.clone();
         let xs = self.rms1.fwd(xs)?;
         let xs = self.attn.fwd(&xs, rope, pos, cache)?;
@@ -569,7 +564,7 @@ impl Model {
         Ok(Self { embedding, layers, ln_f, lm_head, rope })
     }
 
-    fn fwd(&self, tokens: &LB, pos: usize, cache: &mut [Cache]) -> Result<LB> {
+    fn fwd(&self, tokens: &LB, pos: &LB, cache: &mut [Cache]) -> Result<LB> {
         let mut xs = index_select(&self.embedding, tokens)?;
         for (layer, cache) in self.layers.iter().zip(cache) {
             xs = layer.fwd(&xs, &self.rope, pos, cache)?
@@ -653,7 +648,8 @@ fn main() -> Result<()> {
     let mut ccache = ug::cache::CompilationCache::default();
     for pos in 0..args.n_steps {
         let token_ids = LB::cst(last_token as i32, (1, 1), &CpuDevice)?;
-        let tensor = model.fwd(&token_ids, pos, &mut cache)?;
+        let pos = LB::cst(pos as i32, (1, 1), &CpuDevice)?;
+        let tensor = model.fwd(&token_ids, &pos, &mut cache)?;
         let tensor = softmax(&tensor)?;
 
         let start_time = std::time::Instant::now();
