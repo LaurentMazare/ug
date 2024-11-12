@@ -1,15 +1,8 @@
-use rand::prelude::*;
 use rayon::prelude::*;
-use ug::{CpuDevice, CpuStorage, Error, LazyBuffer, Result, Slice};
+use ug::{CpuDevice, CpuStorage, LazyBuffer, Result};
 
-type LB = LazyBuffer<CpuDevice>;
+pub type LB = LazyBuffer<CpuDevice>;
 type ST = ug::safetensors::MmapedSafetensors;
-
-#[allow(unused)]
-const UNK_TOKEN: u32 = 0;
-const BOS_TOKEN: u32 = 1;
-#[allow(unused)]
-const EOS_TOKEN: u32 = 2;
 
 #[derive(serde::Deserialize, Debug, Clone, Copy)]
 #[serde(rename_all = "snake_case")]
@@ -19,22 +12,22 @@ pub enum HiddenAct {
 
 #[derive(serde::Deserialize, Debug, Clone)]
 pub struct Config {
-    hidden_act: HiddenAct,
-    hidden_size: usize,
-    intermediate_size: usize,
-    max_position_embeddings: usize,
-    num_attention_heads: usize,
-    num_key_value_heads: usize,
-    num_hidden_layers: usize,
-    rms_norm_eps: f64,
-    rope_interleaved: Option<bool>,
-    rope_theta: f32,
-    tie_word_embeddings: bool,
-    vocab_size: usize,
+    pub hidden_act: HiddenAct,
+    pub hidden_size: usize,
+    pub intermediate_size: usize,
+    pub max_position_embeddings: usize,
+    pub num_attention_heads: usize,
+    pub num_key_value_heads: usize,
+    pub num_hidden_layers: usize,
+    pub rms_norm_eps: f64,
+    pub rope_interleaved: Option<bool>,
+    pub rope_theta: f32,
+    pub tie_word_embeddings: bool,
+    pub vocab_size: usize,
 }
 
 impl Config {
-    fn head_dim(&self) -> usize {
+    pub fn head_dim(&self) -> usize {
         self.hidden_size / self.num_attention_heads
     }
 }
@@ -69,28 +62,6 @@ fn rms_norm(src: &LB, alpha: &LB, eps: f32) -> Result<LB> {
         .binary(B::Add, LB::cst(eps, s2s, &CpuDevice)?)?
         .unary(U::Sqrt)?;
     src.binary(B::Div, m.broadcast(src.shape())?)?.binary(B::Mul, alpha.broadcast(src.shape())?)
-}
-
-fn _rms_norm(src: &LB, alpha: &LB, eps: f32) -> Result<LB> {
-    let rank = src.rank();
-    let dim_m1 = src.dims()[rank - 1];
-    let span_rms = tracing::span!(tracing::Level::TRACE, "rms");
-    let f = move |vs: Vec<&mut CpuStorage>| -> Result<()> {
-        let _guard = span_rms.enter();
-        let [src, alpha, dst]: [&mut CpuStorage; 3] = vs.try_into().unwrap();
-        let dst = dst.data_mut::<f32>()?;
-        let src = src.data::<f32>()?;
-        let alpha = alpha.data::<f32>()?;
-        src.par_chunks(dim_m1).zip(dst.par_chunks_mut(dim_m1)).for_each(|(src, dst)| {
-            let sum2 = src.iter().map(|&v| v * v).sum::<f32>();
-            let m = (sum2 / dim_m1 as f32 + eps).sqrt();
-            for ((d, s), alpha) in dst.iter_mut().zip(src.iter()).zip(alpha) {
-                *d = *s / m * *alpha
-            }
-        });
-        Ok(())
-    };
-    LB::custom(f, vec![src.clone(), alpha.clone()], src.shape(), src.dtype(), src.device())
 }
 
 fn rope_i(src: &LB, cos: &LB, sin: &LB, pos: &LB) -> Result<LB> {
@@ -277,7 +248,7 @@ fn transpose(src: &LB, dim1: usize, dim2: usize) -> Result<LB> {
     LB::custom(f, vec![src.clone()], dst_dims, src.dtype(), src.device())
 }
 
-fn softmax(src: &LB) -> Result<LB> {
+pub fn softmax(src: &LB) -> Result<LB> {
     let rank = src.rank();
     let dim_m1 = src.dims()[rank - 1];
     let span_sm = tracing::span!(tracing::Level::TRACE, "softmax");
@@ -408,9 +379,23 @@ struct Attention {
     rope_interleaved: bool,
 }
 
-struct Cache {
+pub struct Cache {
     prev_k: LB,
     prev_v: LB,
+}
+
+impl Cache {
+    pub fn new(cfg: &Config) -> Result<Vec<Self>> {
+        let mut cache = Vec::with_capacity(cfg.num_hidden_layers);
+        for _ in 0..cfg.num_hidden_layers {
+            let prev_k =
+                LB::cst(0f32, (1, cfg.num_key_value_heads, 0, cfg.head_dim()), &CpuDevice)?;
+            let prev_v =
+                LB::cst(0f32, (1, cfg.num_key_value_heads, 0, cfg.head_dim()), &CpuDevice)?;
+            cache.push(Cache { prev_k, prev_v });
+        }
+        Ok(cache)
+    }
 }
 
 impl Attention {
@@ -511,7 +496,7 @@ impl Rope {
     }
 }
 
-struct Model {
+pub struct Model {
     embedding: LB,
     rope: Rope,
     layers: Vec<Layer>,
@@ -520,7 +505,7 @@ struct Model {
 }
 
 impl Model {
-    fn new(cfg: &Config, st: &ug::safetensors::MmapedSafetensors) -> Result<Model> {
+    pub fn new(cfg: &Config, st: &ug::safetensors::MmapedSafetensors) -> Result<Model> {
         let embedding =
             st.load_with_cast("model.embed_tokens.weight", ug::DType::F32, &CpuDevice)?;
         let ln_f = RmsNorm::new(cfg.hidden_size, cfg.rms_norm_eps, "model.norm.weight", st)?;
@@ -564,7 +549,7 @@ impl Model {
         Ok(Self { embedding, layers, ln_f, lm_head, rope })
     }
 
-    fn fwd(&self, tokens: &LB, pos: &LB, cache: &mut [Cache]) -> Result<LB> {
+    pub fn fwd(&self, tokens: &LB, pos: &LB, cache: &mut [Cache]) -> Result<LB> {
         let mut xs = index_select(&self.embedding, tokens)?;
         for (layer, cache) in self.layers.iter().zip(cache) {
             xs = layer.fwd(&xs, &self.rope, pos, cache)?
@@ -573,120 +558,4 @@ impl Model {
         let xs = self.lm_head.fwd(&xs)?;
         Ok(xs)
     }
-}
-
-#[derive(Clone, Debug, Copy, PartialEq, Eq, clap::ValueEnum)]
-enum Which {
-    #[value(name = "smol2-135m")]
-    Smol2_135M,
-    #[value(name = "smol2-360m")]
-    Smol2_360M,
-    #[value(name = "smol2-1.7b")]
-    Smol2_1B7,
-    #[value(name = "3.2-1b")]
-    L32_1B,
-    #[value(name = "3.2-3b")]
-    L32_3B,
-}
-
-#[derive(clap::Parser, Debug)]
-struct Args {
-    #[arg(long)]
-    tracing: bool,
-
-    #[arg(short, long)]
-    verbose: bool,
-
-    #[arg(long, default_value = "smol2-135m")]
-    which: Which,
-
-    #[arg(short, long, default_value_t = 20)]
-    n_steps: usize,
-}
-
-fn main() -> Result<()> {
-    use clap::Parser;
-    let args = Args::parse();
-
-    let _guard = if args.tracing {
-        use tracing_chrome::ChromeLayerBuilder;
-        use tracing_subscriber::prelude::*;
-
-        let (chrome_layer, guard) = ChromeLayerBuilder::new().build();
-        tracing_subscriber::registry().with(chrome_layer).init();
-        Some(guard)
-    } else {
-        None
-    };
-
-    let api = hf_hub::api::sync::Api::new().map_err(Error::wrap)?;
-    let hf_repo = match args.which {
-        Which::Smol2_135M => "HuggingFaceTB/SmolLM2-135M",
-        Which::Smol2_360M => "HuggingFaceTB/SmolLM2-360M",
-        Which::Smol2_1B7 => "HuggingFaceTB/SmolLM2-1.7B",
-        Which::L32_1B => "meta-llama/Llama-3.2-1B",
-        Which::L32_3B => "meta-llama/Llama-3.2-3B",
-    };
-    let api = api.model(hf_repo.to_string());
-    let model_file = api.get("model.safetensors").map_err(Error::wrap)?;
-    let tokenizer_file = api.get("tokenizer.json").map_err(Error::wrap)?;
-    let config_file = api.get("config.json").map_err(Error::wrap)?;
-
-    let cfg = serde_json::from_slice(&std::fs::read(config_file)?).map_err(Error::wrap)?;
-    let tokenizer = tokenizers::Tokenizer::from_file(tokenizer_file)
-        .map_err(|v| Error::debug(format!("{v:?}")))?;
-    let st = unsafe { ug::safetensors::MmapedSafetensors::new(model_file)? };
-    let model = Model::new(&cfg, &st)?;
-    let mut cache = Vec::with_capacity(cfg.num_hidden_layers);
-    for _ in 0..cfg.num_hidden_layers {
-        let prev_k = LB::cst(0f32, (1, cfg.num_key_value_heads, 0, cfg.head_dim()), &CpuDevice)?;
-        let prev_v = LB::cst(0f32, (1, cfg.num_key_value_heads, 0, cfg.head_dim()), &CpuDevice)?;
-        cache.push(Cache { prev_k, prev_v });
-    }
-    let mut rng = rand::rngs::StdRng::seed_from_u64(42);
-    let mut last_token = BOS_TOKEN;
-    let mut ccache = ug::cache::CompilationCache::default();
-    for pos in 0..args.n_steps {
-        let token_ids = LB::copy([last_token as i32].as_slice(), (1, 1), &CpuDevice)?;
-        let pos = LB::copy([pos as i32].as_slice(), (1, 1), &CpuDevice)?;
-        let tensor = model.fwd(&token_ids, &pos, &mut cache)?;
-        let tensor = softmax(&tensor)?;
-
-        let start_time = std::time::Instant::now();
-        let schedule = ug::Schedule::create_one(&tensor)?;
-        let dt_schedule = start_time.elapsed();
-
-        let start_time = std::time::Instant::now();
-        let schedule = schedule.compile_with_cache(&mut ccache)?;
-        let dt_compile = start_time.elapsed();
-
-        let start_time = std::time::Instant::now();
-        schedule.run()?;
-        let dt_run = start_time.elapsed();
-        let prs = {
-            let data = tensor.data().lock().unwrap();
-            let data = data.as_ref().unwrap();
-            data.to_vec::<f32>()?
-        };
-        let dist = rand_distr::WeightedIndex::new(prs).map_err(Error::wrap)?;
-        last_token = dist.sample(&mut rng) as u32;
-        let token = tokenizer.id_to_token(last_token);
-        if args.verbose {
-            println!(
-                "gen {:.2}ms, comp: {:.2}ms, run: {:.2}ms, generated {token:?}",
-                dt_schedule.as_secs_f32() * 1000.,
-                dt_compile.as_secs_f32() * 1000.,
-                dt_run.as_secs_f32() * 1000.,
-            );
-        } else if let Some(token) = token {
-            use std::io::Write;
-
-            let token = token.replace('Ġ', " ").replace('Ċ', "\n");
-            print!("{token}");
-            std::io::stdout().flush().map_err(Error::wrap)?;
-        }
-    }
-    println!();
-
-    Ok(())
 }
