@@ -48,6 +48,10 @@ pub enum ScheduleItem<D: Device> {
         f: crate::lazy_buffer::CustomF<D::Slice>,
         args: Args<D>,
     },
+    Ssa {
+        ssa: crate::lang::ssa::Kernel,
+        args: Args<D>,
+    },
 }
 
 pub struct Schedule<D: Device> {
@@ -121,6 +125,17 @@ impl<D: Device> Schedule<D> {
                 },
                 ScheduleItem::Custom { f, args } => {
                     Func::Custom { f: f.clone(), args: args.to_vec() }
+                }
+                ScheduleItem::Ssa { ssa, args } => {
+                    // TODO: check args vs ssa.args.
+                    if let Some(func) = compilation_cache.get_ssa(ssa.instrs()) {
+                        Func::Kernel { func, args: args.to_vec() }
+                    } else {
+                        let func = self.device.compile(ssa)?;
+                        let func = std::sync::Arc::new(func);
+                        compilation_cache.insert_ssa(ssa.instrs().clone(), func.clone());
+                        Func::Kernel { func, args: args.to_vec() }
+                    }
                 }
                 ScheduleItem::Kernel(item) => {
                     let kernel = item.kernel()?;
@@ -340,6 +355,18 @@ impl<D: Device> Context<D> {
                         }
                     }
                 }
+                Op::Ssa { ssa, args: b_args } => {
+                    let mut args = Vec::with_capacity(b_args.len() + 1);
+                    for arg in b_args.iter() {
+                        let arg_id = self.push_schedule_item(arg)?;
+                        args.push((arg_id, arg.clone()))
+                    }
+                    let dst_id = ArgId::new();
+                    self.per_arg_id.insert(dst_id, b.clone());
+                    args.push((dst_id, b.clone()));
+                    self.items.push(ScheduleItem::Ssa { ssa: ssa.clone(), args });
+                    crate::lang::op::load(dst_id, Layout::from_shape(shape), dtype)?
+                }
                 Op::Custom { f, args: b_args } => {
                     let mut args = Vec::with_capacity(b_args.len() + 1);
                     for arg in b_args.iter() {
@@ -420,7 +447,7 @@ fn id_cnts<D: Device>(b: &LazyBuffer<D>, cnts: &mut HashMap<crate::lazy_buffer::
             id_cnts(arg1, cnts);
             id_cnts(arg2, cnts);
         }
-        Op::Custom { f: _, args } => {
+        Op::Ssa { ssa: _, args } | Op::Custom { f: _, args } => {
             for arg in args.iter() {
                 id_cnts(arg, cnts);
             }

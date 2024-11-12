@@ -699,7 +699,7 @@ pub mod ssa {
     }
 
     impl Kernel {
-        pub fn instrs(&self) -> &[Instr] {
+        pub fn instrs(&self) -> &Vec<Instr> {
             &self.instrs
         }
 

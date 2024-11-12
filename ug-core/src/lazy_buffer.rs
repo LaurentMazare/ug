@@ -62,6 +62,7 @@ pub enum Op<D: Device> {
     Copy,
     Layout(LayoutOp, LazyBuffer<D>),
     Custom { f: CustomF<D::Slice>, args: Vec<LazyBuffer<D>> },
+    Ssa { ssa: crate::lang::ssa::Kernel, args: Vec<LazyBuffer<D>> },
 }
 
 pub struct LazyBuffer<D: Device>(std::sync::Arc<LazyBufferInner<D>>);
@@ -234,6 +235,25 @@ impl<D: Device> LazyBuffer<D> {
             id: Id::new(),
             data: std::sync::Mutex::new(None),
             op: Op::Custom { f, args },
+            dtype,
+            device: device.clone(),
+            shape: s.into(),
+        };
+        let lb = LazyBuffer(std::sync::Arc::new(inner));
+        Ok(lb)
+    }
+
+    pub fn ssa<S: Into<Shape>>(
+        ssa: crate::lang::ssa::Kernel,
+        args: Vec<Self>,
+        s: S,
+        dtype: DType,
+        device: &D,
+    ) -> Result<Self> {
+        let inner = LazyBufferInner {
+            id: Id::new(),
+            data: std::sync::Mutex::new(None),
+            op: Op::Ssa { ssa, args },
             dtype,
             device: device.clone(),
             shape: s.into(),
