@@ -11,13 +11,12 @@ const BOS_TOKEN: u32 = 1;
 #[allow(unused)]
 const EOS_TOKEN: u32 = 2;
 
-#[derive(serde::Deserialize, Debug, Clone)]
+#[derive(serde::Deserialize, Debug, Clone, Copy)]
 #[serde(rename_all = "snake_case")]
 pub enum HiddenAct {
     Silu,
 }
 
-#[allow(unused)]
 #[derive(serde::Deserialize, Debug, Clone)]
 pub struct Config {
     hidden_act: HiddenAct,
@@ -386,13 +385,16 @@ struct Mlp {
     c_fc1: Linear,
     c_fc2: Linear,
     c_proj: Linear,
+    hidden_act: HiddenAct,
 }
 
 impl Mlp {
     fn fwd(&self, xs: &LB) -> Result<LB> {
         let xs1 = self.c_fc1.fwd(xs)?;
         let xs2 = self.c_fc2.fwd(xs)?;
-        let xs1 = silu(&xs1)?;
+        let xs1 = match self.hidden_act {
+            HiddenAct::Silu => silu(&xs1)?,
+        };
         let xs = xs1.binary(ug::lang::BinaryOp::Mul, xs2)?;
         self.c_proj.fwd(&xs)
     }
@@ -451,7 +453,7 @@ impl Attention {
         // attention
         let k = transpose(&k, 3, 2)?;
         let att = q.matmul(k)?;
-        let scale = ug::LazyBuffer::cst((self.head_dim as f32).powf(-0.5), (), q.device())?;
+        let scale = LB::cst((self.head_dim as f32).powf(-0.5), (), q.device())?;
         let scale = scale.broadcast(att.shape())?;
         let att = att.binary(ug::lang::BinaryOp::Mul, scale)?;
         let att = if seq_len == 1 { att } else { causal_mask(&att)? };
@@ -559,7 +561,7 @@ impl Model {
                 num_kv_heads: cfg.num_key_value_heads,
                 rope_interleaved: cfg.rope_interleaved.unwrap_or(false),
             };
-            let mlp = Mlp { c_fc1, c_fc2, c_proj };
+            let mlp = Mlp { c_fc1, c_fc2, c_proj, hidden_act: cfg.hidden_act };
             layers.push(Layer { rms1, attn, rms2, mlp })
         }
         let rope = Rope::new(cfg)?;
