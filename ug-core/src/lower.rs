@@ -149,7 +149,7 @@ impl lang::Kernel {
                 ssa::Type::Ptr(v) => v,
                 ssa::Type::Value(_) => crate::bail!("non-pointer arguments are not supported yet"),
             };
-            instrs.push((id, SsaI::DefineGlobal { index, dtype, arg_id: arg.id() }));
+            instrs.push((id, SsaI::DefineGlobal { index, dtype }));
             per_arg.insert(arg.id(), id.to_varid());
         }
         for lang::Ops::Store { dst, src } in self.ops.iter() {

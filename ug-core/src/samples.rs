@@ -4,7 +4,7 @@ pub mod ssa {
     use crate::Result;
 
     fn arg(index: usize, dtype: DType) -> I {
-        I::DefineGlobal { index, dtype, arg_id: ssa::ArgId::new() }
+        I::DefineGlobal { index, dtype }
     }
 
     pub fn simple_add(vec_len: usize) -> Result<Kernel> {

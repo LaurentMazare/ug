@@ -673,7 +673,7 @@ pub mod ssa {
     /// the final SSA.
     pub enum Instr {
         DefineAcc(Const),
-        DefineGlobal { index: usize, arg_id: ArgId, dtype: DType },
+        DefineGlobal { index: usize, dtype: DType },
         DefineLocal { size: usize, dtype: DType },
         Special(Special),
         Const(Const),
@@ -707,14 +707,19 @@ pub mod ssa {
             &self.args
         }
 
+        pub fn new(instrs: Vec<Instr>, args: Vec<(Arg, usize)>) -> Self {
+            Self { instrs, args }
+        }
+
         pub fn from_instrs(instrs: Vec<Instr>) -> crate::Result<Self> {
             let mut args = vec![];
             for (line_no, instr) in instrs.iter().enumerate() {
-                if let Instr::DefineGlobal { index, dtype, arg_id } = instr {
+                if let Instr::DefineGlobal { index, dtype } = instr {
                     if *index != args.len() {
                         crate::bail!("unexpected order for arguments in kernel {instrs:?}")
                     }
-                    let arg = Arg::new(*arg_id, Type::Ptr(*dtype));
+                    let arg_id = ArgId::new();
+                    let arg = Arg::new(arg_id, Type::Ptr(*dtype));
                     args.push((arg, line_no));
                 }
             }

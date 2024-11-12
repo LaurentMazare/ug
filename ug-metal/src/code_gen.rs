@@ -93,7 +93,7 @@ pub fn gen<W: std::io::Write>(w: &mut W, func_name: &str, kernel: &ssa::Kernel) 
         let var_id = V(ssa::VarId::new(var_id));
         let indent = " ".repeat(2 * depth + 2);
         match instr {
-            I::DefineGlobal { arg_id: _, index: _, dtype: _ } => {}
+            I::DefineGlobal { index: _, dtype: _ } => {}
             I::DefineLocal { dtype, size } => {
                 // TODO(laurent): should we enforce the alignment in some cases?
                 writeln!(w, "{indent}threadgroup {} {var_id}[{size}];", D(*dtype))?

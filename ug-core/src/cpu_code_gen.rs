@@ -94,7 +94,7 @@ pub fn gen<W: std::io::Write>(w: &mut W, func_name: &str, kernel: &ssa::Kernel) 
         let var_id = V(ssa::VarId::new(var_id));
         let indent = " ".repeat(2 * depth + 2);
         match instr {
-            I::DefineGlobal { index: _, dtype: _, arg_id: _ } => {}
+            I::DefineGlobal { index: _, dtype: _ } => {}
             I::DefineLocal { dtype, size } => {
                 // TODO(laurent): should we enforce the alignment in some cases?
                 writeln!(w, "{indent}__shared__ {} {var_id}[{size}];", D(*dtype))?
