@@ -39,21 +39,23 @@ impl Config {
     }
 }
 
-fn index_select(src: &LB, ids: &[u32]) -> Result<LB> {
-    let seq_len = ids.len();
+fn index_select(src: &LB, ids: &LB) -> Result<LB> {
+    let (b_sz, seq_len) = ids.dims2()?;
     let (_, h) = src.shape().dims2()?;
-    let ids = ids.to_vec();
     let f = move |vs: Vec<&mut CpuStorage>| -> Result<()> {
-        let [src, dst]: [&mut CpuStorage; 2] = vs.try_into().unwrap();
+        let [src, ids, dst]: [&mut CpuStorage; 3] = vs.try_into().unwrap();
         let dst = dst.data_mut::<f32>()?;
         let src = src.data::<f32>()?;
-        for (i, id) in ids.iter().enumerate() {
-            let id = *id as usize;
-            dst[i * h..(i + 1) * h].copy_from_slice(&src[id * h..(id + 1) * h]);
+        let ids = ids.data::<i32>()?;
+        for (dst, ids) in dst.chunks_mut(seq_len * h).zip(ids.chunks(seq_len)) {
+            for (i, id) in ids.iter().enumerate() {
+                let id = *id as usize;
+                dst[i * h..(i + 1) * h].copy_from_slice(&src[id * h..(id + 1) * h]);
+            }
         }
         Ok(())
     };
-    LB::custom(f, vec![src.clone()], (seq_len, h), src.dtype(), src.device())
+    LB::custom(f, vec![src.clone(), ids.clone()], (b_sz, seq_len, h), src.dtype(), src.device())
 }
 
 fn rms_norm(src: &LB, alpha: &LB, eps: f32) -> Result<LB> {
@@ -520,7 +522,6 @@ struct Model {
     layers: Vec<Layer>,
     ln_f: RmsNorm,
     lm_head: Linear,
-    config: Config,
 }
 
 impl Model {
@@ -565,13 +566,11 @@ impl Model {
             layers.push(Layer { rms1, attn, rms2, mlp })
         }
         let rope = Rope::new(cfg)?;
-        Ok(Self { embedding, layers, ln_f, lm_head, config: cfg.clone(), rope })
+        Ok(Self { embedding, layers, ln_f, lm_head, rope })
     }
 
-    fn fwd(&self, tokens: &[u32], pos: usize, cache: &mut [Cache]) -> Result<LB> {
-        let seq_len = tokens.len();
-        let xs = index_select(&self.embedding, tokens)?;
-        let mut xs = xs.reshape((1, seq_len, self.config.hidden_size))?;
+    fn fwd(&self, tokens: &LB, pos: usize, cache: &mut [Cache]) -> Result<LB> {
+        let mut xs = index_select(&self.embedding, tokens)?;
         for (layer, cache) in self.layers.iter().zip(cache) {
             xs = layer.fwd(&xs, &self.rope, pos, cache)?
         }
@@ -653,7 +652,8 @@ fn main() -> Result<()> {
     let mut last_token = BOS_TOKEN;
     let mut ccache = ug::cache::CompilationCache::default();
     for pos in 0..args.n_steps {
-        let tensor = model.fwd(&[last_token], pos, &mut cache)?;
+        let token_ids = LB::cst(last_token as i32, (1, 1), &CpuDevice)?;
+        let tensor = model.fwd(&token_ids, pos, &mut cache)?;
         let tensor = softmax(&tensor)?;
 
         let start_time = std::time::Instant::now();
