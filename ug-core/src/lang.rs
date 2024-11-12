@@ -617,13 +617,13 @@ pub mod ssa {
         }
     }
 
-    #[derive(Debug, Clone, Copy, PartialEq)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub enum Special {
         LocalIdx,
         GridIdx,
     }
 
-    #[derive(Debug, Clone, Copy, PartialEq)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub enum A {
         Var(VarId),
         Const(Const),
@@ -668,7 +668,7 @@ pub mod ssa {
         }
     }
 
-    #[derive(Debug, Clone, PartialEq)]
+    #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
     /// The loop start_idx and end_idx are using VarIds as these are derived from line numbers in
     /// the final SSA.
     pub enum Instr {
