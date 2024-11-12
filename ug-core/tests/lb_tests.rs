@@ -82,7 +82,7 @@ fn schedule_mm() -> Result<()> {
 fn lb_copy() -> Result<()> {
     let cpu = ug::CpuDevice;
     let shape = (2, 3);
-    let buf = ug::CpuStorage::F32(vec![0f32, 1f32, 2f32, 3f32, 4f32, 5f32]);
+    let buf = [0f32, 1f32, 2f32, 3f32, 4f32, 5f32].as_slice();
     let lhs = LB::copy(buf, shape, &cpu)?;
     let two = LB::cst(2., shape, &cpu)?;
     let half = LB::cst(0.5, shape, &cpu)?;
@@ -144,7 +144,7 @@ fn lb_custom() -> Result<()> {
         Ok(())
     };
     let shape = (2, 3);
-    let buf = ug::CpuStorage::F32(vec![0f32, 1f32, 2f32, 3f32, 4f32, 5f32]);
+    let buf = [0f32, 1f32, 2f32, 3f32, 4f32, 5f32].as_slice();
     let buf_lb = LB::copy(buf, shape, &cpu)?;
     let two_lb = LB::cst(2., shape, &cpu)?;
     let lb = LB::custom(add_one, vec![buf_lb.clone()], shape, ug::DType::F32, &cpu)?;

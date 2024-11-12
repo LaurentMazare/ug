@@ -144,6 +144,50 @@ impl CpuStorageRef<'_> {
             Self::I64(_) => DType::I64,
         }
     }
+
+    pub fn len(&self) -> usize {
+        match self {
+            Self::BF16(s) => s.len(),
+            Self::F16(s) => s.len(),
+            Self::F32(s) => s.len(),
+            Self::I32(s) => s.len(),
+            Self::I64(s) => s.len(),
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+}
+
+impl<'a> From<&'a [bf16]> for CpuStorageRef<'a> {
+    fn from(value: &'a [bf16]) -> Self {
+        Self::BF16(value)
+    }
+}
+
+impl<'a> From<&'a [f16]> for CpuStorageRef<'a> {
+    fn from(value: &'a [f16]) -> Self {
+        Self::F16(value)
+    }
+}
+
+impl<'a> From<&'a [f32]> for CpuStorageRef<'a> {
+    fn from(value: &'a [f32]) -> Self {
+        Self::F32(value)
+    }
+}
+
+impl<'a> From<&'a [i32]> for CpuStorageRef<'a> {
+    fn from(value: &'a [i32]) -> Self {
+        Self::I32(value)
+    }
+}
+
+impl<'a> From<&'a [i64]> for CpuStorageRef<'a> {
+    fn from(value: &'a [i64]) -> Self {
+        Self::I64(value)
+    }
 }
 
 impl CpuStorageRefMut<'_> {
@@ -156,7 +200,51 @@ impl CpuStorageRefMut<'_> {
             Self::I64(_) => DType::I64,
         }
     }
+    pub fn len(&self) -> usize {
+        match self {
+            Self::BF16(s) => s.len(),
+            Self::F16(s) => s.len(),
+            Self::F32(s) => s.len(),
+            Self::I32(s) => s.len(),
+            Self::I64(s) => s.len(),
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
 }
+
+impl<'a> From<&'a mut [bf16]> for CpuStorageRefMut<'a> {
+    fn from(value: &'a mut [bf16]) -> Self {
+        Self::BF16(value)
+    }
+}
+
+impl<'a> From<&'a mut [f16]> for CpuStorageRefMut<'a> {
+    fn from(value: &'a mut [f16]) -> Self {
+        Self::F16(value)
+    }
+}
+
+impl<'a> From<&'a mut [f32]> for CpuStorageRefMut<'a> {
+    fn from(value: &'a mut [f32]) -> Self {
+        Self::F32(value)
+    }
+}
+
+impl<'a> From<&'a mut [i32]> for CpuStorageRefMut<'a> {
+    fn from(value: &'a mut [i32]) -> Self {
+        Self::I32(value)
+    }
+}
+
+impl<'a> From<&'a mut [i64]> for CpuStorageRefMut<'a> {
+    fn from(value: &'a mut [i64]) -> Self {
+        Self::I64(value)
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct CpuDevice;
 

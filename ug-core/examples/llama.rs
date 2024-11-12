@@ -647,8 +647,8 @@ fn main() -> Result<()> {
     let mut last_token = BOS_TOKEN;
     let mut ccache = ug::cache::CompilationCache::default();
     for pos in 0..args.n_steps {
-        let token_ids = LB::cst(last_token as i32, (1, 1), &CpuDevice)?;
-        let pos = LB::cst(pos as i32, (1, 1), &CpuDevice)?;
+        let token_ids = LB::copy([last_token as i32].as_slice(), (1, 1), &CpuDevice)?;
+        let pos = LB::copy([pos as i32].as_slice(), (1, 1), &CpuDevice)?;
         let tensor = model.fwd(&token_ids, &pos, &mut cache)?;
         let tensor = softmax(&tensor)?;
 

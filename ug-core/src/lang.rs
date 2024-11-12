@@ -320,7 +320,7 @@ impl ExprNode {
         Self::from_expr(Expr::Binary(BinaryOp::Mul, self.clone(), rhs.clone()), dtype)
     }
 
-    pub fn all_args(&self, args: &mut std::collections::HashSet<Arg>) {
+    pub fn all_args(&self, args: &mut std::collections::BTreeSet<Arg>) {
         match &self.inner.expr {
             Expr::Load(ss) => {
                 args.insert(*ss.ptr());
@@ -364,7 +364,7 @@ impl Ops {
         }
     }
 
-    pub fn all_args(&self, args: &mut std::collections::HashSet<Arg>) {
+    pub fn all_args(&self, args: &mut std::collections::BTreeSet<Arg>) {
         args.insert(*self.dst().ptr());
         self.src().all_args(args);
     }

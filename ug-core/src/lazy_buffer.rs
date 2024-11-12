@@ -402,9 +402,15 @@ impl<D: Device> LazyBuffer<D> {
         Ok(lb)
     }
 
-    pub fn copy<S: Into<Shape>>(data: crate::CpuStorage, s: S, device: &D) -> Result<Self> {
+    pub fn copy<'a, R: Into<crate::CpuStorageRef<'a>>, S: Into<Shape>>(
+        data: R,
+        s: S,
+        device: &D,
+    ) -> Result<Self> {
+        use crate::CpuStorageRef as C;
         use crate::Slice;
 
+        let data: crate::CpuStorageRef<'a> = data.into();
         let s: Shape = s.into();
         if s.num_elements() != data.len() {
             crate::bail!("unexpected number of elements {} for shape {s:?}", data.len())
@@ -412,11 +418,11 @@ impl<D: Device> LazyBuffer<D> {
         let dtype = data.dtype();
         let mut slice = unsafe { device.allocate_uninit(dtype, data.len()) }?;
         match data {
-            crate::CpuStorage::BF16(data) => slice.copy_host_to_device(&data)?,
-            crate::CpuStorage::F16(data) => slice.copy_host_to_device(&data)?,
-            crate::CpuStorage::F32(data) => slice.copy_host_to_device(&data)?,
-            crate::CpuStorage::I32(data) => slice.copy_host_to_device(&data)?,
-            crate::CpuStorage::I64(data) => slice.copy_host_to_device(&data)?,
+            C::BF16(data) => slice.copy_host_to_device(data)?,
+            C::F16(data) => slice.copy_host_to_device(data)?,
+            C::F32(data) => slice.copy_host_to_device(data)?,
+            C::I32(data) => slice.copy_host_to_device(data)?,
+            C::I64(data) => slice.copy_host_to_device(data)?,
         };
         let inner = LazyBufferInner {
             id: Id::new(),
