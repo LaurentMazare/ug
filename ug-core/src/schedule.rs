@@ -397,8 +397,15 @@ impl<D: Device> Context<D> {
     }
 }
 
+/// Return the number of uses for each buffer that is reachable from b. The number of uses can be
+/// either 1 or 2 for the case where the buffer is used twice or more.
+/// Note that realized nodes stop the propagation.
 fn id_cnts<D: Device>(b: &LazyBuffer<D>, cnts: &mut HashMap<crate::lazy_buffer::Id, usize>) {
     use crate::lazy_buffer::Op;
+
+    if b.realized() {
+        return;
+    }
 
     let id = b.id();
     let cnt = cnts.entry(id).or_insert(0);
