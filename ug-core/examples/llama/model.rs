@@ -1,5 +1,5 @@
 use rayon::prelude::*;
-use ug::{CpuDevice, CpuStorage, LazyBuffer, Result};
+use ug::{CpuDevice, CpuStorage, DType, LazyBuffer, Result};
 
 pub type LB = LazyBuffer<CpuDevice>;
 type ST = ug::safetensors::MmapedSafetensors;
@@ -33,6 +33,39 @@ impl Config {
 }
 
 fn index_select(src: &LB, ids: &LB) -> Result<LB> {
+    use ug::lang::ssa::Instr as I;
+
+    fn arg(index: usize, dtype: DType) -> I {
+        I::DefineGlobal { index, dtype }
+    }
+
+    let dtype = DType::F32;
+    let (b_sz, seq_len) = ids.dims2()?;
+    let (_, h) = src.shape().dims2()?;
+
+    let mut b = ug::block::Block::empty();
+    {
+        let src = b.push(arg(0, dtype)).to_varid();
+        let ids = b.push(arg(1, DType::I32)).to_varid();
+        let dst = b.push(arg(2, dtype)).to_varid();
+        let r1 = b.range(0, (b_sz * seq_len) as i32);
+        let src_off = b.push(I::Load { src: ids, offset: r1.id().to_a(), dtype });
+        let src_off = b.mul(src_off, h as i32);
+        let dst_off = b.mul(r1.id(), h as i32);
+        let r2 = b.range(0, h as i32);
+        let src_off = b.binary(ug::lang::BinaryOp::Add, src_off, r2.id(), DType::I32);
+        let dst_off = b.binary(ug::lang::BinaryOp::Add, dst_off, r2.id(), DType::I32);
+        let load_i = b.push(I::Load { src, offset: src_off.to_a(), dtype });
+        b.push(I::Store { dst, offset: dst_off.to_a(), value: load_i.to_a(), dtype });
+        b.end_range(r2)?;
+        b.end_range(r1)?;
+    }
+    let instrs = b.relocate()?;
+    let ssa = ug::lang::ssa::Kernel::from_instrs(instrs)?;
+    LB::ssa(ssa, vec![src.clone(), ids.clone()], (b_sz, seq_len, h), src.dtype(), src.device())
+}
+
+fn _index_select(src: &LB, ids: &LB) -> Result<LB> {
     let (b_sz, seq_len) = ids.dims2()?;
     let (_, h) = src.shape().dims2()?;
     let f = move |vs: Vec<&mut CpuStorage>| -> Result<()> {
