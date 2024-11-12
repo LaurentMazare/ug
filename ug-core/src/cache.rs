@@ -3,6 +3,8 @@ use crate::lang::op::{self, ArgId, Ast};
 use crate::Result;
 use std::collections::HashMap;
 
+type Ssa = Vec<crate::lang::ssa::Instr>;
+
 #[derive(Debug, Hash, PartialEq, Eq)]
 pub struct NormalizedKernel {
     pub(crate) args: Vec<op::Arg>,
@@ -65,21 +67,30 @@ impl NormalizedKernel {
 }
 
 pub struct CompilationCache<D: crate::Device> {
-    data: HashMap<NormalizedKernel, std::sync::Arc<D::Func>>,
+    op_cache: HashMap<NormalizedKernel, std::sync::Arc<D::Func>>,
+    ssa_cache: HashMap<Ssa, std::sync::Arc<D::Func>>,
 }
 
 impl<D: crate::Device> Default for CompilationCache<D> {
     fn default() -> Self {
-        Self { data: Default::default() }
+        Self { op_cache: Default::default(), ssa_cache: Default::default() }
     }
 }
 
 impl<D: crate::Device> CompilationCache<D> {
     pub fn get(&self, kernel: &NormalizedKernel) -> Option<std::sync::Arc<D::Func>> {
-        self.data.get(kernel).cloned()
+        self.op_cache.get(kernel).cloned()
     }
 
     pub fn insert(&mut self, kernel: NormalizedKernel, func: std::sync::Arc<D::Func>) {
-        self.data.insert(kernel, func);
+        self.op_cache.insert(kernel, func);
+    }
+
+    pub fn get_ssa(&self, kernel: &Ssa) -> Option<std::sync::Arc<D::Func>> {
+        self.ssa_cache.get(kernel).cloned()
+    }
+
+    pub fn insert_ssa(&mut self, kernel: Ssa, func: std::sync::Arc<D::Func>) {
+        self.ssa_cache.insert(kernel, func);
     }
 }
