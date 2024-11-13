@@ -38,67 +38,75 @@ impl Opts {
 }
 
 #[derive(Debug, Clone)]
-struct Index {
-    id: Id,
-    broadcast: bool,
+struct IndexFormula {
+    ids: Vec<(Id, usize)>,
+    offset: usize,
 }
 
 /// Indexes represent the way to access the local data using the indexes from the top-level call
 /// to the lower function.
+/// The length of Indexes should match the shape for the local data and each IndexFormula value
+/// gives the index on this dimension as offset + sum ids.1 * ids.0
 #[derive(Debug, Clone)]
-struct Indexes {
-    idxs: Vec<Index>,
-    offset: usize,
-}
+struct Indexes(Vec<IndexFormula>);
 
 impl Indexes {
     fn layout_op(&self, op: &crate::lang::op::LayoutOp, shape: &Shape) -> Result<Self> {
         use crate::lang::op::LayoutOp as L;
-        let offset = self.offset;
-        let mut idxs = self.idxs.to_vec();
-        let offset = match op {
+        let mut idxs = self.0.clone();
+        match op {
             L::Broadcast { broadcasted_dims } => {
                 for dim in broadcasted_dims.iter() {
-                    match idxs.get_mut(*dim) {
-                        None => {
-                            bail!("unexpected dim for broadcast, {dim} {:?}", shape)
-                        }
-                        Some(v) => v.broadcast = true,
-                    };
+                    if *dim >= idxs.len() {
+                        bail!("unexpected dim for broadcast, {dim} {:?}", shape)
+                    }
+                    idxs[*dim] = IndexFormula { ids: vec![], offset: 0 }
                 }
-                offset
+            }
+            L::Narrow { dim, offset } => {
+                if *dim >= idxs.len() {
+                    bail!("unexpected dim for broadcast, {dim} {:?}", shape)
+                }
+                idxs[*dim].offset += *offset
             }
             op => bail!("unsupported layout op {op:?}"),
         };
-        Ok(Self { idxs, offset })
+        Ok(Self(idxs))
+    }
+}
+
+impl From<Id> for IndexFormula {
+    fn from(value: Id) -> Self {
+        Self { ids: vec![(value, 1)], offset: 0 }
     }
 }
 
 impl lang::op::Layout {
     fn lower(&self, idxs: &Indexes) -> Result<(Id, Block)> {
         let strides = self.strides();
-        let n_real_dims = idxs.idxs.iter().filter(|v| !v.broadcast).count();
-        if n_real_dims != strides.len() {
+        if idxs.0.len() != strides.len() {
             bail!("len mismatch between strides {self:?} and idxs {idxs:?}")
         }
-        let off = (self.offset() + idxs.offset) as i32;
-        if n_real_dims == 0 {
+        let off: usize = idxs.0.iter().zip(strides.iter()).map(|(idx, s)| idx.offset * *s).sum();
+        let off = (self.offset() + off) as i32;
+        if idxs.0.is_empty() {
             let acc_id = Id::new();
             let block = Block::new(vec![(acc_id, SsaI::Const(off.into()))]);
             Ok((acc_id, block))
         } else {
             let mut acc_id = None;
             let mut block = Block::empty();
-            for (idx, &stride) in idxs.idxs.iter().filter(|v| !v.broadcast).zip(strides.iter()) {
-                if idx.broadcast {
-                    continue;
+            for (idx, &stride) in idxs.0.iter().zip(strides.iter()) {
+                for (id, m) in idx.ids.iter() {
+                    let dim_id = block.mul(*id, (stride * m) as i32);
+                    let new_id = match acc_id {
+                        Some(acc_id) => {
+                            block.binary(ssa::BinaryOp::Add, dim_id, acc_id, DType::I32)
+                        }
+                        None => block.add(dim_id, off),
+                    };
+                    acc_id = Some(new_id)
                 }
-                let dim_id = block.mul(idx.id, stride as i32);
-                let new_id = match acc_id {
-                    Some(acc_id) => block.binary(ssa::BinaryOp::Add, dim_id, acc_id, DType::I32),
-                    None => block.add(dim_id, off),
-                };
-                acc_id = Some(new_id)
             }
             let acc_id = acc_id.unwrap();
             Ok((acc_id, block))
@@ -245,7 +253,7 @@ impl Ast {
                     let r = block.range(0, reduce_len as i32);
 
                     let mut reduce_idxs = idxs.clone();
-                    reduce_idxs.idxs[*dim] = Index { id: r.id(), broadcast: false };
+                    reduce_idxs.0[*dim] = r.id().into();
                     let (arg_i, arg_b) = arg.lower(&reduce_idxs, opts, per_arg)?;
                     block.0.extend_from_slice(&arg_b.0);
                     let fold_op = SsaI::Binary {
@@ -313,9 +321,9 @@ impl lang::op::Kernel {
                         id
                     }
                 };
-                idxs.push(Index { id, broadcast: false });
+                idxs.push(id.into())
             }
-            let idxs = Indexes { idxs, offset: 0 };
+            let idxs = Indexes(idxs);
 
             let (off_i, off_b) = layout.lower(&idxs)?;
             block.0.extend_from_slice(off_b.0.as_slice());

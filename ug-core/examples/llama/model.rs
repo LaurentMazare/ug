@@ -354,6 +354,7 @@ impl RmsNorm {
         if alpha.dims() != [dim] {
             ug::bail!("unexpected shape for {name}: {:?}, expected {dim}", alpha.shape())
         }
+        let alpha = alpha.reshape((1, 1, dim))?;
         Ok(Self { alpha, eps })
     }
 
