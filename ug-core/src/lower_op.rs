@@ -69,7 +69,15 @@ impl Indexes {
                 }
                 idxs[*dim].offset += *offset
             }
-            op => bail!("unsupported layout op {op:?}"),
+            L::Transpose { dim1, dim2 } => {
+                if *dim1 >= idxs.len() || *dim2 >= idxs.len() {
+                    bail!("unexpected dims for transpose {dim1} {dim2}, {:?}", shape)
+                }
+                idxs.swap(*dim1, *dim2)
+            }
+            L::SplitDim { dim: _, lhs: _, rhs: _ } | L::MergeDims { dim: _, lhs: _, rhs: _ } => {
+                bail!("unsupported layout op {op:?}")
+            }
         };
         Ok(Self(idxs))
     }

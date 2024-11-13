@@ -408,7 +408,7 @@ pub mod op {
     pub enum LayoutOp {
         Broadcast { broadcasted_dims: Vec<usize> },
         Narrow { dim: usize, offset: usize },
-        Permute { perm: Vec<usize> },
+        Transpose { dim1: usize, dim2: usize },
         SplitDim { dim: usize, lhs: usize, rhs: usize },
         MergeDims { dim: usize, lhs: usize, rhs: usize },
     }
