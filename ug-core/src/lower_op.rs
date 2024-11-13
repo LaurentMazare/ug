@@ -4,35 +4,35 @@ use crate::Result;
 use ssa::{DType, Instr as SsaI};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct AxisSize {
-    pub axis: usize,
-    /// size is the number of worker processes on the specified axis.
+pub struct DimSize {
+    pub dim: usize,
+    /// size is the number of worker processes on the specified dim.
     pub size: usize,
 }
 
 // Default for bool is false.
 #[derive(Debug, Clone, Default)]
 pub struct Opts {
-    local: Option<AxisSize>,
-    global: Option<AxisSize>,
+    local: Option<DimSize>,
+    global: Option<DimSize>,
 }
 
 impl Opts {
-    pub fn with_global(mut self, axis: usize, size: usize) -> Self {
-        self.global = Some(AxisSize { axis, size });
+    pub fn with_global(mut self, dim: usize, size: usize) -> Self {
+        self.global = Some(DimSize { dim, size });
         self
     }
 
-    pub fn with_local(mut self, axis: usize, size: usize) -> Self {
-        self.local = Some(AxisSize { axis, size });
+    pub fn with_local(mut self, dim: usize, size: usize) -> Self {
+        self.local = Some(DimSize { dim, size });
         self
     }
 
-    pub fn global(&self) -> &Option<AxisSize> {
+    pub fn global(&self) -> &Option<DimSize> {
         &self.global
     }
 
-    pub fn local(&self) -> &Option<AxisSize> {
+    pub fn local(&self) -> &Option<DimSize> {
         &self.local
     }
 }
@@ -97,14 +97,14 @@ impl lang::op::ReduceOp {
 }
 
 // Simple optimization that extract the constant bits that do not depend of the index on
-// some specific axis so that these can be evaluated out of loop.
-fn extract_const(ast: &Ast, axis: usize) -> Result<(Vec<(Id, Ast)>, Ast)> {
-    fn walk(ast: &Ast, tgt_axis: usize, accs: &mut Vec<(Id, Ast)>) -> Result<Ast> {
+// some specific dim so that these can be evaluated out of loop.
+fn extract_const(ast: &Ast, dim: usize) -> Result<(Vec<(Id, Ast)>, Ast)> {
+    fn walk(ast: &Ast, tgt_dim: usize, accs: &mut Vec<(Id, Ast)>) -> Result<Ast> {
         use lang::op::AstInner as A;
         let ast = match ast.inner.as_ref() {
             A::Id { .. } | A::Load { .. } | A::Const(_) => ast.clone(),
-            A::Reduce { op, arg, axis } => {
-                if *axis == tgt_axis {
+            A::Reduce { op, arg, dim } => {
+                if *dim == tgt_dim {
                     let src = Id::new();
                     accs.push((src, ast.clone()));
                     let inner = A::Id { src };
@@ -114,35 +114,22 @@ fn extract_const(ast: &Ast, axis: usize) -> Result<(Vec<(Id, Ast)>, Ast)> {
                         shape: ast.shape().clone(),
                     }
                 } else {
-                    let arg = walk(arg, tgt_axis, accs)?;
-                    lang::op::reduce(*op, arg, *axis)?
+                    let arg = walk(arg, tgt_dim, accs)?;
+                    lang::op::reduce(*op, arg, *dim)?
                 }
             }
             A::Unary { op, arg } => {
-                let arg = walk(arg, tgt_axis, accs)?;
+                let arg = walk(arg, tgt_dim, accs)?;
                 lang::op::unary(*op, arg)?
             }
             A::Binary { op, lhs, rhs } => {
-                let lhs = walk(lhs, tgt_axis, accs)?;
-                let rhs = walk(rhs, tgt_axis, accs)?;
+                let lhs = walk(lhs, tgt_dim, accs)?;
+                let rhs = walk(rhs, tgt_dim, accs)?;
                 lang::op::binary(*op, lhs, rhs)?
             }
-            A::Broadcast { arg, .. } => {
-                let arg = walk(arg, tgt_axis, accs)?;
-                lang::op::broadcast(arg, ast.shape())?
-            }
-            A::Narrow { arg, axis, offset } => {
-                let arg = walk(arg, tgt_axis, accs)?;
-                let inner = A::Narrow { arg, axis: *axis, offset: *offset };
-                Ast {
-                    inner: std::sync::Arc::new(inner),
-                    dtype: ast.dtype(),
-                    shape: ast.shape().clone(),
-                }
-            }
-            A::Permute { arg, perm } => {
-                let arg = walk(arg, tgt_axis, accs)?;
-                let inner = A::Permute { arg, perm: perm.to_vec() };
+            A::Layout { op, arg } => {
+                let arg = walk(arg, tgt_dim, accs)?;
+                let inner = A::Layout { arg, op: op.clone() };
                 Ast {
                     inner: std::sync::Arc::new(inner),
                     dtype: ast.dtype(),
@@ -153,7 +140,7 @@ fn extract_const(ast: &Ast, axis: usize) -> Result<(Vec<(Id, Ast)>, Ast)> {
         Ok(ast)
     }
     let mut accs = vec![];
-    let ast = walk(ast, axis, &mut accs)?;
+    let ast = walk(ast, dim, &mut accs)?;
     Ok((accs, ast))
 }
 
@@ -179,17 +166,26 @@ impl Ast {
                 off_b.push((dst_i, load));
                 (dst_i, Block(off_b))
             }
-            A::Broadcast { arg, broadcasted_dims } => {
+            A::Layout { arg, op } => {
+                use crate::lang::op::LayoutOp as L;
                 let mut idxs = idxs.0.to_vec();
-                for axis in broadcasted_dims.iter() {
-                    match idxs.get_mut(*axis) {
-                        None => {
-                            crate::bail!("unexpected axis for broadcast, {axis} {:?}", self.shape)
+                match op {
+                    L::Broadcast { broadcasted_dims } => {
+                        for dim in broadcasted_dims.iter() {
+                            match idxs.get_mut(*dim) {
+                                None => {
+                                    crate::bail!(
+                                        "unexpected dim for broadcast, {dim} {:?}",
+                                        self.shape
+                                    )
+                                }
+                                Some(v) => v.broadcast = true,
+                            };
                         }
-                        Some(v) => v.broadcast = true,
-                    };
+                        arg.lower(&Indexes(idxs), opts, per_arg)?
+                    }
+                    op => crate::bail!("unsupported layout op {op:?}"),
                 }
-                arg.lower(&Indexes(idxs), opts, per_arg)?
             }
             A::Const(c) => {
                 let dst_i = Id::new();
@@ -202,11 +198,11 @@ impl Ast {
                 arg_b.push((dst_i, SsaI::Unary { op: *op, arg: arg_i.to_a(), dtype }));
                 (dst_i, Block(arg_b))
             }
-            A::Reduce { op, arg, axis } => {
+            A::Reduce { op, arg, dim } => {
                 let dst_i = Id::new();
                 let mut block = Block::empty();
 
-                let (const_bits, arg) = extract_const(arg, *axis)?;
+                let (const_bits, arg) = extract_const(arg, *dim)?;
                 for (exp_id, const_bit) in const_bits.iter() {
                     let dtype = const_bit.dtype();
                     let (dst_id, const_bit) = const_bit.lower(idxs, opts, per_arg)?;
@@ -217,9 +213,9 @@ impl Ast {
                     ));
                 }
 
-                // TODO(laurent): generalize to other axis as long as the values in arg do not
-                // depend on the axis.
-                if opts.local.map_or(false, |v| v.axis == *axis) {
+                // TODO(laurent): generalize to other dim as long as the values in arg do not
+                // depend on the dim.
+                if opts.local.map_or(false, |v| v.dim == *dim) {
                     let (arg_i, arg_b) = arg.lower(idxs, opts, per_arg)?;
                     block.0.extend_from_slice(&arg_b.0);
                     block.0.push((dst_i, SsaI::ReduceLocal { op: *op, arg: arg_i.to_a(), dtype }))
@@ -229,16 +225,16 @@ impl Ast {
 
                     let define_acc = SsaI::DefineAcc(init_value);
                     block.0.push((dst_i, define_acc));
-                    let reduce_len = match arg.shape.dims().get(*axis) {
+                    let reduce_len = match arg.shape.dims().get(*dim) {
                         None => {
-                            crate::bail!("unexpected axis for reduce, {axis} {:?}", self.shape)
+                            crate::bail!("unexpected dim for reduce, {dim} {:?}", self.shape)
                         }
                         Some(v) => *v,
                     };
                     let r = block.range(0, reduce_len as i32);
 
                     let mut reduce_idxs = idxs.clone();
-                    reduce_idxs.0[*axis] = Index { id: r.id(), broadcast: false };
+                    reduce_idxs.0[*dim] = Index { id: r.id(), broadcast: false };
                     let (arg_i, arg_b) = arg.lower(&reduce_idxs, opts, per_arg)?;
                     block.0.extend_from_slice(&arg_b.0);
                     let fold_op = SsaI::Binary {
@@ -262,10 +258,6 @@ impl Ast {
                 (dst_i, Block(instrs))
             }
             A::Id { src } => (*src, Block::empty()),
-            A::Permute { arg: _, perm: _ } => crate::bail!("permute is not supported yet"),
-            A::Narrow { arg: _, axis: _, offset: _ } => {
-                crate::bail!("permute is not supported yet")
-            }
         };
         Ok(dst_block)
     }
@@ -275,13 +267,13 @@ impl lang::op::Kernel {
     fn lower_b(&self, opts: &Opts) -> Result<Block> {
         let mut block = Block::empty();
         let mut per_arg = std::collections::HashMap::new();
-        let grid_id = opts.global().map(|axis| {
+        let grid_id = opts.global().map(|dim| {
             let id = block.push(SsaI::Special(ssa::Special::GridIdx));
-            (axis, id)
+            (dim, id)
         });
-        let local_id = opts.local().map(|axis| {
+        let local_id = opts.local().map(|dim| {
             let id = block.push(SsaI::Special(ssa::Special::LocalIdx));
-            (axis, id)
+            (dim, id)
         });
         for (index, arg) in self.args.iter().enumerate() {
             let dtype = match arg.type_() {
@@ -301,8 +293,8 @@ impl lang::op::Kernel {
             let mut idxs = Vec::with_capacity(layout.rank());
             for (dim_idx, &len) in layout.dims().iter().enumerate() {
                 let id = match (grid_id, local_id) {
-                    (Some((g, grid_id)), _) if g.axis == dim_idx => grid_id,
-                    (_, Some((l, local_id))) if l.axis == dim_idx => local_id,
+                    (Some((g, grid_id)), _) if g.dim == dim_idx => grid_id,
+                    (_, Some((l, local_id))) if l.dim == dim_idx => local_id,
                     (_, _) => {
                         let r = block.range(0, len as i32);
                         let id = r.id();

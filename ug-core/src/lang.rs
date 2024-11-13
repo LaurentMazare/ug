@@ -405,21 +405,27 @@ pub mod op {
     }
 
     #[derive(Debug, Clone, PartialEq, PartialOrd, Ord, Eq, Hash)]
+    pub enum LayoutOp {
+        Broadcast { broadcasted_dims: Vec<usize> },
+        Narrow { dim: usize, offset: usize },
+        Permute { perm: Vec<usize> },
+        SplitDim { dim: usize, lhs: usize, rhs: usize },
+        MergeDims { dim: usize, lhs: usize, rhs: usize },
+    }
+
+    #[derive(Debug, Clone, PartialEq, PartialOrd, Ord, Eq, Hash)]
     pub enum AstInner {
         // Id nodes are used to share common parts when linearizing the code. Maybe this should be
         // part of a separate type.
         Id { src: crate::block::Id },
         Load { src: ArgId, layout: Layout },
-        Reduce { op: ReduceOp, arg: Ast, axis: usize },
+        Reduce { op: ReduceOp, arg: Ast, dim: usize },
         Unary { op: UnaryOp, arg: Ast },
         Binary { op: BinaryOp, lhs: Ast, rhs: Ast },
         Const(Const),
 
         // Layout operations
-        Broadcast { arg: Ast, broadcasted_dims: Vec<usize> },
-        Narrow { arg: Ast, axis: usize, offset: usize },
-        Permute { arg: Ast, perm: Vec<usize> },
-        // TODO(laurent): Add SplitDim and MergeDim
+        Layout { op: LayoutOp, arg: Ast },
     }
 
     pub fn load(src: ArgId, layout: Layout, dtype: DType) -> Result<Ast> {
@@ -450,7 +456,8 @@ pub mod op {
                 }
             }
         }
-        let inner = AstInner::Broadcast { arg, broadcasted_dims };
+        let op = LayoutOp::Broadcast { broadcasted_dims };
+        let inner = AstInner::Layout { op, arg };
         Ok(Ast { inner: Arc::new(inner), dtype, shape })
     }
 
@@ -461,14 +468,14 @@ pub mod op {
         Ok(Ast { inner: Arc::new(inner), dtype, shape })
     }
 
-    pub fn reduce(op: ReduceOp, arg: Ast, axis: usize) -> Result<Ast> {
+    pub fn reduce(op: ReduceOp, arg: Ast, dim: usize) -> Result<Ast> {
         let dtype = arg.dtype;
         let mut shape = arg.shape.dims().to_vec();
-        if axis >= shape.len() {
-            crate::bail!("no axis {axis} in shape {shape:?}")
+        if dim >= shape.len() {
+            crate::bail!("no dim {dim} in shape {shape:?}")
         }
-        shape[axis] = 1; // keepdim by default.
-        let inner = AstInner::Reduce { op, arg, axis };
+        shape[dim] = 1; // keepdim by default.
+        let inner = AstInner::Reduce { op, arg, dim };
         Ok(Ast { inner: Arc::new(inner), dtype, shape: Shape::from(shape) })
     }
 
@@ -518,10 +525,8 @@ pub mod op {
         pub fn arg_ids(&self) -> std::collections::BTreeSet<ArgId> {
             fn visit(ast: &Ast, ids: &mut std::collections::BTreeSet<ArgId>) {
                 match ast.inner.as_ref() {
-                    AstInner::Broadcast { arg, .. }
-                    | AstInner::Narrow { arg, .. }
-                    | AstInner::Permute { arg, .. }
-                    | AstInner::Reduce { op: _, axis: _, arg }
+                    AstInner::Layout { arg, .. }
+                    | AstInner::Reduce { op: _, dim: _, arg }
                     | AstInner::Unary { op: _, arg } => visit(arg, ids),
                     AstInner::Binary { op: _, lhs, rhs } => {
                         visit(lhs, ids);

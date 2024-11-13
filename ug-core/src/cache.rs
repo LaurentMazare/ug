@@ -34,26 +34,13 @@ impl NormalizedKernel {
                     op::binary(*op, lhs, rhs)
                 }
                 A::Const(cst) => op::cst(*cst),
-                A::Reduce { op, arg, axis } => {
+                A::Reduce { op, arg, dim } => {
                     let arg = walk(arg, arg_map)?;
-                    op::reduce(*op, arg, *axis)
+                    op::reduce(*op, arg, *dim)
                 }
-                A::Broadcast { arg, broadcasted_dims: _ } => {
+                A::Layout { arg, op } => {
                     let arg = walk(arg, arg_map)?;
-                    op::broadcast(arg, ast.shape())
-                }
-                A::Narrow { arg, axis, offset } => {
-                    let arg = walk(arg, arg_map)?;
-                    let inner = A::Narrow { arg, axis: *axis, offset: *offset };
-                    Ok(Ast {
-                        inner: std::sync::Arc::new(inner),
-                        dtype: ast.dtype(),
-                        shape: ast.shape().clone(),
-                    })
-                }
-                A::Permute { arg, perm } => {
-                    let arg = walk(arg, arg_map)?;
-                    let inner = A::Permute { arg, perm: perm.to_vec() };
+                    let inner = A::Layout { arg, op: op.clone() };
                     Ok(Ast {
                         inner: std::sync::Arc::new(inner),
                         dtype: ast.dtype(),
