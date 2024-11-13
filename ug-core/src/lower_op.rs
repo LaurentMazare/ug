@@ -89,27 +89,25 @@ impl lang::op::Layout {
         }
         let off: usize = idxs.0.iter().zip(strides.iter()).map(|(idx, s)| idx.offset * *s).sum();
         let off = (self.offset() + off) as i32;
-        if idxs.0.is_empty() {
-            let acc_id = Id::new();
-            let block = Block::new(vec![(acc_id, SsaI::Const(off.into()))]);
-            Ok((acc_id, block))
-        } else {
-            let mut acc_id = None;
-            let mut block = Block::empty();
-            for (idx, &stride) in idxs.0.iter().zip(strides.iter()) {
-                for (id, m) in idx.ids.iter() {
-                    let dim_id = block.mul(*id, (stride * m) as i32);
-                    let new_id = match acc_id {
-                        Some(acc_id) => {
-                            block.binary(ssa::BinaryOp::Add, dim_id, acc_id, DType::I32)
-                        }
-                        None => block.add(dim_id, off),
-                    };
-                    acc_id = Some(new_id)
-                }
+        let mut acc_id = None;
+        let mut block = Block::empty();
+        for (idx, &stride) in idxs.0.iter().zip(strides.iter()) {
+            for (id, m) in idx.ids.iter() {
+                let dim_id = block.mul(*id, (stride * m) as i32);
+                let new_id = match acc_id {
+                    Some(acc_id) => block.binary(ssa::BinaryOp::Add, dim_id, acc_id, DType::I32),
+                    None => block.add(dim_id, off),
+                };
+                acc_id = Some(new_id)
             }
-            let acc_id = acc_id.unwrap();
-            Ok((acc_id, block))
+        }
+        match acc_id {
+            Some(acc_id) => Ok((acc_id, block)),
+            None => {
+                let acc_id = Id::new();
+                let block = Block::new(vec![(acc_id, SsaI::Const(off.into()))]);
+                Ok((acc_id, block))
+            }
         }
     }
 }
