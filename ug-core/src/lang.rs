@@ -406,7 +406,7 @@ pub mod op {
 
     #[derive(Debug, Clone, PartialEq, PartialOrd, Ord, Eq, Hash)]
     pub enum LayoutOp {
-        Broadcast { broadcasted_dims: Vec<usize> },
+        Broadcast { inserted_dims: usize, broadcasted_dims: Vec<usize> },
         Narrow { dim: usize, offset: usize },
         Transpose { dim1: usize, dim2: usize },
         SplitDim { dim: usize, lhs: usize, rhs: usize },
@@ -456,7 +456,7 @@ pub mod op {
                 }
             }
         }
-        let op = LayoutOp::Broadcast { broadcasted_dims };
+        let op = LayoutOp::Broadcast { inserted_dims, broadcasted_dims };
         let inner = AstInner::Layout { op, arg };
         Ok(Ast { inner: Arc::new(inner), dtype, shape })
     }

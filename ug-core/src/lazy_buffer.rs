@@ -367,7 +367,10 @@ impl<D: Device> LazyBuffer<D> {
         let inner = LazyBufferInner {
             id: Id::new(),
             data: std::sync::Mutex::new(None),
-            op: Op::Layout(crate::lang::op::LayoutOp::Broadcast { broadcasted_dims }, self.clone()),
+            op: Op::Layout(
+                crate::lang::op::LayoutOp::Broadcast { inserted_dims, broadcasted_dims },
+                self.clone(),
+            ),
             dtype: self.dtype,
             device: self.device.clone(),
             shape: s,
