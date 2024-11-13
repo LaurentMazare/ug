@@ -342,18 +342,13 @@ impl<D: Device> Context<D> {
                     self.per_arg_id.insert(arg_id, b.clone());
                     crate::lang::op::load(arg_id, Layout::from_shape(shape), dtype)?
                 }
+                Op::Reshape(arg) => {
+                    let dst_id = self.push_schedule_item(arg)?;
+                    crate::lang::op::load(dst_id, Layout::from_shape(shape), dtype)?
+                }
                 Op::Layout(op, arg) => {
-                    use crate::lazy_buffer::LayoutOp as L;
-                    match op {
-                        L::Noop | L::Reshape => {
-                            let dst_id = self.push_schedule_item(arg)?;
-                            crate::lang::op::load(dst_id, Layout::from_shape(shape), dtype)?
-                        }
-                        L::Broadcast => {
-                            let ast = self.walk(arg)?;
-                            crate::lang::op::broadcast(ast, b.shape())?
-                        }
-                    }
+                    let ast = self.walk(arg)?;
+                    crate::lang::op::layout(op.clone(), ast, shape)?
                 }
                 Op::Ssa { ssa, args: b_args } => {
                     let mut args = Vec::with_capacity(b_args.len() + 1);
@@ -442,7 +437,9 @@ fn id_cnts<D: Device>(b: &LazyBuffer<D>, cnts: &mut HashMap<crate::lazy_buffer::
     }
     match b.op() {
         Op::Copy | Op::Const(_) => {}
-        Op::Layout(_, arg) | Op::Reduce(_, arg, _) | Op::Unary(_, arg) => id_cnts(arg, cnts),
+        Op::Reshape(arg) | Op::Layout(_, arg) | Op::Reduce(_, arg, _) | Op::Unary(_, arg) => {
+            id_cnts(arg, cnts)
+        }
         Op::MatMul(arg1, arg2, _, _) | Op::Binary(_, arg1, arg2) => {
             id_cnts(arg1, cnts);
             id_cnts(arg2, cnts);

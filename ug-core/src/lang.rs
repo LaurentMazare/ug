@@ -452,11 +452,18 @@ pub mod op {
                 if dim_len == 1 {
                     broadcasted_dims.push(dim_idx)
                 } else {
-                    crate::bail!("cannot broadcast from {:?} to {:?}", arg.shape, shape)
+                    crate::bail!("cannot broadcast from {:?} to {shape:?}", arg.shape)
                 }
             }
         }
         let op = LayoutOp::Broadcast { broadcasted_dims };
+        let inner = AstInner::Layout { op, arg };
+        Ok(Ast { inner: Arc::new(inner), dtype, shape })
+    }
+
+    pub fn layout<S: Into<Shape>>(op: LayoutOp, arg: Ast, shape: S) -> Result<Ast> {
+        let shape = shape.into();
+        let dtype = arg.dtype;
         let inner = AstInner::Layout { op, arg };
         Ok(Ast { inner: Arc::new(inner), dtype, shape })
     }
