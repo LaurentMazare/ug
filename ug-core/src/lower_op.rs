@@ -131,6 +131,24 @@ fn extract_const(ast: &Ast, axis: usize) -> Result<(Vec<(Id, Ast)>, Ast)> {
                 let arg = walk(arg, tgt_axis, accs)?;
                 lang::op::broadcast(arg, ast.shape())?
             }
+            A::Narrow { arg, axis, offset } => {
+                let arg = walk(arg, tgt_axis, accs)?;
+                let inner = A::Narrow { arg, axis: *axis, offset: *offset };
+                Ast {
+                    inner: std::sync::Arc::new(inner),
+                    dtype: ast.dtype(),
+                    shape: ast.shape().clone(),
+                }
+            }
+            A::Permute { arg, perm } => {
+                let arg = walk(arg, tgt_axis, accs)?;
+                let inner = A::Permute { arg, perm: perm.to_vec() };
+                Ast {
+                    inner: std::sync::Arc::new(inner),
+                    dtype: ast.dtype(),
+                    shape: ast.shape().clone(),
+                }
+            }
         };
         Ok(ast)
     }
@@ -244,6 +262,10 @@ impl Ast {
                 (dst_i, Block(instrs))
             }
             A::Id { src } => (*src, Block::empty()),
+            A::Permute { arg: _, perm: _ } => crate::bail!("permute is not supported yet"),
+            A::Narrow { arg: _, axis: _, offset: _ } => {
+                crate::bail!("permute is not supported yet")
+            }
         };
         Ok(dst_block)
     }

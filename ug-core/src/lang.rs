@@ -414,8 +414,12 @@ pub mod op {
         Unary { op: UnaryOp, arg: Ast },
         Binary { op: BinaryOp, lhs: Ast, rhs: Ast },
         Const(Const),
+
+        // Layout operations
         Broadcast { arg: Ast, broadcasted_dims: Vec<usize> },
-        // TODO(laurent): Add some reshape/transpose...
+        Narrow { arg: Ast, axis: usize, offset: usize },
+        Permute { arg: Ast, perm: Vec<usize> },
+        // TODO(laurent): Add SplitDim and MergeDim
     }
 
     pub fn load(src: ArgId, layout: Layout, dtype: DType) -> Result<Ast> {
@@ -509,39 +513,20 @@ pub mod op {
             &self.shape
         }
 
-        /// Return all top-level reduce ops for an AST. Reduce ops that are within another reduce
-        /// op are not returned.
-        pub fn reduce_ops(&self) -> Vec<Self> {
-            fn visit(ast: &Ast, ops: &mut Vec<Ast>) {
-                match ast.inner.as_ref() {
-                    AstInner::Reduce { .. } => ops.push(ast.clone()),
-                    AstInner::Unary { op: _, arg } => visit(arg, ops),
-                    AstInner::Binary { op: _, lhs, rhs } => {
-                        visit(lhs, ops);
-                        visit(rhs, ops)
-                    }
-                    // TODO: Shape tweaks should be propagated.
-                    AstInner::Broadcast { arg, .. } => visit(arg, ops),
-                    AstInner::Id { .. } | AstInner::Load { .. } | AstInner::Const(_) => {}
-                }
-            }
-            let mut ops = vec![];
-            visit(self, &mut ops);
-            ops
-        }
-
         // We use a BTreeSet rather than a HashSet here to ensure consistent ordering
         // when converting the result to a Vec.
         pub fn arg_ids(&self) -> std::collections::BTreeSet<ArgId> {
             fn visit(ast: &Ast, ids: &mut std::collections::BTreeSet<ArgId>) {
                 match ast.inner.as_ref() {
-                    AstInner::Reduce { op: _, axis: _, arg } => visit(arg, ids),
-                    AstInner::Unary { op: _, arg } => visit(arg, ids),
+                    AstInner::Broadcast { arg, .. }
+                    | AstInner::Narrow { arg, .. }
+                    | AstInner::Permute { arg, .. }
+                    | AstInner::Reduce { op: _, axis: _, arg }
+                    | AstInner::Unary { op: _, arg } => visit(arg, ids),
                     AstInner::Binary { op: _, lhs, rhs } => {
                         visit(lhs, ids);
                         visit(rhs, ids)
                     }
-                    AstInner::Broadcast { arg, .. } => visit(arg, ids),
                     AstInner::Load { src, layout: _ } => {
                         ids.insert(*src);
                     }

@@ -42,6 +42,24 @@ impl NormalizedKernel {
                     let arg = walk(arg, arg_map)?;
                     op::broadcast(arg, ast.shape())
                 }
+                A::Narrow { arg, axis, offset } => {
+                    let arg = walk(arg, arg_map)?;
+                    let inner = A::Narrow { arg, axis: *axis, offset: *offset };
+                    Ok(Ast {
+                        inner: std::sync::Arc::new(inner),
+                        dtype: ast.dtype(),
+                        shape: ast.shape().clone(),
+                    })
+                }
+                A::Permute { arg, perm } => {
+                    let arg = walk(arg, arg_map)?;
+                    let inner = A::Permute { arg, perm: perm.to_vec() };
+                    Ok(Ast {
+                        inner: std::sync::Arc::new(inner),
+                        dtype: ast.dtype(),
+                        shape: ast.shape().clone(),
+                    })
+                }
             }
         }
 
