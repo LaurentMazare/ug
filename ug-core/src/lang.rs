@@ -406,7 +406,7 @@ pub mod op {
 
     #[derive(Debug, Clone, PartialEq, PartialOrd, Ord, Eq, Hash)]
     pub enum LayoutOp {
-        Broadcast { broadcasted_dims: Vec<usize> },
+        Broadcast { inserted_dims: usize, broadcasted_dims: Vec<usize> },
         Narrow { dim: usize, offset: usize },
         Transpose { dim1: usize, dim2: usize },
         SplitDim { dim: usize, lhs: usize, rhs: usize },
@@ -452,11 +452,18 @@ pub mod op {
                 if dim_len == 1 {
                     broadcasted_dims.push(dim_idx)
                 } else {
-                    crate::bail!("cannot broadcast from {:?} to {:?}", arg.shape, shape)
+                    crate::bail!("cannot broadcast from {:?} to {shape:?}", arg.shape)
                 }
             }
         }
-        let op = LayoutOp::Broadcast { broadcasted_dims };
+        let op = LayoutOp::Broadcast { inserted_dims, broadcasted_dims };
+        let inner = AstInner::Layout { op, arg };
+        Ok(Ast { inner: Arc::new(inner), dtype, shape })
+    }
+
+    pub fn layout<S: Into<Shape>>(op: LayoutOp, arg: Ast, shape: S) -> Result<Ast> {
+        let shape = shape.into();
+        let dtype = arg.dtype;
         let inner = AstInner::Layout { op, arg };
         Ok(Ast { inner: Arc::new(inner), dtype, shape })
     }

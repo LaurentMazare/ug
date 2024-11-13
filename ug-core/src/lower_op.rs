@@ -55,17 +55,20 @@ impl Indexes {
         use crate::lang::op::LayoutOp as L;
         let mut idxs = self.0.clone();
         match op {
-            L::Broadcast { broadcasted_dims } => {
+            L::Broadcast { inserted_dims, broadcasted_dims } => {
                 for dim in broadcasted_dims.iter() {
                     if *dim >= idxs.len() {
                         bail!("unexpected dim for broadcast, {dim} {:?}", shape)
                     }
                     idxs[*dim] = IndexFormula { ids: vec![], offset: 0 }
                 }
+                for _ in 0..*inserted_dims {
+                    idxs.remove(0);
+                }
             }
             L::Narrow { dim, offset } => {
                 if *dim >= idxs.len() {
-                    bail!("unexpected dim for broadcast, {dim} {:?}", shape)
+                    bail!("unexpected dim for narrow, {dim} {:?}", shape)
                 }
                 idxs[*dim].offset += *offset
             }
@@ -194,6 +197,10 @@ impl Ast {
         per_arg: &std::collections::HashMap<lang::ArgId, ssa::VarId>,
     ) -> Result<(Id, Block)> {
         use lang::op::AstInner as A;
+        // TODO: Manage to enable the following, currently it doesn't work on at least consts.
+        // if idxs.0.len() != self.shape().rank() {
+        //     crate::bail!("internal error, idxs {idxs:?}, shape {:?}", self.shape())
+        // }
         let dtype = self.dtype;
         let dst_block = match self.inner.as_ref() {
             A::Load { src, layout } => {

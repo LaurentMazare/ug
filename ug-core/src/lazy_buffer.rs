@@ -45,13 +45,6 @@ impl Id {
     }
 }
 
-#[derive(Debug, Clone)]
-pub enum LayoutOp {
-    Reshape,
-    Broadcast,
-    Noop,
-}
-
 #[derive(Debug)]
 pub enum Op<D: Device> {
     Unary(crate::lang::UnaryOp, LazyBuffer<D>),
@@ -60,7 +53,8 @@ pub enum Op<D: Device> {
     Reduce(crate::lang::ReduceOp, LazyBuffer<D>, usize),
     Const(crate::lang::Const),
     Copy,
-    Layout(LayoutOp, LazyBuffer<D>),
+    Layout(crate::lang::op::LayoutOp, LazyBuffer<D>),
+    Reshape(LazyBuffer<D>),
     Custom { f: CustomF<D::Slice>, args: Vec<LazyBuffer<D>> },
     Ssa { ssa: crate::lang::ssa::Kernel, args: Vec<LazyBuffer<D>> },
 }
@@ -341,7 +335,7 @@ impl<D: Device> LazyBuffer<D> {
         let inner = LazyBufferInner {
             id: Id::new(),
             data: std::sync::Mutex::new(None),
-            op: Op::Layout(LayoutOp::Reshape, self.clone()),
+            op: Op::Reshape(self.clone()),
             dtype: self.dtype,
             device: self.device.clone(),
             shape: s,
@@ -359,17 +353,24 @@ impl<D: Device> LazyBuffer<D> {
             )
         }
         let inserted_dims = s.rank() - self.shape().rank();
-        for (dim_idx, &dim_len) in self.shape().dims().iter().enumerate() {
+        let mut broadcasted_dims = (0..inserted_dims).collect::<Vec<_>>();
+        for (dim_idx, &dim_len) in self.shape.dims().iter().enumerate() {
             let dim_idx = dim_idx + inserted_dims;
-            if s.dims()[dim_idx] != dim_len && dim_len != 1 {
-                crate::bail!("cannot broadcast from {:?} to {s:?}", self.shape())
+            if s.dims()[dim_idx] != dim_len {
+                if dim_len == 1 {
+                    broadcasted_dims.push(dim_idx)
+                } else {
+                    crate::bail!("cannot broadcast from {:?} to {s:?}", self.shape)
+                }
             }
         }
-
         let inner = LazyBufferInner {
             id: Id::new(),
             data: std::sync::Mutex::new(None),
-            op: Op::Layout(LayoutOp::Broadcast, self.clone()),
+            op: Op::Layout(
+                crate::lang::op::LayoutOp::Broadcast { inserted_dims, broadcasted_dims },
+                self.clone(),
+            ),
             dtype: self.dtype,
             device: self.device.clone(),
             shape: s,

@@ -122,8 +122,8 @@ fn affine() -> Result<()> {
         let layout = Layout::from_shape(4);
         let ptr = ug::lang::Arg::ptr(DType::F32);
         let src = op::load(ptr.id(), layout.clone(), DType::F32)?;
-        let sub = op::binary(op::BinaryOp::Sub, src, op::cst(0.5)?)?;
-        let mul = op::binary(op::BinaryOp::Mul, sub, op::cst(3.)?)?;
+        let sub = op::broadcast_binary(op::BinaryOp::Sub, src, op::cst(0.5)?)?;
+        let mul = op::broadcast_binary(op::BinaryOp::Mul, sub, op::cst(3.)?)?;
         let st = op::store(ptr.id(), layout, mul)?;
         op::Kernel::new("affine".to_string(), vec![ptr], vec![st])
     };
