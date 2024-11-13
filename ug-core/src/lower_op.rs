@@ -1,6 +1,6 @@
 use crate::block::{Block, Id};
 use crate::lang::{self, op::Ast, ssa};
-use crate::Result;
+use crate::{bail, Result};
 use ssa::{DType, Instr as SsaI};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -43,6 +43,8 @@ struct Index {
     broadcast: bool,
 }
 
+/// Indexes represent the way to access the local data using the indexes from the top-level call
+/// to the lower function.
 #[derive(Debug, Clone)]
 struct Indexes(Vec<Index>);
 
@@ -51,7 +53,7 @@ impl lang::op::Layout {
         let strides = self.strides();
         let n_real_dims = idxs.0.iter().filter(|v| !v.broadcast).count();
         if n_real_dims != strides.len() {
-            crate::bail!("len mismatch between strides {self:?} and idxs {idxs:?}")
+            bail!("len mismatch between strides {self:?} and idxs {idxs:?}")
         }
         let off = self.offset() as i32;
         if n_real_dims == 0 {
@@ -157,7 +159,7 @@ impl Ast {
             A::Load { src, layout } => {
                 let dst_i = Id::new();
                 let ptr_i = match per_arg.get(src) {
-                    None => crate::bail!("unknown arg {src:?}"),
+                    None => bail!("unknown arg {src:?}"),
                     Some(id) => *id,
                 };
                 let (off_i, off_b) = layout.lower(idxs)?;
@@ -174,17 +176,14 @@ impl Ast {
                         for dim in broadcasted_dims.iter() {
                             match idxs.get_mut(*dim) {
                                 None => {
-                                    crate::bail!(
-                                        "unexpected dim for broadcast, {dim} {:?}",
-                                        self.shape
-                                    )
+                                    bail!("unexpected dim for broadcast, {dim} {:?}", self.shape)
                                 }
                                 Some(v) => v.broadcast = true,
                             };
                         }
                         arg.lower(&Indexes(idxs), opts, per_arg)?
                     }
-                    op => crate::bail!("unsupported layout op {op:?}"),
+                    op => bail!("unsupported layout op {op:?}"),
                 }
             }
             A::Const(c) => {
@@ -227,7 +226,7 @@ impl Ast {
                     block.0.push((dst_i, define_acc));
                     let reduce_len = match arg.shape.dims().get(*dim) {
                         None => {
-                            crate::bail!("unexpected dim for reduce, {dim} {:?}", self.shape)
+                            bail!("unexpected dim for reduce, {dim} {:?}", self.shape)
                         }
                         Some(v) => *v,
                     };
@@ -278,7 +277,7 @@ impl lang::op::Kernel {
         for (index, arg) in self.args.iter().enumerate() {
             let dtype = match arg.type_() {
                 ssa::Type::Ptr(v) => v,
-                ssa::Type::Value(_) => crate::bail!("non-pointer arguments are not supported yet"),
+                ssa::Type::Value(_) => bail!("non-pointer arguments are not supported yet"),
             };
             let id = block.push(SsaI::DefineGlobal { index, dtype });
             per_arg.insert(arg.id(), id.to_varid());
@@ -286,7 +285,7 @@ impl lang::op::Kernel {
 
         for lang::op::Store { dst, layout, value } in self.ops.iter() {
             let ptr_i = match per_arg.get(dst) {
-                None => crate::bail!("unknown arg {dst:?}"),
+                None => bail!("unknown arg {dst:?}"),
                 Some(id) => *id,
             };
             let mut ranges = Vec::with_capacity(layout.rank());
