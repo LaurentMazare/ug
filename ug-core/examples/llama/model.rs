@@ -263,14 +263,16 @@ fn transpose(src: &LB, dim1: usize, dim2: usize) -> Result<LB> {
         // Inefficient, we should blit the data where possible.
         // i: pre
         for i in 0..d_i {
+            let src_idx = i * d1;
+            let dst_idx = i * d2;
             for a1 in 0..d1 {
+                let src_idx = (src_idx + a1) * d_j;
                 // j: mid
                 for j in 0..d_j {
+                    let src_idx = (src_idx + j) * d2;
                     for a2 in 0..d2 {
-                        let src_idx =
-                            i * d1 * d_j * d2 * d_k + a1 * d_j * d2 * d_k + j * d2 * d_k + a2 * d_k;
-                        let dst_idx =
-                            i * d2 * d_j * d1 * d_k + a2 * d_j * d1 * d_k + j * d1 * d_k + a1 * d_k;
+                        let src_idx = (src_idx + a2) * d_k;
+                        let dst_idx = ((((dst_idx + a2) * d_j) + j) * d1 + a1) * d_k;
                         dst[dst_idx..dst_idx + d_k].copy_from_slice(&src[src_idx..src_idx + d_k])
                     }
                 }
