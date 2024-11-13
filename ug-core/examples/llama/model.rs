@@ -354,9 +354,6 @@ impl RmsNorm {
         if alpha.dims() != [dim] {
             ug::bail!("unexpected shape for {name}: {:?}, expected {dim}", alpha.shape())
         }
-        // TODO: This should not be necessary, but for this we would have to distinguish between
-        // broadcasted dims that were expanded from a 1 and broadcasted dims that were inserted.
-        let alpha = alpha.reshape((1, 1, dim))?;
         Ok(Self { alpha, eps })
     }
 

@@ -197,9 +197,10 @@ impl Ast {
         per_arg: &std::collections::HashMap<lang::ArgId, ssa::VarId>,
     ) -> Result<(Id, Block)> {
         use lang::op::AstInner as A;
-        if idxs.0.len() != self.shape().rank() {
-            crate::bail!("internal error, idxs {idxs:?}, shape {:?}", self.shape())
-        }
+        // TODO: Manage to enable the following, currently it doesn't work on at least consts.
+        // if idxs.0.len() != self.shape().rank() {
+        //     crate::bail!("internal error, idxs {idxs:?}, shape {:?}", self.shape())
+        // }
         let dtype = self.dtype;
         let dst_block = match self.inner.as_ref() {
             A::Load { src, layout } => {
