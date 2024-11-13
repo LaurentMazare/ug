@@ -1,6 +1,6 @@
 use crate::block::{Block, Id};
 use crate::lang::{self, op::Ast, ssa};
-use crate::{bail, Result};
+use crate::{bail, Result, Shape};
 use ssa::{DType, Instr as SsaI};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -46,16 +46,42 @@ struct Index {
 /// Indexes represent the way to access the local data using the indexes from the top-level call
 /// to the lower function.
 #[derive(Debug, Clone)]
-struct Indexes(Vec<Index>);
+struct Indexes {
+    idxs: Vec<Index>,
+    offset: usize,
+}
+
+impl Indexes {
+    fn layout_op(&self, op: &crate::lang::op::LayoutOp, shape: &Shape) -> Result<Self> {
+        use crate::lang::op::LayoutOp as L;
+        let offset = self.offset;
+        let mut idxs = self.idxs.to_vec();
+        let offset = match op {
+            L::Broadcast { broadcasted_dims } => {
+                for dim in broadcasted_dims.iter() {
+                    match idxs.get_mut(*dim) {
+                        None => {
+                            bail!("unexpected dim for broadcast, {dim} {:?}", shape)
+                        }
+                        Some(v) => v.broadcast = true,
+                    };
+                }
+                offset
+            }
+            op => bail!("unsupported layout op {op:?}"),
+        };
+        Ok(Self { idxs, offset })
+    }
+}
 
 impl lang::op::Layout {
     fn lower(&self, idxs: &Indexes) -> Result<(Id, Block)> {
         let strides = self.strides();
-        let n_real_dims = idxs.0.iter().filter(|v| !v.broadcast).count();
+        let n_real_dims = idxs.idxs.iter().filter(|v| !v.broadcast).count();
         if n_real_dims != strides.len() {
             bail!("len mismatch between strides {self:?} and idxs {idxs:?}")
         }
-        let off = self.offset() as i32;
+        let off = (self.offset() + idxs.offset) as i32;
         if n_real_dims == 0 {
             let acc_id = Id::new();
             let block = Block::new(vec![(acc_id, SsaI::Const(off.into()))]);
@@ -63,7 +89,7 @@ impl lang::op::Layout {
         } else {
             let mut acc_id = None;
             let mut block = Block::empty();
-            for (idx, &stride) in idxs.0.iter().filter(|v| !v.broadcast).zip(strides.iter()) {
+            for (idx, &stride) in idxs.idxs.iter().filter(|v| !v.broadcast).zip(strides.iter()) {
                 if idx.broadcast {
                     continue;
                 }
@@ -169,22 +195,8 @@ impl Ast {
                 (dst_i, Block(off_b))
             }
             A::Layout { arg, op } => {
-                use crate::lang::op::LayoutOp as L;
-                let mut idxs = idxs.0.to_vec();
-                match op {
-                    L::Broadcast { broadcasted_dims } => {
-                        for dim in broadcasted_dims.iter() {
-                            match idxs.get_mut(*dim) {
-                                None => {
-                                    bail!("unexpected dim for broadcast, {dim} {:?}", self.shape)
-                                }
-                                Some(v) => v.broadcast = true,
-                            };
-                        }
-                        arg.lower(&Indexes(idxs), opts, per_arg)?
-                    }
-                    op => bail!("unsupported layout op {op:?}"),
-                }
+                let idxs = idxs.layout_op(op, &self.shape)?;
+                arg.lower(&idxs, opts, per_arg)?
             }
             A::Const(c) => {
                 let dst_i = Id::new();
@@ -233,7 +245,7 @@ impl Ast {
                     let r = block.range(0, reduce_len as i32);
 
                     let mut reduce_idxs = idxs.clone();
-                    reduce_idxs.0[*dim] = Index { id: r.id(), broadcast: false };
+                    reduce_idxs.idxs[*dim] = Index { id: r.id(), broadcast: false };
                     let (arg_i, arg_b) = arg.lower(&reduce_idxs, opts, per_arg)?;
                     block.0.extend_from_slice(&arg_b.0);
                     let fold_op = SsaI::Binary {
@@ -303,7 +315,7 @@ impl lang::op::Kernel {
                 };
                 idxs.push(Index { id, broadcast: false });
             }
-            let idxs = Indexes(idxs);
+            let idxs = Indexes { idxs, offset: 0 };
 
             let (off_i, off_b) = layout.lower(&idxs)?;
             block.0.extend_from_slice(off_b.0.as_slice());
