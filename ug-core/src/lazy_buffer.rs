@@ -1,4 +1,4 @@
-use crate::{Const, DType, Device, Result, Shape};
+use crate::{Const, DType, Device, Dim, Result, Shape};
 
 type Callback<S> = std::sync::Arc<dyn Fn(Vec<&mut S>) -> Result<()>>;
 pub struct CustomF<S>(Callback<S>);
@@ -303,7 +303,7 @@ impl<D: Device> LazyBuffer<D> {
         Ok(lb)
     }
 
-    pub fn reduce<I: crate::Dim>(&self, op: crate::lang::ReduceOp, dim: I) -> Result<Self> {
+    pub fn reduce<I: Dim>(&self, op: crate::lang::ReduceOp, dim: I) -> Result<Self> {
         // TODO: dtype/op checks.
         let shape = self.shape(); // TODO: squeeze or remove axis.
         let dim = dim.to_index(shape, "reduce")?;
@@ -321,6 +321,30 @@ impl<D: Device> LazyBuffer<D> {
 
     pub fn id(&self) -> Id {
         self.id
+    }
+
+    pub fn split_dim<I: Dim>(&self, dim: I, size1: usize, size2: usize) -> Result<Self> {
+        let dim = dim.to_index(self.shape(), "split_dim")?;
+        let mut dims = self.dims().to_vec();
+        let size = dims.remove(dim);
+        if size1 * size2 != size {
+            crate::bail!("unexpected target sizes for split_dim {dim}, {size1}x{size2} != {size}",)
+        }
+        dims.insert(dim, size2);
+        dims.insert(dim, size1);
+        let inner = LazyBufferInner {
+            id: Id::new(),
+            data: std::sync::Mutex::new(None),
+            op: Op::Layout(
+                crate::lang::op::LayoutOp::SplitDim { dim, lhs: dim, rhs: dim + 1 },
+                self.clone(),
+            ),
+            dtype: self.dtype,
+            device: self.device.clone(),
+            shape: dims.into(),
+        };
+        let lb = LazyBuffer(std::sync::Arc::new(inner));
+        Ok(lb)
     }
 
     pub fn reshape<S: Into<Shape>>(&self, s: S) -> Result<Self> {
@@ -380,7 +404,7 @@ impl<D: Device> LazyBuffer<D> {
         Ok(lb)
     }
 
-    pub fn transpose<D1: crate::Dim, D2: crate::Dim>(&self, dim1: D1, dim2: D2) -> Result<Self> {
+    pub fn transpose<D1: Dim, D2: Dim>(&self, dim1: D1, dim2: D2) -> Result<Self> {
         let dim1 = dim1.to_index(self.shape(), "transpose")?;
         let dim2 = dim2.to_index(self.shape(), "transpose")?;
         if dim1 == dim2 {
