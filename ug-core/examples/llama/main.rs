@@ -1,6 +1,7 @@
 use rand::prelude::*;
 use ug::{CpuDevice, Error, Result, Slice};
 
+mod custom;
 mod model;
 use model::{Cache, Model, LB};
 
