@@ -102,14 +102,15 @@ impl Indexes {
                 };
                 // Split can only be handled if the opposite merge uses the C layout
                 // convention. Otherwise a full reshape copying the data is done.
-                if l.offset != 0
-                    || l.ids.len() != r.ids.len()
-                    || l.ids
-                        .iter()
-                        .zip(r.ids.iter())
-                        .any(|(l, r)| l.0 != r.0 || l.1 * dims[rhs] != r.1)
-                {
-                    bail!("cannot lower split dims {dim} -> {lhs}x{rhs} {lhs:?} {rhs:?} {dims:?}")
+                let can_lower_split = l.offset == 0
+                    && (dims[lhs] == 1
+                        || dims[rhs] == 1
+                        || l.ids
+                            .iter()
+                            .zip(r.ids.iter())
+                            .all(|(l, r)| l.0 == r.0 || l.1 * dims[rhs] == r.1));
+                if !can_lower_split {
+                    bail!("cannot lower split dims {dims:?} {dim} -> {lhs}x{rhs} {lhs:?} {rhs:?} {dims:?}")
                 }
                 idxs.insert(dim, IndexFormula { ids: r.ids, offset: r.offset })
             }
