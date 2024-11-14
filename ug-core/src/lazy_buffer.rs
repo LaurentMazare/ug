@@ -324,6 +324,7 @@ impl<D: Device> LazyBuffer<D> {
     }
 
     pub fn split_dim<I: Dim>(&self, dim: I, size1: usize, size2: usize) -> Result<Self> {
+        use crate::lang::op::LayoutOp::SplitDim;
         let dim = dim.to_index(self.shape(), "split_dim")?;
         let mut dims = self.dims().to_vec();
         let size = dims.remove(dim);
@@ -335,10 +336,29 @@ impl<D: Device> LazyBuffer<D> {
         let inner = LazyBufferInner {
             id: Id::new(),
             data: std::sync::Mutex::new(None),
-            op: Op::Layout(
-                crate::lang::op::LayoutOp::SplitDim { dim, lhs: dim, rhs: dim + 1 },
-                self.clone(),
-            ),
+            op: Op::Layout(SplitDim { dim, lhs: dim, rhs: dim + 1 }, self.clone()),
+            dtype: self.dtype,
+            device: self.device.clone(),
+            shape: dims.into(),
+        };
+        let lb = LazyBuffer(std::sync::Arc::new(inner));
+        Ok(lb)
+    }
+
+    /// Merge the dims dim and dim + 1 together.
+    pub fn merge_dims<I: Dim>(&self, dim: I) -> Result<Self> {
+        use crate::lang::op::LayoutOp::MergeDims;
+        let dim = dim.to_index(self.shape(), "split_dim")?;
+        if dim + 1 >= self.rank() {
+            crate::bail!("unexpected dim for merge_dims {dim} {:?}", self.shape())
+        }
+        let mut dims = self.dims().to_vec();
+        let size_p = dims.remove(dim + 1);
+        dims[dim] *= size_p;
+        let inner = LazyBufferInner {
+            id: Id::new(),
+            data: std::sync::Mutex::new(None),
+            op: Op::Layout(MergeDims { dim, lhs: dim, rhs: dim + 1 }, self.clone()),
             dtype: self.dtype,
             device: self.device.clone(),
             shape: dims.into(),

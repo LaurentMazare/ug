@@ -110,7 +110,7 @@ impl Indexes {
                             .zip(r.ids.iter())
                             .all(|(l, r)| l.0 == r.0 || l.1 * dims[rhs] == r.1));
                 if !can_lower_split {
-                    bail!("cannot lower split dims {dims:?} {dim} -> {lhs}x{rhs} {lhs:?} {rhs:?} {dims:?}")
+                    bail!("cannot lower split dims {dims:?} {dim} -> {lhs}x{rhs} {l:?} {r:?} {dims:?}")
                 }
                 idxs.insert(dim, IndexFormula { ids: r.ids, offset: r.offset })
             }

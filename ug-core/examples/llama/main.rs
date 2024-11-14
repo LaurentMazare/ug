@@ -33,6 +33,9 @@ struct Args {
     #[arg(short, long)]
     verbose: bool,
 
+    #[arg(long)]
+    custom_softmax: bool,
+
     #[arg(long, default_value = "smol2-135m")]
     which: Which,
 
@@ -72,7 +75,7 @@ fn main() -> Result<()> {
     let tokenizer = tokenizers::Tokenizer::from_file(tokenizer_file)
         .map_err(|v| Error::debug(format!("{v:?}")))?;
     let st = unsafe { ug::safetensors::MmapedSafetensors::new(model_file)? };
-    let model = Model::new(&cfg, &st)?;
+    let model = Model::new(&cfg, args.custom_softmax, &st)?;
     let mut cache = Cache::new(&cfg)?;
     let mut rng = rand::rngs::StdRng::seed_from_u64(42);
     let mut last_token = BOS_TOKEN;
@@ -81,7 +84,11 @@ fn main() -> Result<()> {
         let token_ids = LB::copy([last_token as i32].as_slice(), (1, 1), &CpuDevice)?;
         let pos = LB::copy([pos as i32].as_slice(), (1, 1), &CpuDevice)?;
         let tensor = model.fwd(&token_ids, &pos, &mut cache)?;
-        let tensor = model::softmax(&tensor)?;
+        let tensor = if args.custom_softmax {
+            model::custom_softmax(&tensor)?
+        } else {
+            model::softmax(&tensor)?
+        };
 
         let start_time = std::time::Instant::now();
         let schedule = ug::Schedule::create_one(&tensor)?;

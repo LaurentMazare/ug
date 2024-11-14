@@ -228,7 +228,7 @@ pub fn softmax(src: &LB) -> Result<LB> {
     exp.binary(ug::lang::BinaryOp::Div, sum_exp.broadcast(s)?)
 }
 
-pub fn _softmax(src: &LB) -> Result<LB> {
+pub fn custom_softmax(src: &LB) -> Result<LB> {
     let rank = src.rank();
     let dim_m1 = src.dims()[rank - 1];
     let span_sm = tracing::span!(tracing::Level::TRACE, "softmax");
@@ -357,6 +357,7 @@ struct Attention {
     num_kv_heads: usize,
     head_dim: usize,
     rope_interleaved: bool,
+    custom_softmax: bool,
 }
 
 pub struct Cache {
@@ -418,7 +419,7 @@ impl Attention {
         let scale = scale.broadcast(att.shape())?;
         let att = att.binary(ug::lang::BinaryOp::Mul, scale)?;
         let att = if seq_len == 1 { att } else { causal_mask(&att)? };
-        let att = softmax(&att)?;
+        let att = if self.custom_softmax { custom_softmax(&att)? } else { softmax(&att)? };
         let xs = att.matmul(v)?;
 
         // final proj
@@ -484,7 +485,11 @@ pub struct Model {
 }
 
 impl Model {
-    pub fn new(cfg: &Config, st: &ug::safetensors::MmapedSafetensors) -> Result<Model> {
+    pub fn new(
+        cfg: &Config,
+        custom_softmax: bool,
+        st: &ug::safetensors::MmapedSafetensors,
+    ) -> Result<Model> {
         let embedding =
             st.load_with_cast("model.embed_tokens.weight", ug::DType::F32, &CpuDevice)?;
         let ln_f = RmsNorm::new(cfg.hidden_size, cfg.rms_norm_eps, "model.norm.weight", st)?;
@@ -520,6 +525,7 @@ impl Model {
                 num_heads: cfg.num_attention_heads,
                 num_kv_heads: cfg.num_key_value_heads,
                 rope_interleaved: cfg.rope_interleaved.unwrap_or(false),
+                custom_softmax,
             };
             let mlp = Mlp { c_fc1, c_fc2, c_proj, hidden_act: cfg.hidden_act };
             layers.push(Layer { rms1, attn, rms2, mlp })
