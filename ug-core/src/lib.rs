@@ -19,7 +19,7 @@ pub mod utils;
 pub use cpu_runtime::{CpuDevice, CpuStorage, CpuStorageRef, CpuStorageRefMut};
 pub use dtype::{DType, WithDType};
 pub use error::{Error, Result};
-pub use layout::{Layout, Shape, D};
+pub use layout::{Dim, Layout, Shape, D};
 pub use lazy_buffer::LazyBuffer;
 pub use r#const::Const;
 pub use schedule::{Schedule, ScheduleItem};

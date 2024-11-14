@@ -379,6 +379,26 @@ impl<D: Device> LazyBuffer<D> {
         Ok(lb)
     }
 
+    pub fn transpose<D1: crate::Dim, D2: crate::Dim>(&self, dim1: D1, dim2: D2) -> Result<Self> {
+        let dim1 = dim1.to_index(self.shape(), "transpose")?;
+        let dim2 = dim2.to_index(self.shape(), "transpose")?;
+        if dim1 == dim2 {
+            return Ok(self.clone());
+        }
+        let mut dims = self.dims().to_vec();
+        dims.swap(dim1, dim2);
+        let inner = LazyBufferInner {
+            id: Id::new(),
+            data: std::sync::Mutex::new(None),
+            op: Op::Layout(crate::lang::op::LayoutOp::Transpose { dim1, dim2 }, self.clone()),
+            dtype: self.dtype,
+            device: self.device.clone(),
+            shape: dims.into(),
+        };
+        let lb = LazyBuffer(std::sync::Arc::new(inner));
+        Ok(lb)
+    }
+
     pub fn cst<C: TryInto<Const> + std::fmt::Debug + Copy, S: Into<Shape>>(
         c: C,
         s: S,
