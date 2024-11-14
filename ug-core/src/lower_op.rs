@@ -88,16 +88,37 @@ impl Indexes {
                     bail!("unexpected split dim {dim} src {shape:?}")
                 }
                 if lhs >= shape.rank() || rhs >= shape.rank() || lhs == rhs {
-                    bail!("unexpected split dim {lhs}x{rhs} dst {shape:?}")
+                    bail!("unexpected split dims {lhs}x{rhs} dst {shape:?}")
                 }
-                bail!("unsupported layout op {op:?}")
+                let dims = shape.dims();
+                let (l, r) = if lhs < rhs {
+                    let rhs = idxs.remove(rhs);
+                    let lhs = idxs.remove(lhs);
+                    (lhs, rhs)
+                } else {
+                    let lhs = idxs.remove(lhs);
+                    let rhs = idxs.remove(rhs);
+                    (lhs, rhs)
+                };
+                if l.offset * dims[rhs] != r.offset * dims[lhs]
+                    || l.ids.len() != r.ids.len()
+                    || l.ids
+                        .iter()
+                        .zip(r.ids.iter())
+                        .any(|(l, r)| l.0 != r.0 || l.1 * dims[rhs] != r.1)
+                {
+                    bail!("cannot lower split dims {dim} -> {lhs}x{rhs} {lhs:?} {rhs:?} {dims:?}")
+                }
+                // Split can only be handled if the opposite merge uses the C layout
+                // convention. Otherwise a full reshape copying the data is done.
+                idxs.insert(dim, IndexFormula { ids: r.ids, offset: r.offset })
             }
             &L::MergeDims { dim, lhs, rhs } => {
                 if dim >= shape.rank() {
                     bail!("unexpected merge dim {dim} dst {shape:?}")
                 }
-                if lhs >= arg_shape.rank() || rhs >= arg_shape.rank() {
-                    bail!("unexpected merge dim {lhs}x{rhs} src {arg_shape:?}")
+                if lhs >= arg_shape.rank() || rhs >= arg_shape.rank() || lhs == rhs {
+                    bail!("unexpected merge dims {lhs}x{rhs} src {arg_shape:?}")
                 }
                 let arg_dims = arg_shape.dims();
                 let IndexFormula { ids, offset } = idxs.remove(dim);
