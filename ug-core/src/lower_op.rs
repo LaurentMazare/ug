@@ -100,7 +100,9 @@ impl Indexes {
                     let rhs = idxs.remove(rhs);
                     (lhs, rhs)
                 };
-                if l.offset * dims[rhs] != r.offset * dims[lhs]
+                // Split can only be handled if the opposite merge uses the C layout
+                // convention. Otherwise a full reshape copying the data is done.
+                if l.offset != 0
                     || l.ids.len() != r.ids.len()
                     || l.ids
                         .iter()
@@ -109,8 +111,6 @@ impl Indexes {
                 {
                     bail!("cannot lower split dims {dim} -> {lhs}x{rhs} {lhs:?} {rhs:?} {dims:?}")
                 }
-                // Split can only be handled if the opposite merge uses the C layout
-                // convention. Otherwise a full reshape copying the data is done.
                 idxs.insert(dim, IndexFormula { ids: r.ids, offset: r.offset })
             }
             &L::MergeDims { dim, lhs, rhs } => {
@@ -122,8 +122,7 @@ impl Indexes {
                 }
                 let arg_dims = arg_shape.dims();
                 let IndexFormula { ids, offset } = idxs.remove(dim);
-                let lhs_offset = offset * arg_dims[rhs];
-                let rhs_offset = offset * arg_dims[lhs];
+                let (lhs_offset, rhs_offset) = (0, offset);
                 let lhs_ids = if arg_dims[lhs] <= 1 {
                     vec![]
                 } else {
