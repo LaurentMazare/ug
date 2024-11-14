@@ -51,7 +51,12 @@ struct IndexFormula {
 struct Indexes(Vec<IndexFormula>);
 
 impl Indexes {
-    fn layout_op(&self, op: &crate::lang::op::LayoutOp, shape: &Shape) -> Result<Self> {
+    fn layout_op(
+        &self,
+        op: &crate::lang::op::LayoutOp,
+        shape: &Shape,
+        arg_shape: &Shape,
+    ) -> Result<Self> {
         use crate::lang::op::LayoutOp as L;
         let mut idxs = self.0.clone();
         match op {
@@ -66,20 +71,57 @@ impl Indexes {
                     idxs.remove(0);
                 }
             }
-            L::Narrow { dim, offset } => {
-                if *dim >= idxs.len() {
+            &L::Narrow { dim, offset } => {
+                if dim >= idxs.len() {
                     bail!("unexpected dim for narrow, {dim} {:?}", shape)
                 }
-                idxs[*dim].offset += *offset
+                idxs[dim].offset += offset
             }
-            L::Transpose { dim1, dim2 } => {
-                if *dim1 >= idxs.len() || *dim2 >= idxs.len() {
+            &L::Transpose { dim1, dim2 } => {
+                if dim1 >= idxs.len() || dim2 >= idxs.len() {
                     bail!("unexpected dims for transpose {dim1} {dim2}, {:?}", shape)
                 }
-                idxs.swap(*dim1, *dim2)
+                idxs.swap(dim1, dim2)
             }
-            L::SplitDim { dim: _, lhs: _, rhs: _ } | L::MergeDims { dim: _, lhs: _, rhs: _ } => {
+            &L::SplitDim { dim, lhs, rhs } => {
+                if dim >= arg_shape.rank() {
+                    bail!("unexpected split dim {dim} src {shape:?}")
+                }
+                if lhs >= shape.rank() || rhs >= shape.rank() || lhs == rhs {
+                    bail!("unexpected split dim {lhs}x{rhs} dst {shape:?}")
+                }
                 bail!("unsupported layout op {op:?}")
+            }
+            &L::MergeDims { dim, lhs, rhs } => {
+                if dim >= shape.rank() {
+                    bail!("unexpected merge dim {dim} dst {shape:?}")
+                }
+                if lhs >= arg_shape.rank() || rhs >= arg_shape.rank() {
+                    bail!("unexpected merge dim {lhs}x{rhs} src {arg_shape:?}")
+                }
+                let arg_dims = arg_shape.dims();
+                let IndexFormula { ids, offset } = idxs.remove(dim);
+                let lhs_offset = offset * arg_dims[rhs];
+                let rhs_offset = offset * arg_dims[lhs];
+                let lhs_ids = if arg_dims[lhs] <= 1 {
+                    vec![]
+                } else {
+                    // Use the C layout convention, lhs is on the left side so its stride
+                    // is multiplied by the size of rhs.
+                    ids.iter().map(|v| (v.0, v.1 * arg_dims[rhs])).collect()
+                };
+                let rhs_ids = if arg_dims[rhs] <= 1 {
+                    vec![]
+                } else {
+                    ids.iter().map(|v| (v.0, v.1)).collect()
+                };
+                if lhs < rhs {
+                    idxs.insert(lhs, IndexFormula { ids: lhs_ids, offset: lhs_offset });
+                    idxs.insert(rhs, IndexFormula { ids: rhs_ids, offset: rhs_offset });
+                } else {
+                    idxs.insert(rhs, IndexFormula { ids: rhs_ids, offset: rhs_offset });
+                    idxs.insert(lhs, IndexFormula { ids: lhs_ids, offset: lhs_offset });
+                }
             }
         };
         Ok(Self(idxs))
@@ -216,7 +258,7 @@ impl Ast {
                 (dst_i, Block(off_b))
             }
             A::Layout { arg, op } => {
-                let idxs = idxs.layout_op(op, &self.shape)?;
+                let idxs = idxs.layout_op(op, &self.shape, &arg.shape)?;
                 arg.lower(&idxs, opts, per_arg)?
             }
             A::Const(c) => {
