@@ -303,13 +303,14 @@ impl<D: Device> LazyBuffer<D> {
         Ok(lb)
     }
 
-    pub fn reduce(&self, op: crate::lang::ReduceOp, axis: usize) -> Result<Self> {
+    pub fn reduce<I: crate::Dim>(&self, op: crate::lang::ReduceOp, dim: I) -> Result<Self> {
         // TODO: dtype/op checks.
         let shape = self.shape(); // TODO: squeeze or remove axis.
+        let dim = dim.to_index(shape, "reduce")?;
         let inner = LazyBufferInner {
             id: Id::new(),
             data: std::sync::Mutex::new(None),
-            op: Op::Reduce(op, self.clone(), axis),
+            op: Op::Reduce(op, self.clone(), dim),
             dtype: self.dtype,
             device: self.device.clone(),
             shape: shape.clone(),

@@ -138,8 +138,8 @@ pub fn gen<W: std::io::Write>(w: &mut W, func_name: &str, kernel: &ssa::Kernel) 
                     ssa::BinaryOp::Mul => format!("{} * {}", A(*lhs), A(*rhs)),
                     ssa::BinaryOp::Sub => format!("{} - {}", A(*lhs), A(*rhs)),
                     ssa::BinaryOp::Div => format!("{} / {}", A(*lhs), A(*rhs)),
-                    ssa::BinaryOp::Min => format!("min({}, {})", A(*lhs), A(*rhs)),
-                    ssa::BinaryOp::Max => format!("max({}, {})", A(*lhs), A(*rhs)),
+                    ssa::BinaryOp::Min => format!("fmin({}, {})", A(*lhs), A(*rhs)),
+                    ssa::BinaryOp::Max => format!("fmax({}, {})", A(*lhs), A(*rhs)),
                 };
                 writeln!(w, "{indent}{} {var_id} = {op};", D(*dtype),)?;
             }

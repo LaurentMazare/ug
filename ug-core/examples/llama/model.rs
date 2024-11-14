@@ -1,5 +1,5 @@
 use rayon::prelude::*;
-use ug::{CpuDevice, CpuStorage, DType, LazyBuffer, Result};
+use ug::{CpuDevice, CpuStorage, DType, LazyBuffer, Result, D};
 
 pub type LB = LazyBuffer<CpuDevice>;
 type ST = ug::safetensors::MmapedSafetensors;
@@ -220,6 +220,15 @@ fn repeat(src: &LB, axis: usize, n_rep: usize) -> Result<LB> {
 }
 
 pub fn softmax(src: &LB) -> Result<LB> {
+    let s = src.shape();
+    let max = src.reduce(ug::lang::ReduceOp::Max, D::Minus1)?;
+    let diff = src.binary(ug::lang::BinaryOp::Sub, max.broadcast(s)?)?;
+    let exp = diff.unary(ug::lang::UnaryOp::Exp)?;
+    let sum_exp = exp.reduce(ug::lang::ReduceOp::Sum, D::Minus1)?;
+    exp.binary(ug::lang::BinaryOp::Div, sum_exp.broadcast(s)?)
+}
+
+pub fn _softmax(src: &LB) -> Result<LB> {
     let rank = src.rank();
     let dim_m1 = src.dims()[rank - 1];
     let span_sm = tracing::span!(tracing::Level::TRACE, "softmax");
