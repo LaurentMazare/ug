@@ -177,3 +177,37 @@ fn lb_custom() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn lb_layout() -> Result<()> {
+    let cpu = ug::CpuDevice;
+    let shape = (2, 3);
+    let buf = [0f32, 1f32, 2f32, 3f32, 4f32, 5f32].as_slice();
+    let lb = LB::copy(buf, shape, &cpu)?;
+
+    let lb = lb.transpose(0, 1)?;
+    let schedule = ug::Schedule::create_one(&lb)?;
+    let schedule = schedule.compile()?;
+    schedule.run()?;
+    {
+        let data = lb.data().lock()?;
+        let data = data.as_ref().unwrap().to_vec::<f32>()?;
+        assert_eq!(data, [0.0, 3.0, 1.0, 4.0, 2.0, 5.0]);
+    }
+
+    let lb = lb.transpose(0, 1)?;
+    let lb = lb.merge_dims(0)?;
+    assert_eq!(lb.dims(), [6]);
+
+    let schedule = ug::Schedule::create_one(&lb)?;
+    let schedule = schedule.compile()?;
+    schedule.run()?;
+
+    {
+        let data = lb.data().lock()?;
+        let data = data.as_ref().unwrap().to_vec::<f32>()?;
+        assert_eq!(data, [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]);
+    }
+
+    Ok(())
+}
