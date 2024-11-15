@@ -264,7 +264,7 @@ impl<D: Device> CompiledSchedule<D> {
                         })
                         .collect::<Result<Vec<_>>>()?;
                     let locks = locks.iter_mut().map(|v| v.as_mut().unwrap()).collect::<Vec<_>>();
-                    f(locks)?
+                    f(locks)?;
                 }
             }
         }
@@ -301,7 +301,7 @@ impl<D: Device> Context<D> {
 
         let dtype = b.dtype();
         let shape = b.shape();
-        let ast = if b.realized() {
+        let ast = if b.realized() && !matches!(b.op(), Op::CustomIp { .. }) {
             let arg_id = ArgId::new();
             self.per_arg_id.insert(arg_id, b.clone());
             crate::lang::op::load(arg_id, Layout::from_shape(shape), dtype)?
@@ -362,6 +362,17 @@ impl<D: Device> Context<D> {
                     self.items.push(ScheduleItem::Ssa { ssa: ssa.clone(), args });
                     crate::lang::op::load(dst_id, Layout::from_shape(shape), dtype)?
                 }
+                Op::CustomIp { f, args: b_args, src } => {
+                    let mut args = Vec::with_capacity(b_args.len() + 1);
+                    for arg in b_args.iter() {
+                        let arg_id = self.push_schedule_item(arg)?;
+                        args.push((arg_id, arg.clone()))
+                    }
+                    let arg_id = self.push_schedule_item(src)?;
+                    args.push((arg_id, src.clone()));
+                    self.items.push(ScheduleItem::Custom { f: f.clone(), args });
+                    crate::lang::op::load(arg_id, Layout::from_shape(shape), dtype)?
+                }
                 Op::Custom { f, args: b_args } => {
                     let mut args = Vec::with_capacity(b_args.len() + 1);
                     for arg in b_args.iter() {
@@ -390,7 +401,7 @@ impl<D: Device> Context<D> {
     fn push_kernel(&mut self, buffer: &LazyBuffer<D>, ast: Ast) -> Result<ArgId> {
         if let crate::lang::op::AstInner::Load { src: src_arg_id, .. } = ast.inner.as_ref() {
             let src = self.get_arg_id(*src_arg_id)?;
-            if src.id() == buffer.id() {
+            if std::ptr::eq(src.data(), buffer.data()) {
                 // Avoid the cases where we load and store immediately a buffer, this is a no-op
                 // and would result in a deadlock.
                 return Ok(*src_arg_id);
@@ -425,7 +436,7 @@ impl<D: Device> Context<D> {
 fn id_cnts<D: Device>(b: &LazyBuffer<D>, cnts: &mut HashMap<crate::lazy_buffer::Id, usize>) {
     use crate::lazy_buffer::Op;
 
-    if b.realized() {
+    if b.realized() && !matches!(b.op(), Op::CustomIp { .. }) {
         return;
     }
 
@@ -443,6 +454,12 @@ fn id_cnts<D: Device>(b: &LazyBuffer<D>, cnts: &mut HashMap<crate::lazy_buffer::
         Op::MatMul(arg1, arg2, _, _) | Op::Binary(_, arg1, arg2) => {
             id_cnts(arg1, cnts);
             id_cnts(arg2, cnts);
+        }
+        Op::CustomIp { f: _, args, src } => {
+            for arg in args.iter() {
+                id_cnts(arg, cnts);
+            }
+            id_cnts(src, cnts)
         }
         Op::Ssa { ssa: _, args } | Op::Custom { f: _, args } => {
             for arg in args.iter() {

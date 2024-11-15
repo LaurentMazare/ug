@@ -1,6 +1,7 @@
 use crate::{Const, DType, Device, Dim, Result, Shape};
+use std::sync::{Arc, Mutex};
 
-type Callback<S> = std::sync::Arc<dyn Fn(Vec<&mut S>) -> Result<()>>;
+type Callback<S> = Arc<dyn Fn(Vec<&mut S>) -> Result<()>>;
 pub struct CustomF<S>(Callback<S>);
 
 impl<S> std::fmt::Debug for CustomF<S> {
@@ -10,7 +11,7 @@ impl<S> std::fmt::Debug for CustomF<S> {
 }
 
 impl<S> std::ops::Deref for CustomF<S> {
-    type Target = std::sync::Arc<dyn Fn(Vec<&mut S>) -> Result<()>>;
+    type Target = Arc<dyn Fn(Vec<&mut S>) -> Result<()>>;
     fn deref(&self) -> &Self::Target {
         &self.0
     }
@@ -24,7 +25,7 @@ impl<S> Clone for CustomF<S> {
 
 impl<S> CustomF<S> {
     pub fn new<F: 'static + Fn(Vec<&mut S>) -> Result<()>>(f: F) -> Self {
-        Self(std::sync::Arc::new(f))
+        Self(Arc::new(f))
     }
 }
 
@@ -56,10 +57,11 @@ pub enum Op<D: Device> {
     Layout(crate::lang::op::LayoutOp, LazyBuffer<D>),
     Reshape(LazyBuffer<D>),
     Custom { f: CustomF<D::Slice>, args: Vec<LazyBuffer<D>> },
+    CustomIp { f: CustomF<D::Slice>, args: Vec<LazyBuffer<D>>, src: LazyBuffer<D> },
     Ssa { ssa: crate::lang::ssa::Kernel, args: Vec<LazyBuffer<D>> },
 }
 
-pub struct LazyBuffer<D: Device>(std::sync::Arc<LazyBufferInner<D>>);
+pub struct LazyBuffer<D: Device>(Arc<LazyBufferInner<D>>);
 
 impl<D: Device> std::fmt::Debug for LazyBuffer<D> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -86,7 +88,7 @@ pub struct LazyBufferInner<D: Device> {
     id: Id,
     // A Mutex here has some runtime overhead when lots of buffers are
     // used but allows the structure to be shared between threads.
-    data: std::sync::Mutex<Option<D::Slice>>,
+    data: Arc<Mutex<Option<D::Slice>>>,
     op: Op<D>,
     dtype: crate::DType,
     /// The shape for the buffer, the buffer always uses a C style memory layout.
@@ -125,8 +127,8 @@ impl<D: Device> LazyBuffer<D> {
         Ok(())
     }
 
-    pub fn data(&self) -> &std::sync::Mutex<Option<D::Slice>> {
-        &self.data
+    pub fn data(&self) -> &Mutex<Option<D::Slice>> {
+        self.data.as_ref()
     }
 
     pub fn device(&self) -> &D {
@@ -173,13 +175,13 @@ impl<D: Device> LazyBuffer<D> {
         // TODO: dtype/op checks.
         let inner = LazyBufferInner {
             id: Id::new(),
-            data: std::sync::Mutex::new(None),
+            data: Arc::new(Mutex::new(None)),
             op: Op::Unary(op, self.clone()),
             dtype: self.dtype,
             shape: self.shape.clone(),
             device: self.device.clone(),
         };
-        let lb = LazyBuffer(std::sync::Arc::new(inner));
+        let lb = LazyBuffer(Arc::new(inner));
         Ok(lb)
     }
 
@@ -189,13 +191,13 @@ impl<D: Device> LazyBuffer<D> {
         }
         let inner = LazyBufferInner {
             id: Id::new(),
-            data: std::sync::Mutex::new(None),
+            data: Arc::new(Mutex::new(None)),
             op: Op::Unary(crate::lang::UnaryOp::Cast, self.clone()),
             dtype,
             shape: self.shape.clone(),
             device: self.device.clone(),
         };
-        let lb = LazyBuffer(std::sync::Arc::new(inner));
+        let lb = LazyBuffer(Arc::new(inner));
         Ok(lb)
     }
 
@@ -203,13 +205,13 @@ impl<D: Device> LazyBuffer<D> {
         // TODO: dtype/op/shape checks.
         let inner = LazyBufferInner {
             id: Id::new(),
-            data: std::sync::Mutex::new(None),
+            data: Arc::new(Mutex::new(None)),
             op: Op::Binary(op, self.clone(), rhs),
             dtype: self.dtype,
             device: self.device.clone(),
             shape: self.shape.clone(),
         };
-        let lb = LazyBuffer(std::sync::Arc::new(inner));
+        let lb = LazyBuffer(Arc::new(inner));
         Ok(lb)
     }
 
@@ -217,13 +219,13 @@ impl<D: Device> LazyBuffer<D> {
     pub fn alloc_uninit<S: Into<Shape>>(dtype: DType, s: S, device: &D) -> Result<Self> {
         let inner = LazyBufferInner {
             id: Id::new(),
-            data: std::sync::Mutex::new(None),
+            data: Arc::new(Mutex::new(None)),
             op: Op::Copy,
             dtype,
             device: device.clone(),
             shape: s.into(),
         };
-        let lb = LazyBuffer(std::sync::Arc::new(inner));
+        let lb = LazyBuffer(Arc::new(inner));
         Ok(lb)
     }
 
@@ -237,13 +239,31 @@ impl<D: Device> LazyBuffer<D> {
         let f = CustomF::new(f);
         let inner = LazyBufferInner {
             id: Id::new(),
-            data: std::sync::Mutex::new(None),
+            data: Arc::new(Mutex::new(None)),
             op: Op::Custom { f, args },
             dtype,
             device: device.clone(),
             shape: s.into(),
         };
-        let lb = LazyBuffer(std::sync::Arc::new(inner));
+        let lb = LazyBuffer(Arc::new(inner));
+        Ok(lb)
+    }
+
+    pub fn custom_ip<F: 'static + Fn(Vec<&mut D::Slice>) -> Result<()>>(
+        &self,
+        f: F,
+        args: Vec<Self>,
+    ) -> Result<Self> {
+        let f = CustomF::new(f);
+        let inner = LazyBufferInner {
+            id: Id::new(),
+            data: self.data.clone(),
+            op: Op::CustomIp { f, args, src: self.clone() },
+            dtype: self.dtype,
+            device: self.device.clone(),
+            shape: self.shape.clone(),
+        };
+        let lb = LazyBuffer(Arc::new(inner));
         Ok(lb)
     }
 
@@ -256,13 +276,13 @@ impl<D: Device> LazyBuffer<D> {
     ) -> Result<Self> {
         let inner = LazyBufferInner {
             id: Id::new(),
-            data: std::sync::Mutex::new(None),
+            data: Arc::new(Mutex::new(None)),
             op: Op::Ssa { ssa, args },
             dtype,
             device: device.clone(),
             shape: s.into(),
         };
-        let lb = LazyBuffer(std::sync::Arc::new(inner));
+        let lb = LazyBuffer(Arc::new(inner));
         Ok(lb)
     }
 
@@ -303,13 +323,13 @@ impl<D: Device> LazyBuffer<D> {
         shape.push(n);
         let inner = LazyBufferInner {
             id: Id::new(),
-            data: std::sync::Mutex::new(None),
+            data: Arc::new(Mutex::new(None)),
             op: Op::MatMul(self.clone(), rhs, bmnk, transpose),
             dtype: self.dtype,
             device: self.device.clone(),
             shape: shape.into(),
         };
-        let lb = LazyBuffer(std::sync::Arc::new(inner));
+        let lb = LazyBuffer(Arc::new(inner));
         Ok(lb)
     }
 
@@ -319,13 +339,13 @@ impl<D: Device> LazyBuffer<D> {
         let dim = dim.to_index(shape, "reduce")?;
         let inner = LazyBufferInner {
             id: Id::new(),
-            data: std::sync::Mutex::new(None),
+            data: Arc::new(Mutex::new(None)),
             op: Op::Reduce(op, self.clone(), dim),
             dtype: self.dtype,
             device: self.device.clone(),
             shape: shape.clone(),
         };
-        let lb = LazyBuffer(std::sync::Arc::new(inner));
+        let lb = LazyBuffer(Arc::new(inner));
         Ok(lb)
     }
 
@@ -345,13 +365,13 @@ impl<D: Device> LazyBuffer<D> {
         dims.insert(dim, size1);
         let inner = LazyBufferInner {
             id: Id::new(),
-            data: std::sync::Mutex::new(None),
+            data: Arc::new(Mutex::new(None)),
             op: Op::Layout(SplitDim { dim, lhs: dim, rhs: dim + 1 }, self.clone()),
             dtype: self.dtype,
             device: self.device.clone(),
             shape: dims.into(),
         };
-        let lb = LazyBuffer(std::sync::Arc::new(inner));
+        let lb = LazyBuffer(Arc::new(inner));
         Ok(lb)
     }
 
@@ -367,13 +387,13 @@ impl<D: Device> LazyBuffer<D> {
         dims[dim] *= size_p;
         let inner = LazyBufferInner {
             id: Id::new(),
-            data: std::sync::Mutex::new(None),
+            data: Arc::new(Mutex::new(None)),
             op: Op::Layout(MergeDims { dim, lhs: dim, rhs: dim + 1 }, self.clone()),
             dtype: self.dtype,
             device: self.device.clone(),
             shape: dims.into(),
         };
-        let lb = LazyBuffer(std::sync::Arc::new(inner));
+        let lb = LazyBuffer(Arc::new(inner));
         Ok(lb)
     }
 
@@ -389,13 +409,13 @@ impl<D: Device> LazyBuffer<D> {
         }
         let inner = LazyBufferInner {
             id: Id::new(),
-            data: std::sync::Mutex::new(None),
+            data: Arc::new(Mutex::new(None)),
             op: Op::Reshape(self.clone()),
             dtype: self.dtype,
             device: self.device.clone(),
             shape: s,
         };
-        let lb = LazyBuffer(std::sync::Arc::new(inner));
+        let lb = LazyBuffer(Arc::new(inner));
         Ok(lb)
     }
 
@@ -421,7 +441,7 @@ impl<D: Device> LazyBuffer<D> {
         }
         let inner = LazyBufferInner {
             id: Id::new(),
-            data: std::sync::Mutex::new(None),
+            data: Arc::new(Mutex::new(None)),
             op: Op::Layout(
                 crate::lang::op::LayoutOp::Broadcast { inserted_dims, broadcasted_dims },
                 self.clone(),
@@ -430,7 +450,7 @@ impl<D: Device> LazyBuffer<D> {
             device: self.device.clone(),
             shape: s,
         };
-        let lb = LazyBuffer(std::sync::Arc::new(inner));
+        let lb = LazyBuffer(Arc::new(inner));
         Ok(lb)
     }
 
@@ -444,13 +464,13 @@ impl<D: Device> LazyBuffer<D> {
         dims.swap(dim1, dim2);
         let inner = LazyBufferInner {
             id: Id::new(),
-            data: std::sync::Mutex::new(None),
+            data: Arc::new(Mutex::new(None)),
             op: Op::Layout(crate::lang::op::LayoutOp::Transpose { dim1, dim2 }, self.clone()),
             dtype: self.dtype,
             device: self.device.clone(),
             shape: dims.into(),
         };
-        let lb = LazyBuffer(std::sync::Arc::new(inner));
+        let lb = LazyBuffer(Arc::new(inner));
         Ok(lb)
     }
 
@@ -466,13 +486,13 @@ impl<D: Device> LazyBuffer<D> {
         let s: Shape = s.into();
         let inner = LazyBufferInner {
             id: Id::new(),
-            data: std::sync::Mutex::new(None),
+            data: Arc::new(Mutex::new(None)),
             op: Op::Const(c),
             dtype: c.dtype(),
             device: device.clone(),
             shape: s,
         };
-        let lb = LazyBuffer(std::sync::Arc::new(inner));
+        let lb = LazyBuffer(Arc::new(inner));
         Ok(lb)
     }
 
@@ -487,14 +507,14 @@ impl<D: Device> LazyBuffer<D> {
         }
         let inner = LazyBufferInner {
             id: Id::new(),
-            data: std::sync::Mutex::new(Some(data)),
+            data: Arc::new(Mutex::new(Some(data))),
             // We don't keep a hold on the Copy data here so as to reduce memory usage.
             op: Op::Copy,
             dtype,
             device: device.clone(),
             shape: s,
         };
-        let lb = LazyBuffer(std::sync::Arc::new(inner));
+        let lb = LazyBuffer(Arc::new(inner));
         Ok(lb)
     }
 
@@ -522,14 +542,14 @@ impl<D: Device> LazyBuffer<D> {
         };
         let inner = LazyBufferInner {
             id: Id::new(),
-            data: std::sync::Mutex::new(Some(slice)),
+            data: Arc::new(Mutex::new(Some(slice))),
             // We don't keep a hold on the Copy data here so as to reduce memory usage.
             op: Op::Copy,
             dtype,
             device: device.clone(),
             shape: s,
         };
-        let lb = LazyBuffer(std::sync::Arc::new(inner));
+        let lb = LazyBuffer(Arc::new(inner));
         Ok(lb)
     }
 }

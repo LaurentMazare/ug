@@ -211,3 +211,46 @@ fn lb_layout() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn lb_custom_in_place() -> Result<()> {
+    let cpu = ug::CpuDevice;
+    let add_one = |vs: Vec<&mut ug::CpuStorage>| -> Result<()> {
+        let [dst]: [&mut ug::CpuStorage; 1] = vs.try_into().unwrap();
+        let dst = dst.data_mut::<f32>()?;
+        dst.iter_mut().for_each(|d| *d += 1.0);
+        Ok(())
+    };
+    let shape = (2, 3);
+    let buf = [0f32, 1f32, 2f32, 3f32, 4f32, 5f32].as_slice();
+    let lb = LB::copy(buf, shape, &cpu)?;
+    let lb = lb.custom_ip(add_one, vec![])?;
+    let lb = lb.custom_ip(add_one, vec![])?;
+    let lb = lb.custom_ip(add_one, vec![])?;
+    let schedule = ug::Schedule::create_one(&lb)?;
+    let schedule = schedule.compile()?;
+    schedule.run()?;
+    let data = {
+        let d = lb.data().lock()?;
+        d.as_ref().unwrap().to_vec::<f32>()?
+    };
+    assert_eq!(data, [3., 4., 5., 6., 7., 8.]);
+
+    {
+        let mut data = lb.data().lock().unwrap();
+        let data = data.as_mut().unwrap();
+        if let ug::CpuStorage::F32(vs) = data {
+            vs[1] = 0.;
+            vs[2] = -8.;
+            vs[5] = -2.;
+        }
+    }
+
+    schedule.run()?;
+    let data = {
+        let d = lb.data().lock()?;
+        d.as_ref().unwrap().to_vec::<f32>()?
+    };
+    assert_eq!(data, [6., 3., -5., 9., 10., 1.]);
+    Ok(())
+}
