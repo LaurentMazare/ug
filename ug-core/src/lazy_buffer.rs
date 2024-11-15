@@ -115,6 +115,16 @@ impl<D: Device> LazyBuffer<D> {
         data.is_some()
     }
 
+    pub fn realize(&self) -> Result<()> {
+        if self.realized() {
+            return Ok(());
+        }
+        let schedule = crate::Schedule::create_one(self)?;
+        let schedule = schedule.compile()?;
+        schedule.run()?;
+        Ok(())
+    }
+
     pub fn data(&self) -> &std::sync::Mutex<Option<D::Slice>> {
         &self.data
     }
