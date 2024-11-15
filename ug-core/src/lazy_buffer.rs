@@ -131,6 +131,21 @@ impl<D: Device> LazyBuffer<D> {
         self.data.as_ref()
     }
 
+    pub fn data_vec<DT: crate::WithDType>(&self) -> Result<Option<Vec<DT>>> {
+        use crate::Slice;
+
+        let data = self.data.as_ref().lock()?;
+        let data = match data.as_ref() {
+            None => None,
+            Some(data) => {
+                let mut vs = vec![DT::zero(); self.shape.num_elements()];
+                D::Slice::copy_device_to_host(data, &mut vs)?;
+                Some(vs)
+            }
+        };
+        Ok(data)
+    }
+
     pub fn device(&self) -> &D {
         &self.device
     }

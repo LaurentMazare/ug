@@ -152,10 +152,7 @@ fn lb_custom() -> Result<()> {
     let schedule = ug::Schedule::create_one(&lb)?;
     let schedule = schedule.compile()?;
     schedule.run()?;
-    let data = {
-        let d = lb.data().lock()?;
-        d.as_ref().unwrap().to_vec::<f32>()?
-    };
+    let data = lb.data_vec::<f32>()?.unwrap();
     assert_eq!(data, [2., 4., 6., 8., 10., 12.]);
 
     {
@@ -169,10 +166,7 @@ fn lb_custom() -> Result<()> {
     }
 
     schedule.run()?;
-    let data = {
-        let d = lb.data().lock()?;
-        d.as_ref().unwrap().to_vec::<f32>()?
-    };
+    let data = lb.data_vec::<f32>()?.unwrap();
     assert_eq!(data, [2., 2., -14., 8., 10., -2.]);
 
     Ok(())
@@ -189,11 +183,8 @@ fn lb_layout() -> Result<()> {
     let schedule = ug::Schedule::create_one(&lb)?;
     let schedule = schedule.compile()?;
     schedule.run()?;
-    {
-        let data = lb.data().lock()?;
-        let data = data.as_ref().unwrap().to_vec::<f32>()?;
-        assert_eq!(data, [0.0, 3.0, 1.0, 4.0, 2.0, 5.0]);
-    }
+    let data = lb.data_vec::<f32>()?.unwrap();
+    assert_eq!(data, [0.0, 3.0, 1.0, 4.0, 2.0, 5.0]);
 
     let lb = lb.transpose(0, 1)?;
     let lb = lb.merge_dims(0)?;
@@ -203,11 +194,8 @@ fn lb_layout() -> Result<()> {
     let schedule = schedule.compile()?;
     schedule.run()?;
 
-    {
-        let data = lb.data().lock()?;
-        let data = data.as_ref().unwrap().to_vec::<f32>()?;
-        assert_eq!(data, [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]);
-    }
+    let data = lb.data_vec::<f32>()?.unwrap();
+    assert_eq!(data, [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]);
 
     Ok(())
 }
