@@ -189,7 +189,21 @@ fn cat(lhs: &LB, rhs: &LB, axis: usize) -> Result<LB> {
     LB::custom(f, vec![lhs.clone(), rhs.clone()], dst_dims, lhs.dtype(), lhs.device())
 }
 
-fn repeat(src: &LB, axis: usize, n_rep: usize) -> Result<LB> {
+fn repeat(lb: &LB, axis: usize, n_rep: usize) -> Result<LB> {
+    if n_rep == 1 {
+        return Ok(lb.clone());
+    }
+    let dims = lb.dims();
+    if axis >= dims.len() {
+        ug::bail!("unexpected axis {axis} for repeat {dims:?}")
+    }
+    let lb = lb.split_dim(axis, dims[axis], 1)?;
+    let mut dims = lb.dims().to_vec();
+    dims[axis + 1] = n_rep;
+    lb.broadcast(dims)?.merge_dims(axis)
+}
+
+fn _repeat(src: &LB, axis: usize, n_rep: usize) -> Result<LB> {
     if n_rep == 1 {
         return Ok(src.clone());
     }
