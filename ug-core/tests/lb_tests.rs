@@ -57,8 +57,7 @@ fn schedule_cpu_compile() -> Result<()> {
     let schedule = ug::Schedule::create_one(&lb)?;
     let schedule = schedule.compile()?;
     schedule.run()?;
-    let data = lb.data().lock()?;
-    let data = data.as_ref().unwrap().to_vec::<f32>()?;
+    let data = lb.data_vec::<f32>()?.unwrap();
     assert_eq!(data, [42., 42., 42., 42., 42., 42., 42., 42., 42., 42.]);
     Ok(())
 }
@@ -72,8 +71,7 @@ fn schedule_mm() -> Result<()> {
     let schedule = ug::Schedule::create_one(&lb)?;
     let schedule = schedule.compile()?;
     schedule.run()?;
-    let data = lb.data().lock()?;
-    let data = data.as_ref().unwrap().to_vec::<f32>()?;
+    let data = lb.data_vec::<f32>()?.unwrap();
     assert_eq!(data, [4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0]);
     Ok(())
 }
@@ -91,10 +89,7 @@ fn lb_copy() -> Result<()> {
     let schedule = ug::Schedule::create_one(&lb)?;
     let schedule = schedule.compile()?;
     schedule.run()?;
-    let data = {
-        let d = lb.data().lock()?;
-        d.as_ref().unwrap().to_vec::<f32>()?
-    };
+    let data = lb.data_vec::<f32>()?.unwrap();
     assert_eq!(data, [1.0, 1.5, 2.0, 2.5, 3.0, 3.5]);
 
     {
@@ -108,10 +103,7 @@ fn lb_copy() -> Result<()> {
     }
 
     schedule.run()?;
-    let data = {
-        let d = lb.data().lock()?;
-        d.as_ref().unwrap().to_vec::<f32>()?
-    };
+    let data = lb.data_vec::<f32>()?.unwrap();
     assert_eq!(data, [1.0, 1.0, -3.0, 2.5, 3.0, 0.0]);
 
     Ok(())
@@ -127,8 +119,7 @@ fn schedule_broadcast() -> Result<()> {
     let schedule = ug::Schedule::create_one(&lb)?;
     let schedule = schedule.compile()?;
     schedule.run()?;
-    let data = lb.data().lock()?;
-    let data = data.as_ref().unwrap().to_vec::<f32>()?;
+    let data = lb.data_vec::<f32>()?.unwrap();
     assert_eq!(data, [42., 42., 42., 42., 42., 42., 42., 42., 42., 42.]);
     Ok(())
 }
