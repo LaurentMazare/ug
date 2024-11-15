@@ -100,6 +100,10 @@ impl Block {
         }
     }
 
+    pub fn cst<C: Into<lang::Const>>(&mut self, c: C) -> Id {
+        self.push(SsaI::Const(c.into()))
+    }
+
     pub fn push(&mut self, inst: SsaI) -> Id {
         let id = Id::new();
         self.0.push((id, inst));

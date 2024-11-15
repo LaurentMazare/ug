@@ -246,6 +246,26 @@ impl Dim for usize {
     }
 }
 
+impl Dim for i32 {
+    fn to_index(&self, shape: &Shape, op: &'static str) -> Result<usize> {
+        let dim = *self;
+        if dim >= 0 {
+            (dim as usize).to_index(shape, op)
+        } else {
+            D::Minus((-dim) as usize).to_index(shape, op)
+        }
+    }
+
+    fn to_index_plus_one(&self, shape: &Shape, op: &'static str) -> Result<usize> {
+        let dim = *self;
+        if dim >= 0 {
+            (dim as usize).to_index_plus_one(shape, op)
+        } else {
+            D::Minus((-dim) as usize).to_index_plus_one(shape, op)
+        }
+    }
+}
+
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum D {
     Minus1,

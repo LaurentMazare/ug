@@ -86,7 +86,7 @@ impl IndexFormula {
     fn eval(&self, block: &mut Block) -> Id {
         match self {
             &Self::Id(id) => id,
-            &Self::Const(c) => block.push(SsaI::Const((c as i32).into())),
+            &Self::Const(c) => block.cst(c as i32),
             Self::Add(lhs, rhs) => {
                 let lhs = lhs.eval(block);
                 let rhs = rhs.eval(block);
@@ -97,7 +97,7 @@ impl IndexFormula {
                 block.mul(lhs, *rhs as i32)
             }
             Self::Div(lhs, 1) => lhs.eval(block),
-            Self::Mod(_lhs, 1) => block.push(SsaI::Const(0i32.into())),
+            Self::Mod(_lhs, 1) => block.cst(0i32),
             Self::Div(lhs, rhs) => {
                 let lhs = lhs.eval(block);
                 block.binary(ssa::BinaryOp::Div, lhs, *rhs as i32, DType::I32)
