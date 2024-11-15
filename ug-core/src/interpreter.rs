@@ -78,6 +78,9 @@ impl<T: num::traits::Num + Copy + MinMax, const N: usize> W<T, N> {
     fn div(&self, rhs: &Self) -> Self {
         W(std::array::from_fn(|i| self.0[i] / rhs.0[i]))
     }
+    fn mod_(&self, rhs: &Self) -> Self {
+        W(std::array::from_fn(|i| self.0[i] % rhs.0[i]))
+    }
     fn max(&self, rhs: &Self) -> Self {
         W(std::array::from_fn(|i| T::max(self.0[i], rhs.0[i])))
     }
@@ -331,6 +334,9 @@ pub fn eval_ssa<const N: usize>(
                     (B::Div, Value::F32(v1), Value::F32(v2)) => Value::F32(v1.div(v2)),
                     (B::Div, Value::I32(v1), Value::I32(v2)) => Value::I32(v1.div(v2)),
                     (B::Div, _, _) => crate::bail!("dtype mismatch for {op:?}"),
+                    (B::Mod, Value::F32(v1), Value::F32(v2)) => Value::F32(v1.mod_(v2)),
+                    (B::Mod, Value::I32(v1), Value::I32(v2)) => Value::I32(v1.mod_(v2)),
+                    (B::Mod, _, _) => crate::bail!("dtype mismatch for {op:?}"),
                     (B::Max, Value::F32(v1), Value::F32(v2)) => Value::F32(v1.max(v2)),
                     (B::Max, Value::I32(v1), Value::I32(v2)) => Value::I32(v1.max(v2)),
                     (B::Max, _, _) => crate::bail!("dtype mismatch for {op:?}"),

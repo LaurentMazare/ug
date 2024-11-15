@@ -37,10 +37,77 @@ impl Opts {
     }
 }
 
+// This represents the formula to compute the index based on some variables.
+// The current structure is a pure tree so could result in exponential complexity however formulas
+// are likely to be very simple so probably good to start with? If not we could update this to be a
+// DAG and avoid recomputing the parts that have already been generated.
 #[derive(Debug, Clone)]
-struct IndexFormula {
-    ids: Vec<(Id, usize)>,
-    offset: usize,
+enum IndexFormula {
+    Id(Id),
+    Const(usize),
+    Add(Box<IndexFormula>, Box<IndexFormula>),
+    Mul(Box<IndexFormula>, usize),
+    Div(Box<IndexFormula>, usize),
+    Mod(Box<IndexFormula>, usize),
+}
+
+impl From<Id> for IndexFormula {
+    fn from(value: Id) -> Self {
+        Self::Id(value)
+    }
+}
+
+impl From<usize> for IndexFormula {
+    fn from(value: usize) -> Self {
+        Self::Const(value)
+    }
+}
+
+impl IndexFormula {
+    fn add(self, rhs: Self) -> Self {
+        Self::Add(Box::new(self), Box::new(rhs))
+    }
+
+    #[allow(unused)]
+    fn mul(self, rhs: usize) -> Self {
+        Self::Mul(Box::new(self), rhs)
+    }
+
+    fn div(self, rhs: usize) -> Self {
+        Self::Div(Box::new(self), rhs)
+    }
+
+    fn mod_(self, rhs: usize) -> Self {
+        Self::Mod(Box::new(self), rhs)
+    }
+
+    // TODO: We currently use i32 for indexes, however this prevents numerous compile time
+    // optimizations and it would be better to use u32 and/or u64.
+    fn eval(&self, block: &mut Block) -> Id {
+        match self {
+            &Self::Id(id) => id,
+            &Self::Const(c) => block.push(SsaI::Const((c as i32).into())),
+            Self::Add(lhs, rhs) => {
+                let lhs = lhs.eval(block);
+                let rhs = rhs.eval(block);
+                block.binary(ssa::BinaryOp::Add, lhs, rhs, DType::I32)
+            }
+            Self::Mul(lhs, rhs) => {
+                let lhs = lhs.eval(block);
+                block.mul(lhs, *rhs as i32)
+            }
+            Self::Div(lhs, 1) => lhs.eval(block),
+            Self::Mod(_lhs, 1) => block.push(SsaI::Const(0i32.into())),
+            Self::Div(lhs, rhs) => {
+                let lhs = lhs.eval(block);
+                block.binary(ssa::BinaryOp::Div, lhs, *rhs as i32, DType::I32)
+            }
+            Self::Mod(lhs, rhs) => {
+                let lhs = lhs.eval(block);
+                block.binary(ssa::BinaryOp::Mod, lhs, *rhs as i32, DType::I32)
+            }
+        }
+    }
 }
 
 /// Indexes represent the way to access the local data using the indexes from the top-level call
@@ -65,7 +132,7 @@ impl Indexes {
                     if *dim >= idxs.len() {
                         bail!("unexpected dim for broadcast, {dim} {:?}", shape)
                     }
-                    idxs[*dim] = IndexFormula { ids: vec![], offset: 0 }
+                    idxs[*dim] = 0.into()
                 }
                 for _ in 0..*inserted_dims {
                     idxs.remove(0);
@@ -75,7 +142,7 @@ impl Indexes {
                 if dim >= idxs.len() {
                     bail!("unexpected dim for narrow, {dim} {:?}", shape)
                 }
-                idxs[dim].offset += offset
+                idxs[dim] = idxs[dim].clone().add(offset.into())
             }
             &L::Transpose { dim1, dim2 } => {
                 if dim1 >= idxs.len() || dim2 >= idxs.len() {
@@ -90,8 +157,8 @@ impl Indexes {
                 if lhs >= shape.rank() || rhs >= shape.rank() || lhs == rhs {
                     bail!("unexpected split dims {lhs}x{rhs} dst {shape:?}")
                 }
-                let dims = shape.dims();
-                let (l, r) = if lhs < rhs {
+                let _dims = shape.dims();
+                let (_l, _r) = if lhs < rhs {
                     let rhs = idxs.remove(rhs);
                     let lhs = idxs.remove(lhs);
                     (lhs, rhs)
@@ -102,17 +169,18 @@ impl Indexes {
                 };
                 // Split can only be handled if the opposite merge uses the C layout
                 // convention. Otherwise a full reshape copying the data is done.
-                let can_lower_split = l.offset == 0
-                    && (dims[lhs] == 1
-                        || dims[rhs] == 1
-                        || l.ids
-                            .iter()
-                            .zip(r.ids.iter())
-                            .all(|(l, r)| l.0 == r.0 || l.1 * dims[rhs] == r.1));
-                if !can_lower_split {
-                    bail!("cannot lower split dims {dims:?} {dim} -> {lhs}x{rhs} {l:?} {r:?} {dims:?}")
-                }
-                idxs.insert(dim, IndexFormula { ids: r.ids, offset: r.offset })
+                // let can_lower_split = l.offset == 0
+                //     && (dims[lhs] == 1
+                //         || dims[rhs] == 1
+                //         || l.ids
+                //             .iter()
+                //             .zip(r.ids.iter())
+                //             .all(|(l, r)| l.0 == r.0 || l.1 * dims[rhs] == r.1));
+                // if !can_lower_split {
+                //     bail!("cannot lower split dims {dims:?} {dim} -> {lhs}x{rhs} {l:?} {r:?} {dims:?}")
+                // }
+                // idxs.insert(dim, IndexFormula { ids: r.ids, offset: r.offset })
+                bail!("TODO implement SplitDim")
             }
             &L::MergeDims { dim, lhs, rhs } => {
                 if dim >= shape.rank() {
@@ -122,36 +190,22 @@ impl Indexes {
                     bail!("unexpected merge dims {lhs}x{rhs} src {arg_shape:?}")
                 }
                 let arg_dims = arg_shape.dims();
-                let IndexFormula { ids, offset } = idxs.remove(dim);
-                let (lhs_offset, rhs_offset) = (0, offset);
-                let lhs_ids = if arg_dims[lhs] <= 1 {
-                    vec![]
-                } else {
-                    // Use the C layout convention, lhs is on the left side so its stride
-                    // is multiplied by the size of rhs.
-                    ids.iter().map(|v| (v.0, v.1 * arg_dims[rhs])).collect()
-                };
-                let rhs_ids = if arg_dims[rhs] <= 1 {
-                    vec![]
-                } else {
-                    ids.iter().map(|v| (v.0, v.1)).collect()
-                };
+                let idx = idxs.remove(dim);
+                // Use the C layout convention, lhs is on the left side so its stride
+                // is multiplied by the size of rhs.
+                let lhs_idx =
+                    if arg_dims[lhs] <= 1 { 0.into() } else { idx.clone().div(arg_dims[rhs]) };
+                let rhs_idx = if arg_dims[rhs] <= 1 { 0.into() } else { idx.mod_(arg_dims[rhs]) };
                 if lhs < rhs {
-                    idxs.insert(lhs, IndexFormula { ids: lhs_ids, offset: lhs_offset });
-                    idxs.insert(rhs, IndexFormula { ids: rhs_ids, offset: rhs_offset });
+                    idxs.insert(lhs, lhs_idx);
+                    idxs.insert(rhs, rhs_idx);
                 } else {
-                    idxs.insert(rhs, IndexFormula { ids: rhs_ids, offset: rhs_offset });
-                    idxs.insert(lhs, IndexFormula { ids: lhs_ids, offset: lhs_offset });
+                    idxs.insert(rhs, rhs_idx);
+                    idxs.insert(lhs, lhs_idx);
                 }
             }
         };
         Ok(Self(idxs))
-    }
-}
-
-impl From<Id> for IndexFormula {
-    fn from(value: Id) -> Self {
-        Self { ids: vec![(value, 1)], offset: 0 }
     }
 }
 
@@ -161,25 +215,22 @@ impl lang::op::Layout {
         if idxs.0.len() != strides.len() {
             bail!("len mismatch between strides {self:?} and idxs {idxs:?}")
         }
-        let off: usize = idxs.0.iter().zip(strides.iter()).map(|(idx, s)| idx.offset * *s).sum();
-        let off = (self.offset() + off) as i32;
         let mut acc_id = None;
         let mut block = Block::empty();
         for (idx, &stride) in idxs.0.iter().zip(strides.iter()) {
-            for (id, m) in idx.ids.iter() {
-                let dim_id = block.mul(*id, (stride * m) as i32);
-                let new_id = match acc_id {
-                    Some(acc_id) => block.binary(ssa::BinaryOp::Add, dim_id, acc_id, DType::I32),
-                    None => block.add(dim_id, off),
-                };
-                acc_id = Some(new_id)
-            }
+            let dim_id = idx.eval(&mut block);
+            let dim_id = block.mul(dim_id, stride as i32);
+            let new_id = match acc_id {
+                Some(acc_id) => block.binary(ssa::BinaryOp::Add, dim_id, acc_id, DType::I32),
+                None => dim_id,
+            };
+            acc_id = Some(new_id)
         }
         match acc_id {
             Some(acc_id) => Ok((acc_id, block)),
             None => {
                 let acc_id = Id::new();
-                let block = Block::new(vec![(acc_id, SsaI::Const(off.into()))]);
+                let block = Block::new(vec![(acc_id, SsaI::Const(0i32.into()))]);
                 Ok((acc_id, block))
             }
         }

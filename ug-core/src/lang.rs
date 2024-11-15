@@ -26,6 +26,7 @@ pub enum BinaryOp {
     Sub,
     Mul,
     Div,
+    Mod,
     Min,
     Max,
 }
@@ -39,6 +40,7 @@ impl BinaryOp {
             Self::Div => "div",
             Self::Min => "min",
             Self::Max => "max",
+            Self::Mod => "mod",
         }
     }
 }
