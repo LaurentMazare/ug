@@ -383,16 +383,16 @@ impl Attention {
     // We use a mutable cache rather than returning an updated value. This makes the function
     // signatures slightly simpler but introduces more mutability.
     fn fwd(&self, xs: &LB, r: &Rope, pos: &LB, cache: &mut Cache) -> Result<LB> {
-        let (b_sz, seq_len, _hidden_size) = xs.shape().dims3()?;
+        let (_b_sz, seq_len, _hidden_size) = xs.shape().dims3()?;
         let q = self.q_proj.fwd(xs)?;
         let k = self.k_proj.fwd(xs)?;
         let v = self.v_proj.fwd(xs)?;
 
-        let q = q.reshape((b_sz, seq_len, self.num_heads, self.head_dim))?;
+        let q = q.split_dim(2, self.num_heads, self.head_dim)?;
         let q = q.transpose(2, 1)?;
-        let k = k.reshape((b_sz, seq_len, self.num_kv_heads, self.head_dim))?;
+        let k = k.split_dim(2, self.num_kv_heads, self.head_dim)?;
         let k = k.transpose(2, 1)?;
-        let v = v.reshape((b_sz, seq_len, self.num_kv_heads, self.head_dim))?;
+        let v = v.split_dim(2, self.num_kv_heads, self.head_dim)?;
         let v = v.transpose(2, 1)?;
 
         let q = if self.rope_interleaved {

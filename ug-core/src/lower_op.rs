@@ -157,8 +157,8 @@ impl Indexes {
                 if lhs >= shape.rank() || rhs >= shape.rank() || lhs == rhs {
                     bail!("unexpected split dims {lhs}x{rhs} dst {shape:?}")
                 }
-                let _dims = shape.dims();
-                let (_l, _r) = if lhs < rhs {
+                let dims = shape.dims();
+                let (l, r) = if lhs < rhs {
                     let rhs = idxs.remove(rhs);
                     let lhs = idxs.remove(lhs);
                     (lhs, rhs)
@@ -167,20 +167,7 @@ impl Indexes {
                     let rhs = idxs.remove(rhs);
                     (lhs, rhs)
                 };
-                // Split can only be handled if the opposite merge uses the C layout
-                // convention. Otherwise a full reshape copying the data is done.
-                // let can_lower_split = l.offset == 0
-                //     && (dims[lhs] == 1
-                //         || dims[rhs] == 1
-                //         || l.ids
-                //             .iter()
-                //             .zip(r.ids.iter())
-                //             .all(|(l, r)| l.0 == r.0 || l.1 * dims[rhs] == r.1));
-                // if !can_lower_split {
-                //     bail!("cannot lower split dims {dims:?} {dim} -> {lhs}x{rhs} {l:?} {r:?} {dims:?}")
-                // }
-                // idxs.insert(dim, IndexFormula { ids: r.ids, offset: r.offset })
-                bail!("TODO implement SplitDim")
+                idxs.insert(dim, l.mul(dims[rhs]).add(r))
             }
             &L::MergeDims { dim, lhs, rhs } => {
                 if dim >= shape.rank() {
