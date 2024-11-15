@@ -424,7 +424,9 @@ impl Attention {
 
         // final proj
         let xs = xs.transpose(2, 1)?;
-        let xs = xs.merge_dims(D::Minus2)?;
+        // TODO: once merge_dims has been fixed, use the following.
+        // let xs = xs.merge_dims(D::Minus2)?;
+        let xs = xs.reshape((b_sz, seq_len, self.num_heads * self.head_dim))?;
         let xs = self.o_proj.fwd(&xs)?;
         Ok(xs)
     }
