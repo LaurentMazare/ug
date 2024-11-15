@@ -1,5 +1,5 @@
 use rand::prelude::*;
-use ug::{CpuDevice, Error, Result, Slice};
+use ug::{CpuDevice, Error, Result};
 
 mod custom;
 mod model;
@@ -101,11 +101,7 @@ fn main() -> Result<()> {
         let start_time = std::time::Instant::now();
         schedule.run()?;
         let dt_run = start_time.elapsed();
-        let prs = {
-            let data = tensor.data().lock().unwrap();
-            let data = data.as_ref().unwrap();
-            data.to_vec::<f32>()?
-        };
+        let prs = tensor.data_vec::<f32>()?.unwrap();
         let dist = rand_distr::WeightedIndex::new(prs).map_err(Error::wrap)?;
         last_token = dist.sample(&mut rng) as u32;
         let token = tokenizer.id_to_token(last_token);
