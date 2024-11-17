@@ -7,6 +7,7 @@ type Args<D> = Vec<(ArgId, LazyBuffer<D>)>;
 pub struct KernelItem<D: Device> {
     ast: Ast,
     dst: (ArgId, LazyBuffer<D>),
+    dst_layout: Option<Layout>,
     args: Args<D>,
 }
 
@@ -28,7 +29,10 @@ impl<D: Device> KernelItem<D> {
             .iter()
             .map(|(id, lb)| op::Arg::new(*id, crate::lang::Type::Ptr(lb.dtype())))
             .collect::<Vec<_>>();
-        let dst_layout = Layout::from_shape(dst.1.shape());
+        let dst_layout = match &self.dst_layout {
+            None => Layout::from_shape(dst.1.shape()),
+            Some(l) => l.clone(),
+        };
         let sto = op::store(dst.0, dst_layout, ast.clone())?;
         let kernel = op::Kernel::new(format!("realize_{:?}", dst.1.id()), args, vec![sto]);
         Ok(kernel)
@@ -361,10 +365,10 @@ impl<D: Device> Context<D> {
                     self.items.push(ScheduleItem::Ssa { ssa: ssa.clone(), args });
                     crate::lang::op::load(dst_id, Layout::from_shape(shape), dtype)?
                 }
-                Op::Set { values, src } => {
+                Op::Set { values, src, dst_layout } => {
                     let arg_id = self.push_schedule_item(src)?;
                     let values = self.walk(values)?;
-                    self.push_kernel(src, values)?;
+                    self.push_kernel(src, values, Some(dst_layout.clone()))?;
                     crate::lang::op::load(arg_id, Layout::from_shape(shape), dtype)?
                 }
                 Op::CustomIp { f, args: b_args, src } => {
@@ -394,7 +398,7 @@ impl<D: Device> Context<D> {
         };
         // When a subtree appears multiple times in the ast, generate a dedicated kernel.
         let ast = if self.id_cnts.get(&id).copied().unwrap_or(0) > 1 {
-            let dst_id = self.push_kernel(b, ast)?;
+            let dst_id = self.push_kernel(b, ast, None)?;
             crate::lang::op::load(dst_id, Layout::from_shape(shape), dtype)?
         } else {
             ast
@@ -403,7 +407,12 @@ impl<D: Device> Context<D> {
         Ok(ast)
     }
 
-    fn push_kernel(&mut self, buffer: &LazyBuffer<D>, ast: Ast) -> Result<ArgId> {
+    fn push_kernel(
+        &mut self,
+        buffer: &LazyBuffer<D>,
+        ast: Ast,
+        dst_layout: Option<Layout>,
+    ) -> Result<ArgId> {
         if let crate::lang::op::AstInner::Load { src: src_arg_id, .. } = ast.inner.as_ref() {
             let src = self.get_arg_id(*src_arg_id)?;
             if std::ptr::eq(src.data(), buffer.data()) {
@@ -424,14 +433,14 @@ impl<D: Device> Context<D> {
                 Ok((arg_id, arg.clone()))
             })
             .collect::<Result<Vec<_>>>()?;
-        let si = KernelItem { ast, dst: (dst_id, buffer.clone()), args };
+        let si = KernelItem { ast, dst: (dst_id, buffer.clone()), args, dst_layout };
         self.items.push(ScheduleItem::Kernel(si));
         Ok(dst_id)
     }
 
     fn push_schedule_item(&mut self, buffer: &LazyBuffer<D>) -> Result<ArgId> {
         let ast = self.walk(buffer)?;
-        self.push_kernel(buffer, ast)
+        self.push_kernel(buffer, ast, None)
     }
 }
 
@@ -459,7 +468,7 @@ fn id_cnts<D: Device>(
         Op::Reshape(arg) | Op::Layout(_, arg) | Op::Reduce(_, arg, _) | Op::Unary(_, arg) => {
             id_cnts(arg, cnts)?
         }
-        Op::Set { src: arg1, values: arg2 }
+        Op::Set { src: arg1, values: arg2, dst_layout: _ }
         | Op::MatMul(arg1, arg2, _, _)
         | Op::Binary(_, arg1, arg2) => {
             id_cnts(arg1, cnts)?;

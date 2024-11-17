@@ -78,6 +78,7 @@ pub enum Op<D: Device> {
     Set {
         values: LazyBuffer<D>,
         src: LazyBuffer<D>,
+        dst_layout: crate::Layout,
     },
 }
 
@@ -333,10 +334,11 @@ impl<D: Device> LazyBuffer<D> {
         if self.dtype != values.dtype {
             bail!("dtype mismatch in set, {:?} vs {:?}", self.dtype, values.dtype)
         }
+        let dst_layout = crate::Layout::from_shape(self.shape());
         let inner = LazyBufferInner {
             id: Id::new(),
             data: self.data.clone(),
-            op: Op::Set { values, src: self.clone() },
+            op: Op::Set { values, src: self.clone(), dst_layout },
             dtype: self.dtype,
             device: self.device.clone(),
             shape: self.shape.clone(),
