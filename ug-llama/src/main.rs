@@ -1,16 +1,27 @@
-use model::Device;
 use rand::prelude::*;
 use ug::{Error, Result};
 
+mod cpu_ops;
 mod custom;
 mod model;
-use model::{Cache, Model, LB};
+use model::{Cache, Model};
+
+pub type LB<D> = ug::LazyBuffer<D>;
+pub type ST = ug::safetensors::MmapedSafetensors;
 
 #[allow(unused)]
 const UNK_TOKEN: u32 = 0;
 const BOS_TOKEN: u32 = 1;
 #[allow(unused)]
 const EOS_TOKEN: u32 = 2;
+
+pub trait Device: ug::Device {
+    fn rope_i(src: &LB<Self>, cos: &LB<Self>, sin: &LB<Self>, pos: &LB<Self>) -> Result<LB<Self>>;
+    fn rope(src: &LB<Self>, cos: &LB<Self>, sin: &LB<Self>, pos: &LB<Self>) -> Result<LB<Self>>;
+    fn cat(lhs: &LB<Self>, rhs: &LB<Self>, axis: usize) -> Result<LB<Self>>;
+    fn custom_softmax(src: &LB<Self>) -> Result<LB<Self>>;
+    fn causal_mask(src: &LB<Self>) -> Result<LB<Self>>;
+}
 
 #[derive(Clone, Debug, Copy, PartialEq, Eq, clap::ValueEnum)]
 enum Which {
