@@ -227,3 +227,24 @@ fn lb_custom_in_place() -> Result<()> {
     assert_eq!(data, [6., 3., -5., 9., 10., 1.]);
     Ok(())
 }
+
+#[test]
+fn lb_set() -> Result<()> {
+    let cpu = ug::CpuDevice;
+    let shape = (2, 3);
+    let buf = [0f32, 1f32, 2f32, 3f32, 4f32, 5f32].as_slice();
+    let dst_lb = LB::copy(buf, shape, &cpu)?;
+    let src_lb = dst_lb.binary(ug::lang::BinaryOp::Mul, dst_lb.clone())?;
+    src_lb.realize()?;
+    let data = src_lb.data_vec::<f32>()?.unwrap();
+    assert_eq!(data, [0.0, 1.0, 4.0, 9.0, 16.0, 25.0]);
+    let data = dst_lb.data_vec::<f32>()?.unwrap();
+    assert_eq!(data, [0., 1., 2., 3., 4., 5.]);
+    let dst_lb = dst_lb.set(src_lb)?;
+    // TODO: the current behavior is very error prone as if realize is not called, the
+    // 'set' op is not executed and the data is not modified.
+    dst_lb.realize()?;
+    let data = dst_lb.data_vec::<f32>()?.unwrap();
+    assert_eq!(data, [0.0, 1.0, 4.0, 9.0, 16.0, 25.0]);
+    Ok(())
+}

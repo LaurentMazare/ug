@@ -73,6 +73,12 @@ pub enum Op<D: Device> {
         ssa: crate::lang::ssa::Kernel,
         args: Vec<LazyBuffer<D>>,
     },
+    /// Set the data from src using data from values. The LazyBuffer is shared between self and
+    /// src.
+    Set {
+        values: LazyBuffer<D>,
+        src: LazyBuffer<D>,
+    },
 }
 
 pub struct LazyBuffer<D: Device>(Arc<LazyBufferInner<D>>);
@@ -127,13 +133,29 @@ impl<D: Device> LazyBuffer<D> {
         &self.op
     }
 
+    pub fn in_place_op(&self) -> bool {
+        match self.op {
+            Op::CustomIp { .. } | Op::Set { .. } => true,
+            Op::Ssa { .. }
+            | Op::Unary(_, _)
+            | Op::Const(_)
+            | Op::Value
+            | Op::Binary(_, _, _)
+            | Op::MatMul(_, _, _, _)
+            | Op::Reduce(_, _, _)
+            | Op::Layout(_, _)
+            | Op::Reshape(_)
+            | Op::Custom { .. } => false,
+        }
+    }
+
     pub fn realized(&self) -> Result<bool> {
         let data = self.data.try_borrow()?;
         Ok(data.is_some())
     }
 
     pub fn realize(&self) -> Result<()> {
-        if self.realized()? {
+        if self.realized()? && !self.in_place_op() {
             return Ok(());
         }
         let schedule = crate::Schedule::create_one(self)?;
@@ -284,6 +306,7 @@ impl<D: Device> LazyBuffer<D> {
         Ok(lb)
     }
 
+    /// Applies a custom in-place operation.
     pub fn custom_ip<F: 'static + Fn(Vec<&mut D::Slice>) -> Result<()>>(
         &self,
         f: F,
@@ -294,6 +317,26 @@ impl<D: Device> LazyBuffer<D> {
             id: Id::new(),
             data: self.data.clone(),
             op: Op::CustomIp { f, args, src: self.clone() },
+            dtype: self.dtype,
+            device: self.device.clone(),
+            shape: self.shape.clone(),
+        };
+        let lb = LazyBuffer(Arc::new(inner));
+        Ok(lb)
+    }
+
+    /// Sets self using data from values.
+    pub fn set(&self, values: Self) -> Result<Self> {
+        if self.shape != values.shape {
+            bail!("shape mismatch in set, {:?} vs {:?}", self.shape, values.shape)
+        }
+        if self.dtype != values.dtype {
+            bail!("dtype mismatch in set, {:?} vs {:?}", self.dtype, values.dtype)
+        }
+        let inner = LazyBufferInner {
+            id: Id::new(),
+            data: self.data.clone(),
+            op: Op::Set { values, src: self.clone() },
             dtype: self.dtype,
             device: self.device.clone(),
             shape: self.shape.clone(),

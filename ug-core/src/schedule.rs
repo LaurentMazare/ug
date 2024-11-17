@@ -300,7 +300,7 @@ impl<D: Device> Context<D> {
 
         let dtype = b.dtype();
         let shape = b.shape();
-        let ast = if b.realized()? && !matches!(b.op(), Op::CustomIp { .. }) {
+        let ast = if b.realized()? && !b.in_place_op() {
             let arg_id = ArgId::new();
             self.per_arg_id.insert(arg_id, b.clone());
             crate::lang::op::load(arg_id, Layout::from_shape(shape), dtype)?
@@ -360,6 +360,12 @@ impl<D: Device> Context<D> {
                     args.push((dst_id, b.clone()));
                     self.items.push(ScheduleItem::Ssa { ssa: ssa.clone(), args });
                     crate::lang::op::load(dst_id, Layout::from_shape(shape), dtype)?
+                }
+                Op::Set { values, src } => {
+                    let arg_id = self.push_schedule_item(src)?;
+                    let values = self.walk(values)?;
+                    self.push_kernel(src, values)?;
+                    crate::lang::op::load(arg_id, Layout::from_shape(shape), dtype)?
                 }
                 Op::CustomIp { f, args: b_args, src } => {
                     let mut args = Vec::with_capacity(b_args.len() + 1);
@@ -438,7 +444,7 @@ fn id_cnts<D: Device>(
 ) -> Result<()> {
     use crate::lazy_buffer::Op;
 
-    if b.realized()? && !matches!(b.op(), Op::CustomIp { .. }) {
+    if b.realized()? && !b.in_place_op() {
         return Ok(());
     }
 
@@ -453,7 +459,9 @@ fn id_cnts<D: Device>(
         Op::Reshape(arg) | Op::Layout(_, arg) | Op::Reduce(_, arg, _) | Op::Unary(_, arg) => {
             id_cnts(arg, cnts)?
         }
-        Op::MatMul(arg1, arg2, _, _) | Op::Binary(_, arg1, arg2) => {
+        Op::Set { src: arg1, values: arg2 }
+        | Op::MatMul(arg1, arg2, _, _)
+        | Op::Binary(_, arg1, arg2) => {
             id_cnts(arg1, cnts)?;
             id_cnts(arg2, cnts)?;
         }
