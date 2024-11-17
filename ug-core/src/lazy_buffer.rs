@@ -347,6 +347,23 @@ impl<D: Device> LazyBuffer<D> {
         Ok(lb)
     }
 
+    pub fn set_l(&self, values: Self, dst_layout: crate::Layout) -> Result<Self> {
+        // TODO: validate dst_layout with self.shape
+        if self.dtype != values.dtype {
+            bail!("dtype mismatch in set, {:?} vs {:?}", self.dtype, values.dtype)
+        }
+        let inner = LazyBufferInner {
+            id: Id::new(),
+            data: self.data.clone(),
+            op: Op::Set { values, src: self.clone(), dst_layout },
+            dtype: self.dtype,
+            device: self.device.clone(),
+            shape: self.shape.clone(),
+        };
+        let lb = LazyBuffer(Arc::new(inner));
+        Ok(lb)
+    }
+
     pub fn ssa<S: Into<Shape>>(
         ssa: crate::lang::ssa::Kernel,
         args: Vec<Self>,
