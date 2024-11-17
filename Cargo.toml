@@ -2,6 +2,7 @@
 members = [
   "ug-core",
   "ug-cuda",
+  "ug-llama",
   "ug-metal",
   "ug-pyo3",
 ]
