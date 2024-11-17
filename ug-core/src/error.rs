@@ -13,6 +13,12 @@ pub enum Error {
     FromUtf8(#[from] std::string::FromUtf8Error),
 
     #[error(transparent)]
+    BorrowMutError(#[from] std::cell::BorrowMutError),
+
+    #[error(transparent)]
+    BorrowError(#[from] std::cell::BorrowError),
+
+    #[error(transparent)]
     LibLoading(#[from] libloading::Error),
 
     /// Arbitrary errors wrapping.

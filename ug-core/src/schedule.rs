@@ -79,7 +79,7 @@ impl<D: Device> Schedule<D> {
         };
         let mut cnts = HashMap::new();
         for buffer in buffers.iter() {
-            id_cnts(buffer, &mut cnts)
+            id_cnts(buffer, &mut cnts)?
         }
         let mut context = Context::new(cnts);
         for &buffer in buffers.iter() {
@@ -208,17 +208,16 @@ impl<D: Device> CompiledSchedule<D> {
                 Func::Kernel { func, args } => {
                     let _guard = span_k.enter();
                     // Should we do some deadlock detection?
-                    let mut locks = args
+                    let mut bs = args
                         .iter()
                         .map(|(_id, lb)| {
                             unsafe { lb.maybe_allocate_uninit()? };
-                            let lock = lb.data().lock()?;
-                            Ok(lock)
+                            let b = lb.data().try_borrow_mut()?;
+                            Ok(b)
                         })
                         .collect::<Result<Vec<_>>>()?;
-                    let mut locks =
-                        locks.iter_mut().map(|v| v.as_mut().unwrap()).collect::<Vec<_>>();
-                    self.device.run(func, &mut locks)?
+                    let mut bs = bs.iter_mut().map(|b| b.as_mut().unwrap()).collect::<Vec<_>>();
+                    self.device.run(func, &mut bs)?
                 }
                 Func::MatMul { dst, lhs, rhs, bmnk, transpose } => {
                     let _guard = span_mm.enter();
@@ -245,26 +244,26 @@ impl<D: Device> CompiledSchedule<D> {
                     unsafe { dst.maybe_allocate_uninit()? };
                     unsafe { lhs.maybe_allocate_uninit()? };
                     unsafe { rhs.maybe_allocate_uninit()? };
-                    let mut dst = dst.data().lock()?;
+                    let mut dst = dst.data().try_borrow_mut()?;
                     let dst = dst.as_mut().unwrap();
-                    let lhs = lhs.data().lock()?;
+                    let lhs = lhs.data().try_borrow()?;
                     let lhs = lhs.as_ref().unwrap();
-                    let rhs = rhs.data().lock()?;
+                    let rhs = rhs.data().try_borrow()?;
                     let rhs = rhs.as_ref().unwrap();
                     self.device.matmul(dst, lhs, rhs, *bmnk, &lhs_l, &rhs_l)?;
                 }
                 Func::Custom { f, args } => {
                     let _guard = span_custom.enter();
-                    let mut locks = args
+                    let mut bs = args
                         .iter()
                         .map(|(_id, lb)| {
                             unsafe { lb.maybe_allocate_uninit()? };
-                            let lock = lb.data().lock()?;
-                            Ok(lock)
+                            let b = lb.data().try_borrow_mut()?;
+                            Ok(b)
                         })
                         .collect::<Result<Vec<_>>>()?;
-                    let locks = locks.iter_mut().map(|v| v.as_mut().unwrap()).collect::<Vec<_>>();
-                    f(locks)?;
+                    let bs = bs.iter_mut().map(|v| v.as_mut().unwrap()).collect::<Vec<_>>();
+                    f(bs)?;
                 }
             }
         }
@@ -301,7 +300,7 @@ impl<D: Device> Context<D> {
 
         let dtype = b.dtype();
         let shape = b.shape();
-        let ast = if b.realized() && !matches!(b.op(), Op::CustomIp { .. }) {
+        let ast = if b.realized()? && !matches!(b.op(), Op::CustomIp { .. }) {
             let arg_id = ArgId::new();
             self.per_arg_id.insert(arg_id, b.clone());
             crate::lang::op::load(arg_id, Layout::from_shape(shape), dtype)?
@@ -433,38 +432,42 @@ impl<D: Device> Context<D> {
 /// Return the number of uses for each buffer that is reachable from b. The number of uses can be
 /// either 1 or 2 for the case where the buffer is used twice or more.
 /// Note that realized nodes stop the propagation.
-fn id_cnts<D: Device>(b: &LazyBuffer<D>, cnts: &mut HashMap<crate::lazy_buffer::Id, usize>) {
+fn id_cnts<D: Device>(
+    b: &LazyBuffer<D>,
+    cnts: &mut HashMap<crate::lazy_buffer::Id, usize>,
+) -> Result<()> {
     use crate::lazy_buffer::Op;
 
-    if b.realized() && !matches!(b.op(), Op::CustomIp { .. }) {
-        return;
+    if b.realized()? && !matches!(b.op(), Op::CustomIp { .. }) {
+        return Ok(());
     }
 
     let id = b.id();
     let cnt = cnts.entry(id).or_insert(0);
     *cnt += 1;
     if *cnt > 1 {
-        return;
+        return Ok(());
     }
     match b.op() {
         Op::Value | Op::Const(_) => {}
         Op::Reshape(arg) | Op::Layout(_, arg) | Op::Reduce(_, arg, _) | Op::Unary(_, arg) => {
-            id_cnts(arg, cnts)
+            id_cnts(arg, cnts)?
         }
         Op::MatMul(arg1, arg2, _, _) | Op::Binary(_, arg1, arg2) => {
-            id_cnts(arg1, cnts);
-            id_cnts(arg2, cnts);
+            id_cnts(arg1, cnts)?;
+            id_cnts(arg2, cnts)?;
         }
         Op::CustomIp { f: _, args, src } => {
             for arg in args.iter() {
-                id_cnts(arg, cnts);
+                id_cnts(arg, cnts)?;
             }
-            id_cnts(src, cnts)
+            id_cnts(src, cnts)?
         }
         Op::Ssa { ssa: _, args } | Op::Custom { f: _, args } => {
             for arg in args.iter() {
-                id_cnts(arg, cnts);
+                id_cnts(arg, cnts)?
             }
         }
     }
+    Ok(())
 }

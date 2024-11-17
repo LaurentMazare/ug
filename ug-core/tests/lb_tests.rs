@@ -93,7 +93,7 @@ fn lb_copy() -> Result<()> {
     assert_eq!(data, [1.0, 1.5, 2.0, 2.5, 3.0, 3.5]);
 
     {
-        let mut data = lhs.data().lock().unwrap();
+        let mut data = lhs.data().try_borrow_mut()?;
         let data = data.as_mut().unwrap();
         if let ug::CpuStorage::F32(vs) = data {
             vs[1] = 0.;
@@ -147,7 +147,7 @@ fn lb_custom() -> Result<()> {
     assert_eq!(data, [2., 4., 6., 8., 10., 12.]);
 
     {
-        let mut data = buf_lb.data().lock().unwrap();
+        let mut data = buf_lb.data().try_borrow_mut()?;
         let data = data.as_mut().unwrap();
         if let ug::CpuStorage::F32(vs) = data {
             vs[1] = 0.;
@@ -209,14 +209,11 @@ fn lb_custom_in_place() -> Result<()> {
     let schedule = ug::Schedule::create_one(&lb)?;
     let schedule = schedule.compile()?;
     schedule.run()?;
-    let data = {
-        let d = lb.data().lock()?;
-        d.as_ref().unwrap().to_vec::<f32>()?
-    };
+    let data = lb.data_vec::<f32>()?.unwrap();
     assert_eq!(data, [3., 4., 5., 6., 7., 8.]);
 
     {
-        let mut data = lb.data().lock().unwrap();
+        let mut data = lb.data().try_borrow_mut()?;
         let data = data.as_mut().unwrap();
         if let ug::CpuStorage::F32(vs) = data {
             vs[1] = 0.;
@@ -226,10 +223,7 @@ fn lb_custom_in_place() -> Result<()> {
     }
 
     schedule.run()?;
-    let data = {
-        let d = lb.data().lock()?;
-        d.as_ref().unwrap().to_vec::<f32>()?
-    };
+    let data = lb.data_vec::<f32>()?.unwrap();
     assert_eq!(data, [6., 3., -5., 9., 10., 1.]);
     Ok(())
 }
