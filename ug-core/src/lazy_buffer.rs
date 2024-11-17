@@ -1,4 +1,4 @@
-use crate::{Const, DType, Device, Dim, Result, Shape};
+use crate::{bail, Const, DType, Device, Dim, Result, Shape};
 use std::sync::{Arc, Mutex};
 
 type Callback<S> = Arc<dyn Fn(Vec<&mut S>) -> Result<()>>;
@@ -217,7 +217,12 @@ impl<D: Device> LazyBuffer<D> {
     }
 
     pub fn binary(&self, op: crate::lang::BinaryOp, rhs: Self) -> Result<Self> {
-        // TODO: dtype/op/shape checks.
+        if self.shape != rhs.shape {
+            bail!("shape mismatch in {op:?}, {:?} vs {:?}", self.shape, rhs.shape)
+        }
+        if self.dtype != rhs.dtype {
+            bail!("dtype mismatch in {op:?}, {:?} vs {:?}", self.dtype, rhs.dtype)
+        }
         let inner = LazyBufferInner {
             id: Id::new(),
             data: Arc::new(Mutex::new(None)),
@@ -316,7 +321,7 @@ impl<D: Device> LazyBuffer<D> {
         let rdim = rhs_dims.len();
 
         if dim < 2 || rdim < 2 {
-            crate::bail!("shape mismatch in matmul {lhs_dims:?} {rhs_dims:?}")
+            bail!("shape mismatch in matmul {lhs_dims:?} {rhs_dims:?}")
         }
 
         let m = lhs_dims[dim - 2];
@@ -330,7 +335,7 @@ impl<D: Device> LazyBuffer<D> {
         let lhs_bsz: usize = lhs_dims[..dim - 2].iter().product();
         let rhs_bsz: usize = rhs_dims[..rdim - 2].iter().product();
         if k != k2 || lhs_bsz != rhs_bsz {
-            crate::bail!("shape mismatch in matmul {lhs_dims:?} {rhs_dims:?}")
+            bail!("shape mismatch in matmul {lhs_dims:?} {rhs_dims:?}")
         }
         let bmnk = (lhs_bsz, m, n, k);
         let mut shape = lhs_dims[..dim - 2].to_vec();
@@ -374,7 +379,7 @@ impl<D: Device> LazyBuffer<D> {
         let mut dims = self.dims().to_vec();
         let size = dims.remove(dim);
         if size1 * size2 != size {
-            crate::bail!("unexpected target sizes for split_dim {dim}, {size1}x{size2} != {size}",)
+            bail!("unexpected target sizes for split_dim {dim}, {size1}x{size2} != {size}",)
         }
         dims.insert(dim, size2);
         dims.insert(dim, size1);
@@ -395,7 +400,7 @@ impl<D: Device> LazyBuffer<D> {
         use crate::lang::op::LayoutOp::MergeDims;
         let dim = dim.to_index(self.shape(), "split_dim")?;
         if dim + 1 >= self.rank() {
-            crate::bail!("unexpected dim for merge_dims {dim} {:?}", self.shape())
+            bail!("unexpected dim for merge_dims {dim} {:?}", self.shape())
         }
         let mut dims = self.dims().to_vec();
         let size_p = dims.remove(dim + 1);
@@ -417,7 +422,7 @@ impl<D: Device> LazyBuffer<D> {
         let dst_nel = s.num_elements();
         let src_nel = self.shape().num_elements();
         if dst_nel != src_nel {
-            crate::bail!(
+            bail!(
                 "cannot reshape between {:?} ({src_nel} elts) and {s:?} ({dst_nel} elts)",
                 self.shape()
             )
@@ -437,10 +442,7 @@ impl<D: Device> LazyBuffer<D> {
     pub fn broadcast<S: Into<Shape>>(&self, s: S) -> Result<Self> {
         let s: Shape = s.into();
         if self.shape().rank() > s.rank() {
-            crate::bail!(
-                "target shape {s:?} has less dimensions than original shape {:?}",
-                self.shape()
-            )
+            bail!("target shape {s:?} has less dimensions than original shape {:?}", self.shape())
         }
         let inserted_dims = s.rank() - self.shape().rank();
         let mut broadcasted_dims = (0..inserted_dims).collect::<Vec<_>>();
@@ -450,7 +452,7 @@ impl<D: Device> LazyBuffer<D> {
                 if dim_len == 1 {
                     broadcasted_dims.push(dim_idx)
                 } else {
-                    crate::bail!("cannot broadcast from {:?} to {s:?}", self.shape)
+                    bail!("cannot broadcast from {:?} to {s:?}", self.shape)
                 }
             }
         }
@@ -495,7 +497,7 @@ impl<D: Device> LazyBuffer<D> {
         device: &D,
     ) -> Result<Self> {
         let c: Const = match c.try_into() {
-            Err(_) => crate::bail!("unable to create const for {c:?}"),
+            Err(_) => bail!("unable to create const for {c:?}"),
             Ok(v) => v,
         };
         let s: Shape = s.into();
@@ -518,7 +520,7 @@ impl<D: Device> LazyBuffer<D> {
         let device = data.device().clone();
         let dtype = data.dtype();
         if s.num_elements() != data.len() {
-            crate::bail!("unexpected number of elements {} for shape {s:?}", data.len())
+            bail!("unexpected number of elements {} for shape {s:?}", data.len())
         }
         let inner = LazyBufferInner {
             id: Id::new(),
@@ -544,7 +546,7 @@ impl<D: Device> LazyBuffer<D> {
         let data: crate::CpuStorageRef<'a> = data.into();
         let s: Shape = s.into();
         if s.num_elements() != data.len() {
-            crate::bail!("unexpected number of elements {} for shape {s:?}", data.len())
+            bail!("unexpected number of elements {} for shape {s:?}", data.len())
         }
         let dtype = data.dtype();
         let mut slice = unsafe { device.allocate_uninit(dtype, data.len()) }?;
