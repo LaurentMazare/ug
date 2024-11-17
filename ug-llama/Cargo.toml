@@ -10,6 +10,7 @@ license.workspace = true
 
 [dependencies]
 clap = { workspace = true }
+cudarc = { workspace = true, optional = true }
 hf-hub = { workspace = true }
 rand = { workspace = true }
 rand_distr = { workspace = true }
@@ -21,3 +22,8 @@ tracing = { workspace = true }
 tracing-chrome = { workspace = true }
 tracing-subscriber = { workspace = true }
 ug = { workspace = true }
+ug-cuda = { workspace = true, optional = true }
+
+[features]
+default = []
+cuda = ["cudarc", "ug-cuda"]

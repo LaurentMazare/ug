@@ -1,5 +1,6 @@
+use model::Device;
 use rand::prelude::*;
-use ug::{CpuDevice, Error, Result};
+use ug::{Error, Result};
 
 mod custom;
 mod model;
@@ -71,21 +72,22 @@ fn main() -> Result<()> {
     let tokenizer_file = api.get("tokenizer.json").map_err(Error::wrap)?;
     let config_file = api.get("config.json").map_err(Error::wrap)?;
 
+    let dev = ug::CpuDevice;
     let cfg = serde_json::from_slice(&std::fs::read(config_file)?).map_err(Error::wrap)?;
     let tokenizer = tokenizers::Tokenizer::from_file(tokenizer_file)
         .map_err(|v| Error::debug(format!("{v:?}")))?;
     let st = unsafe { ug::safetensors::MmapedSafetensors::new(model_file)? };
-    let model = Model::new(&cfg, args.custom_softmax, &st)?;
-    let mut cache = Cache::new(&cfg)?;
+    let model = Model::new(&cfg, args.custom_softmax, &st, &dev)?;
+    let mut cache = Cache::new(&cfg, &dev)?;
     let mut rng = rand::rngs::StdRng::seed_from_u64(42);
     let mut last_token = BOS_TOKEN;
     let mut ccache = ug::cache::CompilationCache::default();
     for pos in 0..args.n_steps {
-        let token_ids = LB::copy([last_token as i32].as_slice(), (1, 1), &CpuDevice)?;
-        let pos = LB::copy([pos as i32].as_slice(), (1, 1), &CpuDevice)?;
+        let token_ids = LB::copy([last_token as i32].as_slice(), (1, 1), &dev)?;
+        let pos = LB::copy([pos as i32].as_slice(), (1, 1), &dev)?;
         let tensor = model.fwd(&token_ids, &pos, &mut cache)?;
         let tensor = if args.custom_softmax {
-            model::custom_softmax(&tensor)?
+            ug::CpuDevice::custom_softmax(&tensor)?
         } else {
             model::softmax(&tensor)?
         };
