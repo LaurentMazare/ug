@@ -151,12 +151,17 @@ impl<D: Device> LazyBuffer<D> {
     }
 
     pub fn realized(&self) -> Result<bool> {
+        // TODO: Always re-running in place ops is odd, we should keep track of whether
+        // this has run or not in the past to know if we want to run it again.
+        if self.in_place_op() {
+            return Ok(false);
+        }
         let data = self.data.try_borrow()?;
         Ok(data.is_some())
     }
 
     pub fn realize(&self) -> Result<()> {
-        if self.realized()? && !self.in_place_op() {
+        if self.realized()? {
             return Ok(());
         }
         let schedule = crate::Schedule::create_one(self)?;

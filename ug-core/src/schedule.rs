@@ -304,7 +304,7 @@ impl<D: Device> Context<D> {
 
         let dtype = b.dtype();
         let shape = b.shape();
-        let ast = if b.realized()? && !b.in_place_op() {
+        let ast = if b.realized()? {
             let arg_id = ArgId::new();
             self.per_arg_id.insert(arg_id, b.clone());
             crate::lang::op::load(arg_id, Layout::from_shape(shape), dtype)?
@@ -453,7 +453,7 @@ fn id_cnts<D: Device>(
 ) -> Result<()> {
     use crate::lazy_buffer::Op;
 
-    if b.realized()? && !b.in_place_op() {
+    if b.realized()? {
         return Ok(());
     }
 
