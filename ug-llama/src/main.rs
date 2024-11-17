@@ -2,6 +2,8 @@ use rand::prelude::*;
 use ug::{Error, Result};
 
 mod cpu_ops;
+#[cfg(feature = "cuda")]
+mod cuda_ops;
 mod custom;
 mod model;
 use model::{Cache, Model};
