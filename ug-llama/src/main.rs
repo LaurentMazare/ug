@@ -70,6 +70,12 @@ fn main() -> Result<()> {
         None
     };
 
+    let dev = ug::CpuDevice;
+    run(&dev, &args)?;
+    Ok(())
+}
+
+fn run<D: Device>(dev: &D, args: &Args) -> Result<()> {
     let api = hf_hub::api::sync::Api::new().map_err(Error::wrap)?;
     let hf_repo = match args.which {
         Which::Smol2_135M => "HuggingFaceTB/SmolLM2-135M",
@@ -83,22 +89,21 @@ fn main() -> Result<()> {
     let tokenizer_file = api.get("tokenizer.json").map_err(Error::wrap)?;
     let config_file = api.get("config.json").map_err(Error::wrap)?;
 
-    let dev = ug::CpuDevice;
     let cfg = serde_json::from_slice(&std::fs::read(config_file)?).map_err(Error::wrap)?;
     let tokenizer = tokenizers::Tokenizer::from_file(tokenizer_file)
         .map_err(|v| Error::debug(format!("{v:?}")))?;
     let st = unsafe { ug::safetensors::MmapedSafetensors::new(model_file)? };
-    let model = Model::new(&cfg, args.custom_softmax, &st, &dev)?;
-    let mut cache = Cache::new(&cfg, &dev)?;
+    let model = Model::<D>::new(&cfg, args.custom_softmax, &st, dev)?;
+    let mut cache = Cache::<D>::new(&cfg, dev)?;
     let mut rng = rand::rngs::StdRng::seed_from_u64(42);
     let mut last_token = BOS_TOKEN;
     let mut ccache = ug::cache::CompilationCache::default();
     for pos in 0..args.n_steps {
-        let token_ids = LB::copy([last_token as i32].as_slice(), (1, 1), &dev)?;
-        let pos = LB::copy([pos as i32].as_slice(), (1, 1), &dev)?;
+        let token_ids = LB::<D>::copy([last_token as i32].as_slice(), (1, 1), dev)?;
+        let pos = LB::<D>::copy([pos as i32].as_slice(), (1, 1), dev)?;
         let tensor = model.fwd(&token_ids, &pos, &mut cache)?;
         let tensor = if args.custom_softmax {
-            ug::CpuDevice::custom_softmax(&tensor)?
+            D::custom_softmax(&tensor)?
         } else {
             model::softmax(&tensor)?
         };
