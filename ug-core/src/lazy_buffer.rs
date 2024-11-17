@@ -53,12 +53,25 @@ pub enum Op<D: Device> {
     MatMul(LazyBuffer<D>, LazyBuffer<D>, (usize, usize, usize, usize), bool),
     Reduce(crate::lang::ReduceOp, LazyBuffer<D>, usize),
     Const(crate::lang::Const),
-    Copy,
+    /// Values are leafs of the op DAG, holding values that do not depend on other values.
+    Value,
     Layout(crate::lang::op::LayoutOp, LazyBuffer<D>),
     Reshape(LazyBuffer<D>),
-    Custom { f: CustomF<D::Slice>, args: Vec<LazyBuffer<D>> },
-    CustomIp { f: CustomF<D::Slice>, args: Vec<LazyBuffer<D>>, src: LazyBuffer<D> },
-    Ssa { ssa: crate::lang::ssa::Kernel, args: Vec<LazyBuffer<D>> },
+    Custom {
+        f: CustomF<D::Slice>,
+        args: Vec<LazyBuffer<D>>,
+    },
+    /// In-place variant of the custom op.
+    CustomIp {
+        f: CustomF<D::Slice>,
+        args: Vec<LazyBuffer<D>>,
+        src: LazyBuffer<D>,
+    },
+    /// Custom op based on some SSA code.
+    Ssa {
+        ssa: crate::lang::ssa::Kernel,
+        args: Vec<LazyBuffer<D>>,
+    },
 }
 
 pub struct LazyBuffer<D: Device>(Arc<LazyBufferInner<D>>);
@@ -240,7 +253,7 @@ impl<D: Device> LazyBuffer<D> {
         let inner = LazyBufferInner {
             id: Id::new(),
             data: Arc::new(Mutex::new(None)),
-            op: Op::Copy,
+            op: Op::Value,
             dtype,
             device: device.clone(),
             shape: s.into(),
@@ -526,7 +539,7 @@ impl<D: Device> LazyBuffer<D> {
             id: Id::new(),
             data: Arc::new(Mutex::new(Some(data))),
             // We don't keep a hold on the Copy data here so as to reduce memory usage.
-            op: Op::Copy,
+            op: Op::Value,
             dtype,
             device: device.clone(),
             shape: s,
@@ -561,7 +574,7 @@ impl<D: Device> LazyBuffer<D> {
             id: Id::new(),
             data: Arc::new(Mutex::new(Some(slice))),
             // We don't keep a hold on the Copy data here so as to reduce memory usage.
-            op: Op::Copy,
+            op: Op::Value,
             dtype,
             device: device.clone(),
             shape: s,

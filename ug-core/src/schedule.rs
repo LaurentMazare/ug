@@ -337,7 +337,7 @@ impl<D: Device> Context<D> {
                     crate::lang::op::reduce(*op, ast, *axis)?
                 }
                 Op::Const(cst) => crate::lang::op::cst(*cst)?,
-                Op::Copy => {
+                Op::Value => {
                     let arg_id = ArgId::new();
                     self.per_arg_id.insert(arg_id, b.clone());
                     crate::lang::op::load(arg_id, Layout::from_shape(shape), dtype)?
@@ -447,7 +447,7 @@ fn id_cnts<D: Device>(b: &LazyBuffer<D>, cnts: &mut HashMap<crate::lazy_buffer::
         return;
     }
     match b.op() {
-        Op::Copy | Op::Const(_) => {}
+        Op::Value | Op::Const(_) => {}
         Op::Reshape(arg) | Op::Layout(_, arg) | Op::Reduce(_, arg, _) | Op::Unary(_, arg) => {
             id_cnts(arg, cnts)
         }
