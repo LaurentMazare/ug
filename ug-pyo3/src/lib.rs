@@ -40,11 +40,11 @@ impl Func {
         }
         unsafe {
             self.0
-                .launch3(
+                .launch3((
                     s1.0.slice::<f32>().map_err(w)?,
                     s2.0.slice::<f32>().map_err(w)?,
                     s3.0.slice::<f32>().map_err(w)?,
-                )
+                ))
                 .map_err(w)?
         };
         Ok(())

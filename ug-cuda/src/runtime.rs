@@ -1,3 +1,4 @@
+use cudarc::driver::DeviceRepr;
 pub use cudarc::driver::DeviceSlice;
 pub use cudarc::driver::LaunchConfig;
 use std::sync::Arc;
@@ -51,48 +52,29 @@ pub struct Func {
     cfg: LaunchConfig,
 }
 
+macro_rules! impl_launch { ($name:ident, [$($Vars:tt),*]) => {
+    pub unsafe fn $name<$($Vars: DeviceRepr),*>(
+        &self,
+        args: ($($Vars, )*)
+    ) -> Result<()> {
+        use cudarc::driver::LaunchAsync;
+        let func = self.func.clone();
+        unsafe { func.launch(self.cfg, args).w()? };
+        Ok(())
+    }
+}
+}
+
+#[allow(clippy::missing_safety_doc)]
 impl Func {
-    /// Launch a kernel with one argument.
-    ///
-    /// # Safety
-    /// Launching a kernel is always unsafe...
-    pub unsafe fn launch1<Params: cudarc::driver::DeviceRepr>(&self, p: Params) -> Result<()> {
-        use cudarc::driver::LaunchAsync;
-        let func = self.func.clone();
-        unsafe { func.launch(self.cfg, (p,)).w()? };
-        Ok(())
-    }
-
-    /// Launch a kernel with 2 arguments.
-    ///
-    /// # Safety
-    /// Launching a kernel is always unsafe...
-    pub unsafe fn launch2<Params: cudarc::driver::DeviceRepr>(
-        &self,
-        p1: Params,
-        p2: Params,
-    ) -> Result<()> {
-        use cudarc::driver::LaunchAsync;
-        let func = self.func.clone();
-        unsafe { func.launch(self.cfg, (p1, p2)).w()? };
-        Ok(())
-    }
-
-    /// Launch a kernel with 3 arguments.
-    ///
-    /// # Safety
-    /// Launching a kernel is always unsafe...
-    pub unsafe fn launch3<Params: cudarc::driver::DeviceRepr>(
-        &self,
-        p1: Params,
-        p2: Params,
-        p3: Params,
-    ) -> Result<()> {
-        use cudarc::driver::LaunchAsync;
-        let func = self.func.clone();
-        unsafe { func.launch(self.cfg, (p1, p2, p3)).w()? };
-        Ok(())
-    }
+    impl_launch!(launch1, [P1]);
+    impl_launch!(launch2, [P1, P2]);
+    impl_launch!(launch3, [P1, P2, P3]);
+    impl_launch!(launch4, [P1, P2, P3, P4]);
+    impl_launch!(launch5, [P1, P2, P3, P4, P5]);
+    impl_launch!(launch6, [P1, P2, P3, P4, P5, P6]);
+    impl_launch!(launch7, [P1, P2, P3, P4, P5, P6, P7]);
+    impl_launch!(launch8, [P1, P2, P3, P4, P5, P6, P7, P8]);
 }
 
 #[derive(Debug, Clone)]
@@ -150,6 +132,18 @@ impl Slice {
 }
 
 unsafe impl cudarc::driver::safe::DeviceRepr for &Slice {
+    fn as_kernel_param(&self) -> *mut std::ffi::c_void {
+        match &self.inner {
+            SliceInner::BF16(v) => v.as_kernel_param(),
+            SliceInner::F16(v) => v.as_kernel_param(),
+            SliceInner::F32(v) => v.as_kernel_param(),
+            SliceInner::I32(v) => v.as_kernel_param(),
+            SliceInner::I64(v) => v.as_kernel_param(),
+        }
+    }
+}
+
+unsafe impl cudarc::driver::safe::DeviceRepr for &mut Slice {
     fn as_kernel_param(&self) -> *mut std::ffi::c_void {
         match &self.inner {
             SliceInner::BF16(v) => v.as_kernel_param(),

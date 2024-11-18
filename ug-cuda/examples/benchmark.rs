@@ -76,7 +76,7 @@ fn run_one(args: &Args, n_cols: usize) -> Result<()> {
     let arg: Vec<f32> = (0..n_elements).map(|_| rng.gen()).collect();
     let arg = device.slice_from_values(&arg)?;
     let run = || {
-        unsafe { func.launch2(arg.slice::<f32>()?, res.slice::<f32>()?)? }
+        unsafe { func.launch2((arg.slice::<f32>()?, res.slice::<f32>()?))? }
         device.synchronize()?;
         Ok::<_, ug::Error>(())
     };

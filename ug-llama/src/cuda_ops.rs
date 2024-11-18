@@ -2,17 +2,16 @@ use crate::LB;
 use ug::Result;
 use ug_cuda::runtime::Slice;
 
-const ROPE_CU: &'static str = include_str!("rope.cu");
+const ROPE_CU: &str = include_str!("rope.cu");
 
-#[allow(unused)]
 impl crate::Device for ug_cuda::runtime::Device {
     fn rope_i(src: &LB<Self>, cos: &LB<Self>, sin: &LB<Self>, pos: &LB<Self>) -> Result<LB<Self>> {
         let cfg = cudarc::driver::LaunchConfig::for_num_elems(1);
         // TODO: Add rope_i on the cuda side
-        let func = src.device().compile_cu(&ROPE_CU, "rope_f32", "rope_f32", cfg)?;
+        let _func = src.device().compile_cu(ROPE_CU, "ropei_f32", "ropei_f32", cfg)?;
 
         let (b, h, t, d) = src.shape().dims4()?;
-        let f = move |vs: Vec<&mut Slice>| -> Result<()> {
+        let f = move |_vs: Vec<&mut Slice>| -> Result<()> {
             ug::bail!("rope-i is not implemented for the cuda backend")
         };
         LB::custom(
@@ -26,11 +25,16 @@ impl crate::Device for ug_cuda::runtime::Device {
 
     fn rope(src: &LB<Self>, cos: &LB<Self>, sin: &LB<Self>, pos: &LB<Self>) -> Result<LB<Self>> {
         let cfg = cudarc::driver::LaunchConfig::for_num_elems(1);
-        let func = src.device().compile_cu(&ROPE_CU, "rope_f32", "rope_f32", cfg)?;
+        let func = src.device().compile_cu(ROPE_CU, "rope_f32", "rope_f32", cfg)?;
 
         let (b, h, t, d) = src.shape().dims4()?;
         let f = move |vs: Vec<&mut Slice>| -> Result<()> {
-            ug::bail!("rope is not implemented for the cuda backend")
+            let [src, cos, sin, _pos, dst]: [&mut Slice; 5] = vs.try_into().unwrap();
+            // TODO: Use pos.
+            unsafe {
+                func.launch7((src, cos, sin, dst, (b * h) as u32, (t * d) as u32, d as u32))?
+            };
+            Ok(())
         };
         LB::custom(
             f,
@@ -57,10 +61,9 @@ impl crate::Device for ug_cuda::runtime::Device {
         }
         let mut dst_dims = l_dims.to_vec();
         dst_dims[axis] = l_dims[axis] + r_dims[axis];
-        let span = tracing::span!(tracing::Level::TRACE, "cat");
-        let l_dims = l_dims.to_vec();
-        let r_dims = r_dims.to_vec();
-        let f = move |vs: Vec<&mut Slice>| -> Result<()> {
+        let _l_dims = l_dims.to_vec();
+        let _r_dims = r_dims.to_vec();
+        let f = move |_vs: Vec<&mut Slice>| -> Result<()> {
             ug::bail!("cat is not implemented for the cuda backend")
         };
         LB::custom(f, vec![lhs.clone(), rhs.clone()], dst_dims, lhs.dtype(), lhs.device())
@@ -68,17 +71,16 @@ impl crate::Device for ug_cuda::runtime::Device {
 
     fn custom_softmax(src: &LB<Self>) -> Result<LB<Self>> {
         let rank = src.rank();
-        let dim_m1 = src.dims()[rank - 1];
-        let span_sm = tracing::span!(tracing::Level::TRACE, "softmax");
-        let f = move |vs: Vec<&mut Slice>| -> Result<()> {
+        let _dim_m1 = src.dims()[rank - 1];
+        let f = move |_vs: Vec<&mut Slice>| -> Result<()> {
             ug::bail!("custom_softmax is not implemented for the cuda backend")
         };
         LB::custom(f, vec![src.clone()], src.shape(), src.dtype(), src.device())
     }
 
     fn causal_mask(src: &LB<Self>) -> Result<LB<Self>> {
-        let (_b_sz, _num_heads, s1, s2) = src.dims4()?;
-        let f = move |vs: Vec<&mut Slice>| -> Result<()> {
+        let (_b_sz, _num_heads, _s1, _s2) = src.dims4()?;
+        let f = move |_vs: Vec<&mut Slice>| -> Result<()> {
             ug::bail!("causal_mask is not implemented for the cuda backend")
         };
         LB::custom(f, vec![src.clone()], src.shape(), src.dtype(), src.device())

@@ -23,7 +23,7 @@ fn eval_dotprod() -> Result<()> {
     let rhs = (0..1024).map(|v| v as f32).collect::<Vec<_>>();
     let lhs = device.slice_from_values(&lhs)?;
     let rhs = device.slice_from_values(&rhs)?;
-    unsafe { func.launch3(res.slice::<f32>()?, lhs.slice::<f32>()?, rhs.slice::<f32>()?)? };
+    unsafe { func.launch3((res.slice::<f32>()?, lhs.slice::<f32>()?, rhs.slice::<f32>()?))? };
     let res: Vec<f32> = res.to_vec()?;
     println!("res: {res:?}");
     Ok(())
@@ -46,7 +46,7 @@ fn eval_lower_add() -> Result<()> {
     let rhs = (0..1024).map(|v| v as f32).collect::<Vec<_>>();
     let lhs = device.slice_from_values(&lhs)?;
     let rhs = device.slice_from_values(&rhs)?;
-    unsafe { func.launch3(lhs.slice::<f32>()?, rhs.slice::<f32>()?, res.slice::<f32>()?)? };
+    unsafe { func.launch3((lhs.slice::<f32>()?, rhs.slice::<f32>()?, res.slice::<f32>()?))? };
     let res: Vec<f32> = res.to_vec()?;
     println!("res: {res:?}");
     Ok(())
@@ -67,7 +67,7 @@ fn eval_softmax() -> Result<()> {
     let res = device.zeros(8)?;
     let arg = vec![0., 1., 2., 3., 2., 1., 2., 1.];
     let arg = device.slice_from_values(&arg)?;
-    unsafe { func.launch2(arg.slice::<f32>()?, res.slice::<f32>()?)? };
+    unsafe { func.launch2((arg.slice::<f32>()?, res.slice::<f32>()?))? };
     let res: Vec<f32> = res.to_vec()?;
     println!("res: {res:?}");
     Ok(())
