@@ -44,6 +44,9 @@ struct Args {
     #[arg(long)]
     tracing: bool,
 
+    #[arg(long)]
+    cpu: bool,
+
     #[arg(short, long)]
     verbose: bool,
 
@@ -72,8 +75,18 @@ fn main() -> Result<()> {
         None
     };
 
-    let dev = ug::CpuDevice;
-    run(&dev, &args)?;
+    #[cfg(feature = "cuda")]
+    {
+        if args.cpu {
+            run(&ug::CpuDevice, &args)?;
+        } else {
+            let device = ug_cuda::runtime::Device::new(0)?;
+            run(&device, &args)?;
+        }
+    }
+    #[cfg(not(feature = "cuda"))]
+    run(&ug::CpuDevice, &args)?;
+
     Ok(())
 }
 
