@@ -20,3 +20,4 @@ py_src/ug/*.so
 model.safetensors
 flamegraph.svg
 trace*.json
+report*sqlite
