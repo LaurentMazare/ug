@@ -510,8 +510,8 @@ impl lang::op::Store {
                         &L::Transpose { dim1: _, dim2: _ } => {
                             adjs.iter_mut().for_each(|v| *v = false)
                         }
-                        L::Broadcast { inserted_dims, broadcasted_dims } => {
-                            if *inserted_dims + broadcasted_dims.len() != ast.shape.rank() {
+                        L::Broadcast { inserted_dims: _, broadcasted_dims } => {
+                            if broadcasted_dims.len() < ast.shape.rank() {
                                 adjs.iter_mut().for_each(|v| *v = false)
                             }
                         }
