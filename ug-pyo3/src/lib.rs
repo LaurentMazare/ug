@@ -333,7 +333,7 @@ mod ssa {
 
         #[staticmethod]
         fn define_global(index: usize, dtype: DType) -> Self {
-            Self(ssa::Instr::DefineGlobal { index, dtype: dtype.0, arg_id: ssa::ArgId::new() })
+            Self(ssa::Instr::DefineGlobal { index, dtype: dtype.0 })
         }
 
         #[staticmethod]
