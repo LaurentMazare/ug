@@ -11,6 +11,16 @@ __device__ void cat(
     const uint32_t d2_r,
     const uint32_t d2_lr
 ) {
+  const uint32_t i1 = blockIdx.x;
+  const uint32_t i2 = threadIdx.x;
+  const uint32_t block_size = blockDim.x;
+
+  for (uint32_t v = i2; v < d2_l; v += block_size) {
+    dst[i1 * d2_lr + v] = lhs[i1 * d2_l + v];
+  }
+  for (uint32_t v = i2; v < d2_r; v += block_size) {
+    dst[i1 * d2_lr + d2_l + v] = rhs[i1 * d2_r + v];
+  }
 }
 
 extern "C" __global__ void cat_f32(
@@ -24,5 +34,3 @@ extern "C" __global__ void cat_f32(
 ) {
   cat<float>(lhs, rhs, dst, d1, d2_l, d2_r, d2_lr);
 }
-
-

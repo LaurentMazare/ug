@@ -1,6 +1,6 @@
 use crate::LB;
 use ug::Result;
-use ug_cuda::runtime::Slice;
+use ug_cuda::runtime::{LaunchConfig, Slice};
 
 const CAT_CU: &str = include_str!("cat.cu");
 const ROPE_CU: &str = include_str!("rope.cu");
@@ -9,10 +9,10 @@ const SOFTMAX_CU: &str = include_str!("softmax.cu");
 
 impl crate::Device for ug_cuda::runtime::Device {
     fn rope_i(src: &LB<Self>, cos: &LB<Self>, sin: &LB<Self>, pos: &LB<Self>) -> Result<LB<Self>> {
-        let cfg = cudarc::driver::LaunchConfig::for_num_elems(1);
+        let (b, h, t, d) = src.shape().dims4()?;
+        let cfg = LaunchConfig::for_num_elems((b * h * t * d) as u32 / 2);
         let func = src.device().compile_cu(ROPEI_CU, "ropei_f32", "ropei_f32", cfg)?;
 
-        let (b, h, t, d) = src.shape().dims4()?;
         let f = move |vs: Vec<&mut Slice>| -> Result<()> {
             // TODO: check the dtypes.
             let [src, cos, sin, pos, dst]: [&mut Slice; 5] = vs.try_into().unwrap();
@@ -31,10 +31,10 @@ impl crate::Device for ug_cuda::runtime::Device {
     }
 
     fn rope(src: &LB<Self>, cos: &LB<Self>, sin: &LB<Self>, pos: &LB<Self>) -> Result<LB<Self>> {
-        let cfg = cudarc::driver::LaunchConfig::for_num_elems(1);
+        let (b, h, t, d) = src.shape().dims4()?;
+        let cfg = LaunchConfig::for_num_elems((b * h * t * d) as u32 / 2);
         let func = src.device().compile_cu(ROPE_CU, "rope_f32", "rope_f32", cfg)?;
 
-        let (b, h, t, d) = src.shape().dims4()?;
         let f = move |vs: Vec<&mut Slice>| -> Result<()> {
             // TODO: check the dtypes.
             let [src, cos, sin, pos, dst]: [&mut Slice; 5] = vs.try_into().unwrap();
@@ -53,9 +53,6 @@ impl crate::Device for ug_cuda::runtime::Device {
     }
 
     fn cat(lhs: &LB<Self>, rhs: &LB<Self>, axis: usize) -> Result<LB<Self>> {
-        let cfg = cudarc::driver::LaunchConfig::for_num_elems(1);
-        let func = lhs.device().compile_cu(CAT_CU, "cat_f32", "cat_f32", cfg)?;
-
         let l_dims = lhs.dims();
         let r_dims = rhs.dims();
         if axis >= l_dims.len() {
@@ -75,6 +72,12 @@ impl crate::Device for ug_cuda::runtime::Device {
         let d2_l = l_dims[axis..].iter().product::<usize>();
         let d2_r = r_dims[axis..].iter().product::<usize>();
         let d2_lr = d2_l + d2_r;
+        let cfg = LaunchConfig {
+            grid_dim: (d1 as u32, 1, 1),
+            block_dim: (32, 1, 1),
+            shared_mem_bytes: 0,
+        };
+        let func = lhs.device().compile_cu(CAT_CU, "cat_f32", "cat_f32", cfg)?;
         let f = move |vs: Vec<&mut Slice>| -> Result<()> {
             let [lhs, rhs, dst]: [&mut Slice; 3] = vs.try_into().unwrap();
             unsafe {
@@ -86,11 +89,17 @@ impl crate::Device for ug_cuda::runtime::Device {
     }
 
     fn custom_softmax(src: &LB<Self>) -> Result<LB<Self>> {
-        let cfg = cudarc::driver::LaunchConfig::for_num_elems(1);
-        let func = src.device().compile_cu(SOFTMAX_CU, "softmax_f32", "softmax_f32", cfg)?;
-
         let rank = src.rank();
         let dim_m1 = src.dims()[rank - 1];
+        let n_rows = src.shape().num_elements() / dim_m1;
+        let cfg = LaunchConfig {
+            grid_dim: (n_rows as u32, 1, 1),
+            block_dim: (1, 32, 1),
+            shared_mem_bytes: 0,
+        };
+
+        let func = src.device().compile_cu(SOFTMAX_CU, "softmax_f32", "softmax_f32", cfg)?;
+
         let f = move |vs: Vec<&mut Slice>| -> Result<()> {
             let [src, dst]: [&mut Slice; 2] = vs.try_into().unwrap();
             unsafe { func.launch3((src, dst, dim_m1 as i32))? };
