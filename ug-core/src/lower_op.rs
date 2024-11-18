@@ -465,3 +465,74 @@ impl lang::op::Kernel {
         Ok(ssa::Kernel::new(instrs, args))
     }
 }
+
+impl lang::op::Store {
+    /// When the result at index i is true, the dims i and i + 1 can be merged.
+    pub fn mergeable_adjacent_dims(&self) -> Vec<bool> {
+        fn walk(ast: &Ast, adjs: &mut [bool]) {
+            use lang::op::AstInner as A;
+            match ast.inner.as_ref() {
+                A::Unary { op: _, arg } => walk(arg, adjs),
+                A::Binary { op: _, lhs, rhs } => {
+                    walk(lhs, adjs);
+                    walk(rhs, adjs);
+                }
+                A::Load { src: _, layout } => {
+                    let strides = layout.strides();
+                    let dims = layout.dims();
+                    for (i, a) in adjs.iter_mut().enumerate() {
+                        if strides[i] != strides[i + 1] * dims[i + 1] {
+                            *a = false
+                        }
+                    }
+                }
+                A::Reduce { op: _, arg: _, dim: _ } => adjs.iter_mut().for_each(|v| *v = false),
+                A::Layout { op, arg } => {
+                    use lang::op::LayoutOp as L;
+                    match op {
+                        &L::Narrow { dim, offset } => {
+                            if offset != 0 {
+                                adjs[dim] = false;
+                                if dim > 0 {
+                                    adjs[dim - 1] = false;
+                                }
+                            }
+                            walk(arg, adjs)
+                        }
+                        L::SplitDim { dim: _, lhs: _, rhs: _ } => {
+                            // Do not walk recursively as the number of dims is different
+                            adjs.iter_mut().for_each(|v| *v = false)
+                        }
+                        L::MergeDims { dim: _, lhs: _, rhs: _ } => {
+                            // Do not walk recursively as the number of dims is different
+                            adjs.iter_mut().for_each(|v| *v = false)
+                        }
+                        &L::Transpose { dim1: _, dim2: _ } => {
+                            adjs.iter_mut().for_each(|v| *v = false)
+                        }
+                        L::Broadcast { inserted_dims, broadcasted_dims } => {
+                            if *inserted_dims + broadcasted_dims.len() != ast.shape.rank() {
+                                adjs.iter_mut().for_each(|v| *v = false)
+                            }
+                        }
+                    }
+                }
+                A::Const(_) | A::Id { .. } => {}
+            }
+        }
+
+        if self.layout.rank() <= 1 {
+            return vec![];
+        }
+        let mut adjs = vec![true; self.layout.rank() - 1];
+        let strides = self.layout.strides();
+        let dims = self.layout.dims();
+        for (i, a) in adjs.iter_mut().enumerate() {
+            if strides[i] != strides[i + 1] * dims[i + 1] {
+                *a = false
+            }
+        }
+        walk(&self.value, &mut adjs);
+        adjs
+    }
+}
