@@ -1,17 +1,26 @@
 use crate::LB;
 use ug::Result;
-use ug_cuda::runtime::{LaunchConfig, Slice};
+use ug_cuda::runtime::{Func, LaunchConfig, Slice};
 
 const CAT_CU: &str = include_str!("cat.cu");
 const ROPE_CU: &str = include_str!("rope.cu");
 const ROPEI_CU: &str = include_str!("ropei.cu");
 const SOFTMAX_CU: &str = include_str!("softmax.cu");
 
+use std::sync::OnceLock;
+static ROPEI: OnceLock<Func> = OnceLock::new();
+static ROPE: OnceLock<Func> = OnceLock::new();
+static CAT: OnceLock<Func> = OnceLock::new();
+static CUSTOM_SOFTMAX: OnceLock<Func> = OnceLock::new();
+
 impl crate::Device for ug_cuda::runtime::Device {
     fn rope_i(src: &LB<Self>, cos: &LB<Self>, sin: &LB<Self>, pos: &LB<Self>) -> Result<LB<Self>> {
         let (b, h, t, d) = src.shape().dims4()?;
         let cfg = LaunchConfig::for_num_elems((b * h * t * d) as u32 / 2);
-        let func = src.device().compile_cu(ROPEI_CU, "ropei_f32", "ropei_f32", cfg)?;
+        // TODO: Use get_or_try_init when available.
+        let func = ROPEI.get_or_init(|| {
+            src.device().compile_cu(ROPEI_CU, "ropei_f32", "ropei_f32", cfg).unwrap()
+        });
 
         let f = move |vs: Vec<&mut Slice>| -> Result<()> {
             // TODO: check the dtypes.
@@ -33,7 +42,9 @@ impl crate::Device for ug_cuda::runtime::Device {
     fn rope(src: &LB<Self>, cos: &LB<Self>, sin: &LB<Self>, pos: &LB<Self>) -> Result<LB<Self>> {
         let (b, h, t, d) = src.shape().dims4()?;
         let cfg = LaunchConfig::for_num_elems((b * h * t * d) as u32 / 2);
-        let func = src.device().compile_cu(ROPE_CU, "rope_f32", "rope_f32", cfg)?;
+        // TODO: Use get_or_try_init when available.
+        let func = ROPE
+            .get_or_init(|| src.device().compile_cu(ROPE_CU, "rope_f32", "rope_f32", cfg).unwrap());
 
         let f = move |vs: Vec<&mut Slice>| -> Result<()> {
             // TODO: check the dtypes.
@@ -77,7 +88,9 @@ impl crate::Device for ug_cuda::runtime::Device {
             block_dim: (32, 1, 1),
             shared_mem_bytes: 0,
         };
-        let func = lhs.device().compile_cu(CAT_CU, "cat_f32", "cat_f32", cfg)?;
+        // TODO: Use get_or_try_init when available.
+        let func =
+            CAT.get_or_init(|| lhs.device().compile_cu(CAT_CU, "cat_f32", "cat_f32", cfg).unwrap());
         let f = move |vs: Vec<&mut Slice>| -> Result<()> {
             let [lhs, rhs, dst]: [&mut Slice; 3] = vs.try_into().unwrap();
             unsafe {
@@ -98,7 +111,10 @@ impl crate::Device for ug_cuda::runtime::Device {
             shared_mem_bytes: 0,
         };
 
-        let func = src.device().compile_cu(SOFTMAX_CU, "softmax_f32", "softmax_f32", cfg)?;
+        // TODO: Use get_or_try_init when available.
+        let func = CUSTOM_SOFTMAX.get_or_init(|| {
+            src.device().compile_cu(SOFTMAX_CU, "softmax_f32", "softmax_f32", cfg).unwrap()
+        });
 
         let f = move |vs: Vec<&mut Slice>| -> Result<()> {
             let [src, dst]: [&mut Slice; 2] = vs.try_into().unwrap();
