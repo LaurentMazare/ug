@@ -283,6 +283,18 @@ impl ug::Device for Device {
             [a1] => {
                 unsafe { func.launch(f.cfg, (&**a1,)).w()? };
             }
+            [a1, a2] => {
+                unsafe { func.launch(f.cfg, (&**a1, &**a2)).w()? };
+            }
+            [a1, a2, a3] => {
+                unsafe { func.launch(f.cfg, (&**a1, &**a2, &**a3)).w()? };
+            }
+            [a1, a2, a3, a4] => {
+                unsafe { func.launch(f.cfg, (&**a1, &**a2, &**a3, &**a4)).w()? };
+            }
+            [a1, a2, a3, a4, a5] => {
+                unsafe { func.launch(f.cfg, (&**a1, &**a2, &**a3, &**a4, &**a5)).w()? };
+            }
             _ => ug::bail!("unsupported number of args for kernel {}", args.len()),
         }
         Ok(())
