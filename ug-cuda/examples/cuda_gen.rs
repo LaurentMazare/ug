@@ -17,7 +17,8 @@ fn eval_dotprod() -> Result<()> {
     println!("<<<< CUDA CODE >>>>\n{cuda_code}\nflops-mem: {:?}", kernel.flops_mem_per_thread()?);
     let device = ug_cuda::runtime::Device::new(0)?;
     let cfg = cudarc::driver::LaunchConfig::for_num_elems(1);
-    let func = device.compile_cu(&cuda_code, "foo", "dotprod", cfg)?;
+    let func = device.compile_cu(&cuda_code, "foo", "dotprod")?;
+    let func = ug_cuda::runtime::Func::new(func, cfg);
     let res = device.zeros(1)?;
     let lhs = (0..1024).map(|v| v as f32).collect::<Vec<_>>();
     let rhs = (0..1024).map(|v| v as f32).collect::<Vec<_>>();
@@ -40,7 +41,8 @@ fn eval_lower_add() -> Result<()> {
     println!("<<<< CUDA CODE >>>>\n{cuda_code}\nflops-mem: {:?}", kernel.flops_mem_per_thread()?);
     let device = ug_cuda::runtime::Device::new(0)?;
     let cfg = cudarc::driver::LaunchConfig::for_num_elems(1);
-    let func = device.compile_cu(&cuda_code, "foo", "dotprod", cfg)?;
+    let func = device.compile_cu(&cuda_code, "foo", "dotprod")?;
+    let func = ug_cuda::runtime::Func::new(func, cfg);
     let res = device.zeros(1024)?;
     let lhs = (0..1024).map(|v| v as f32).collect::<Vec<_>>();
     let rhs = (0..1024).map(|v| v as f32).collect::<Vec<_>>();
@@ -63,7 +65,8 @@ fn eval_softmax() -> Result<()> {
     println!("<<<< CUDA CODE >>>>\n{cuda_code}\nflops-mem: {:?}", kernel.flops_mem_per_thread()?);
     let device = ug_cuda::runtime::Device::new(0)?;
     let cfg = cudarc::driver::LaunchConfig::for_num_elems(1);
-    let func = device.compile_cu(&cuda_code, "foo", "dotprod", cfg)?;
+    let func = device.compile_cu(&cuda_code, "foo", "dotprod")?;
+    let func = ug_cuda::runtime::Func::new(func, cfg);
     let res = device.zeros(8)?;
     let arg = vec![0., 1., 2., 3., 2., 1., 2., 1.];
     let arg = device.slice_from_values(&arg)?;

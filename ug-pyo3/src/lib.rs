@@ -430,7 +430,8 @@ impl Device {
             block_dim: (block_dim, 1, 1),
             shared_mem_bytes,
         };
-        let func = self.0.compile_ptx(ptx_code, MODULE_NAME, func_name, cfg).map_err(w)?;
+        let func = self.0.compile_ptx(ptx_code, MODULE_NAME, func_name).map_err(w)?;
+        let func = ug_cuda::runtime::Func::new(func, cfg);
         Ok(Func(func))
     }
 
@@ -449,7 +450,8 @@ impl Device {
             block_dim: (block_dim, 1, 1),
             shared_mem_bytes,
         };
-        let func = self.0.compile_cu(cu_code, MODULE_NAME, func_name, cfg).map_err(w)?;
+        let func = self.0.compile_cu(cu_code, MODULE_NAME, func_name).map_err(w)?;
+        let func = ug_cuda::runtime::Func::new(func, cfg);
         Ok(Func(func))
     }
 

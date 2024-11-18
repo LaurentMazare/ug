@@ -70,7 +70,8 @@ fn run_one(args: &Args, n_cols: usize) -> Result<()> {
         block_dim: (block_dim as u32, 1, 1),
         shared_mem_bytes: 0,
     };
-    let func = device.compile_cu(&cuda_code, "foo", "mykernel", cfg)?;
+    let func = device.compile_cu(&cuda_code, "foo", "mykernel")?;
+    let func = ug_cuda::runtime::Func::new(func, cfg);
     let n_elements = n_rows * n_cols;
     let res = device.zeros(n_elements)?;
     let arg: Vec<f32> = (0..n_elements).map(|_| rng.gen()).collect();

@@ -1,6 +1,5 @@
 use cudarc::driver::DeviceRepr;
-pub use cudarc::driver::DeviceSlice;
-pub use cudarc::driver::LaunchConfig;
+pub use cudarc::driver::{CudaFunction, DeviceSlice, LaunchConfig};
 use std::sync::Arc;
 use ug::{Device as D, Error, Result, Slice as S, WithDType};
 
@@ -48,8 +47,14 @@ impl KernelId {
 
 #[derive(Clone)]
 pub struct Func {
-    func: cudarc::driver::CudaFunction,
+    func: CudaFunction,
     cfg: LaunchConfig,
+}
+
+impl Func {
+    pub fn new(func: CudaFunction, cfg: LaunchConfig) -> Self {
+        Self { func, cfg }
+    }
 }
 
 macro_rules! impl_launch { ($name:ident, [$($Vars:tt),*]) => {
@@ -175,8 +180,7 @@ impl Device {
         cu_code: &str,
         module_name: &str,
         func_name: &'static str,
-        cfg: LaunchConfig,
-    ) -> Result<Func> {
+    ) -> Result<CudaFunction> {
         let opts =
             cudarc::nvrtc::CompileOptions { use_fast_math: Some(true), ..Default::default() };
         let ptx = cudarc::nvrtc::safe::compile_ptx_with_opts(cu_code, opts).w()?;
@@ -185,7 +189,7 @@ impl Device {
             Some(func) => func,
             None => ug::bail!("unknown function {module_name}::{func_name}"),
         };
-        Ok(Func { func, cfg })
+        Ok(func)
     }
 
     pub fn compile_ptx(
@@ -193,15 +197,14 @@ impl Device {
         ptx_code: &str,
         module_name: &str,
         func_name: &'static str,
-        cfg: LaunchConfig,
-    ) -> Result<Func> {
+    ) -> Result<CudaFunction> {
         let ptx = cudarc::nvrtc::safe::Ptx::from_src(ptx_code);
         self.device.load_ptx(ptx, module_name, &[func_name]).w()?;
         let func = match self.device.get_func(module_name, func_name) {
             Some(func) => func,
             None => ug::bail!("unknown function {module_name}::{func_name}"),
         };
-        Ok(Func { func, cfg })
+        Ok(func)
     }
 
     pub fn zeros(&self, len: usize) -> Result<Slice> {
@@ -267,7 +270,8 @@ impl ug::Device for Device {
         // TODO: proper launch config.
         let cfg = LaunchConfig { grid_dim: (1, 1, 1), block_dim: (1, 1, 1), shared_mem_bytes: 0 };
 
-        self.compile_cu(&cu_code, &func_name, func_name_s, cfg)
+        let func = self.compile_cu(&cu_code, &func_name, func_name_s)?;
+        Ok(Func { func, cfg })
     }
 
     fn run(&self, f: &Self::Func, args: &mut [&mut Self::Slice]) -> Result<()> {
