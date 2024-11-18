@@ -93,7 +93,7 @@ impl crate::Device for ug_cuda::runtime::Device {
         let dim_m1 = src.dims()[rank - 1];
         let f = move |vs: Vec<&mut Slice>| -> Result<()> {
             let [src, dst]: [&mut Slice; 2] = vs.try_into().unwrap();
-            unsafe { func.launch3((src, dst, dim_m1 as u32))? };
+            unsafe { func.launch3((src, dst, dim_m1 as i32))? };
             Ok(())
         };
         LB::custom(f, vec![src.clone()], src.shape(), src.dtype(), src.device())
