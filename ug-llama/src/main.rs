@@ -114,6 +114,7 @@ fn run<D: Device>(dev: &D, args: &Args) -> Result<()> {
     let mut last_token = BOS_TOKEN;
     let mut ccache = ug::cache::CompilationCache::default();
     for pos in 0..args.n_steps {
+        let start_time = std::time::Instant::now();
         let token_ids = LB::<D>::copy([last_token as i32].as_slice(), (1, 1), dev)?;
         let pos = LB::<D>::copy([pos as i32].as_slice(), (1, 1), dev)?;
         let tensor = model.fwd(&token_ids, &pos, &mut cache)?;
@@ -122,6 +123,7 @@ fn run<D: Device>(dev: &D, args: &Args) -> Result<()> {
         } else {
             model::softmax(&tensor)?
         };
+        let dt_model = start_time.elapsed();
 
         let start_time = std::time::Instant::now();
         let schedule = ug::Schedule::create_one(&tensor)?;
@@ -140,7 +142,8 @@ fn run<D: Device>(dev: &D, args: &Args) -> Result<()> {
         let token = tokenizer.id_to_token(last_token);
         if args.verbose {
             println!(
-                "gen {:.2}ms, comp: {:.2}ms, run: {:.2}ms, generated {token:?}",
+                "build {:.2}ms, gen {:.2}ms, comp: {:.2}ms, run: {:.2}ms, generated {token:?}",
+                dt_model.as_secs_f32() * 1000.,
                 dt_schedule.as_secs_f32() * 1000.,
                 dt_compile.as_secs_f32() * 1000.,
                 dt_run.as_secs_f32() * 1000.,
