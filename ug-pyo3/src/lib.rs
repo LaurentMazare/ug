@@ -256,7 +256,7 @@ mod op {
         }
 
         fn lower(&self) -> PyResult<super::ssa::Kernel> {
-            let ssa = self.0.lower(&Default::default()).map_err(w)?;
+            let ssa = self.0.clone().lower(&Default::default()).map_err(w)?;
             Ok(super::ssa::Kernel(ssa))
         }
     }

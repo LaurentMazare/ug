@@ -458,10 +458,56 @@ impl lang::op::Kernel {
         Ok(block)
     }
 
-    pub fn lower(&self, opts: &Opts) -> Result<ssa::Kernel> {
-        let block = self.lower_b(opts)?;
+    fn optimize(mut self) -> Result<Self> {
+        fn walk(v: &Ast) -> Result<Ast> {
+            use lang::op::AstInner as A;
+            match v.inner.as_ref() {
+                A::Unary { op, arg } => {
+                    let arg = walk(arg)?;
+                    lang::op::unary(*op, arg)
+                }
+                A::Binary { op, lhs, rhs } => {
+                    let lhs = walk(lhs)?;
+                    let rhs = walk(rhs)?;
+                    lang::op::binary(*op, lhs, rhs)
+                }
+                A::Load { src, layout } => lang::op::load(*src, layout.compress_all()?, v.dtype()),
+                A::Reduce { .. } => bail!("unexpected result in optimize step"),
+                A::Layout { op, arg } => {
+                    use lang::op::LayoutOp as L;
+                    match op {
+                        L::Transpose { .. }
+                        | L::Narrow { .. }
+                        | L::SplitDim { .. }
+                        | L::MergeDims { .. } => {
+                            bail!("unexpected layout op {op:?}")
+                        }
+                        // All the dims are broadcasted here.
+                        L::Broadcast { .. } => {
+                            let arg = walk(arg)?;
+                            lang::op::broadcast(arg, v.shape.num_elements())
+                        }
+                    }
+                }
+                A::Const(_) | A::Id { .. } => Ok(v.clone()),
+            }
+        }
+
+        for op in self.ops.iter_mut() {
+            let mad = op.mergeable_adjacent_dims();
+            if mad.iter().all(|v| *v) {
+                op.layout = op.layout.compress_all()?;
+                op.value = walk(&op.value)?
+            }
+        }
+        Ok(self)
+    }
+
+    pub fn lower(self, opts: &Opts) -> Result<ssa::Kernel> {
+        let s = self.optimize()?;
+        let block = s.lower_b(opts)?;
         let instrs = block.relocate()?;
-        let args = self.args.iter().enumerate().map(|(i, a)| (*a, i)).collect();
+        let args = s.args.iter().enumerate().map(|(i, a)| (*a, i)).collect();
         Ok(ssa::Kernel::new(instrs, args))
     }
 }

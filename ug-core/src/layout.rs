@@ -581,6 +581,19 @@ pub struct Layout {
 }
 
 impl Layout {
+    pub fn compress_all(&self) -> Result<Self> {
+        let strides = self.strides();
+        let dims = self.dims();
+        for i in 0..dims.len() - 1 {
+            if strides[i] != strides[i + 1] * dims[i + 1] {
+                bail!("cannot collapse dims, {self:?}")
+            }
+        }
+        let stride = strides.last().copied().unwrap_or(1);
+        let dim = self.num_elements();
+        Ok(Self { shape: Shape::from(dim), strides: vec![stride], offset: self.offset() })
+    }
+
     pub fn from_shape<S: Into<Shape>>(shape: S) -> Self {
         let shape = shape.into();
         let mut strides = vec![];
