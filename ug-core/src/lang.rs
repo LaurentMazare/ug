@@ -31,6 +31,13 @@ pub enum BinaryOp {
     Max,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct LaunchConfig {
+    pub grid_dim: u32,
+    pub block_dim: u32,
+    pub shared_mem: u32,
+}
+
 impl BinaryOp {
     fn as_str(&self) -> &'static str {
         match self {
@@ -593,6 +600,7 @@ pub mod op {
 // This is currently close to the UOps setup from tinygrad:
 // https://github.com/tinygrad/tinygrad/blob/13846930cd43b1cfd8f7bb2967529f08c08cb6d6/tinygrad/ops.py#L98
 pub mod ssa {
+    use super::LaunchConfig;
     use crate::Result;
 
     pub use super::{Arg, ArgId, BinaryOp, Const, ReduceOp, Type, UnaryOp};
@@ -695,9 +703,14 @@ pub mod ssa {
     pub struct Kernel {
         instrs: Vec<Instr>,
         args: Vec<(Arg, usize)>,
+        launch_config: LaunchConfig,
     }
 
     impl Kernel {
+        pub fn launch_config(&self) -> &LaunchConfig {
+            &self.launch_config
+        }
+
         pub fn instrs(&self) -> &Vec<Instr> {
             &self.instrs
         }
@@ -706,8 +719,12 @@ pub mod ssa {
             &self.args
         }
 
-        pub fn new(instrs: Vec<Instr>, args: Vec<(Arg, usize)>) -> Self {
-            Self { instrs, args }
+        pub fn new(
+            instrs: Vec<Instr>,
+            args: Vec<(Arg, usize)>,
+            launch_config: LaunchConfig,
+        ) -> Self {
+            Self { instrs, args, launch_config }
         }
 
         pub fn from_instrs(instrs: Vec<Instr>) -> crate::Result<Self> {
@@ -722,7 +739,8 @@ pub mod ssa {
                     args.push((arg, line_no));
                 }
             }
-            Ok(Self { instrs, args })
+            let launch_config = LaunchConfig { grid_dim: 1, block_dim: 1, shared_mem: 0 };
+            Ok(Self { instrs, args, launch_config })
         }
 
         pub fn flops_mem_per_thread(&self) -> Result<super::FlopsMem> {

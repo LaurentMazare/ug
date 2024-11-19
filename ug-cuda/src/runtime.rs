@@ -267,8 +267,12 @@ impl ug::Device for Device {
         crate::code_gen::gen(&mut cu_code, &func_name, kernel)?;
         let func_name_s = Box::leak(Box::new(func_name.to_string()));
         let cu_code = String::from_utf8(cu_code)?;
-        // TODO: proper launch config.
-        let cfg = LaunchConfig { grid_dim: (1, 1, 1), block_dim: (1, 1, 1), shared_mem_bytes: 0 };
+        let cfg = kernel.launch_config();
+        let cfg = LaunchConfig {
+            grid_dim: (cfg.grid_dim(), 1, 1),
+            block_dim: (cfg.block_dim(), 1, 1),
+            shared_mem_bytes: cfg.shared_mem(),
+        };
 
         let func = self.compile_cu(&cu_code, &func_name, func_name_s)?;
         Ok(Func { func, cfg })

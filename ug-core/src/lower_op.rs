@@ -494,8 +494,7 @@ impl lang::op::Kernel {
         }
 
         for op in self.ops.iter_mut() {
-            let mad = op.mergeable_adjacent_dims();
-            if mad.iter().all(|v| *v) {
+            if op.can_merge_all() {
                 op.layout = op.layout.compress_all()?;
                 op.value = walk(&op.value)?
             }
@@ -508,12 +507,47 @@ impl lang::op::Kernel {
         let block = s.lower_b(opts)?;
         let instrs = block.relocate()?;
         let args = s.args.iter().enumerate().map(|(i, a)| (*a, i)).collect();
-        Ok(ssa::Kernel::new(instrs, args))
+        let cfg = lang::LaunchConfig {
+            grid_dim: opts.global().map_or(1, |v| v.size as u32),
+            block_dim: opts.local().map_or(1, |v| v.size as u32),
+            shared_mem: 0,
+        };
+        Ok(ssa::Kernel::new(instrs, args, cfg))
     }
 }
 
 impl lang::op::Store {
     /// When the result at index i is true, the dims i and i + 1 can be merged.
+    pub fn can_merge_all(&self) -> bool {
+        fn walk(ast: &Ast) -> bool {
+            use lang::op::AstInner as A;
+            match ast.inner.as_ref() {
+                A::Unary { op: _, arg } => walk(arg),
+                A::Binary { op: _, lhs, rhs } => walk(lhs) && walk(rhs),
+                A::Load { src: _, layout } => layout.can_be_compressed(),
+                A::Reduce { op: _, arg: _, dim: _ } => false,
+                A::Layout { op, arg: _ } => {
+                    use lang::op::LayoutOp as L;
+                    match op {
+                        &L::Narrow { dim: _, offset } => offset == 0,
+                        L::SplitDim { dim: _, lhs: _, rhs: _ } => false,
+                        L::MergeDims { dim: _, lhs: _, rhs: _ } => false,
+                        &L::Transpose { dim1: _, dim2: _ } => false,
+                        L::Broadcast { inserted_dims: _, broadcasted_dims } => {
+                            broadcasted_dims.len() >= ast.shape.rank()
+                        }
+                    }
+                }
+                A::Const(_) | A::Id { .. } => true,
+            }
+        }
+
+        if !self.layout.can_be_compressed() {
+            return false;
+        }
+        walk(&self.value)
+    }
+
     pub fn mergeable_adjacent_dims(&self) -> Vec<bool> {
         fn walk(ast: &Ast, adjs: &mut [bool]) {
             use lang::op::AstInner as A;
