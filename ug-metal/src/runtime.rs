@@ -175,6 +175,16 @@ impl<T: Clone> SliceT<T> {
     }
 
     pub fn to_vec(&self) -> Vec<T> {
+        // let buffer = self.device.new_buffer_managed(size)?;
+        // {
+        //     let command_buffer = self.device.command_buffer()?;
+        //     command_buffer.set_label("to_cpu");
+        //     let blit = command_buffer.new_blit_command_encoder();
+        //     blit.set_label("blit_to_cpu");
+        //     blit.copy_from_buffer(&self.buffer, 0, &buffer, 0, size);
+        //     blit.end_encoding();
+        // }
+        // self.device.wait_until_completed()?;
         let ptr = self.buffer.contents() as *const T;
         assert!(!ptr.is_null());
         let slice = unsafe { std::slice::from_raw_parts(ptr, self.len()) };
@@ -211,18 +221,41 @@ impl ug::Slice for Slice {
     }
 
     fn to_vec<DT: ug::WithDType>(&self) -> Result<Vec<DT>> {
-        todo!()
+        let ptr = self.buffer.contents() as *const DT;
+        if ptr.is_null() {
+            ug::bail!("unexpected null pointer")
+        }
+        let slice = unsafe { std::slice::from_raw_parts(ptr, self.len) };
+        Ok(slice.to_vec())
     }
 
     fn is_empty(&self) -> bool {
         self.len == 0
     }
 
-    fn copy_host_to_device<DT: ug::WithDType>(&mut self, _src: &[DT]) -> Result<()> {
-        todo!()
+    fn copy_host_to_device<DT: ug::WithDType>(&mut self, src: &[DT]) -> Result<()> {
+        if self.len != src.len() {
+            ug::bail!("size mismatch in copy_host_to_device, src {}, dst: {}", src.len(), self.len)
+        }
+        let ptr = self.buffer.contents() as *mut DT;
+        if ptr.is_null() {
+            ug::bail!("unexpected null pointer")
+        }
+        let slice = unsafe { std::slice::from_raw_parts_mut(ptr, self.len) };
+        slice.copy_from_slice(src);
+        Ok(())
     }
 
-    fn copy_device_to_host<DT: ug::WithDType>(&self, _dst: &mut [DT]) -> Result<()> {
-        todo!()
+    fn copy_device_to_host<DT: ug::WithDType>(&self, dst: &mut [DT]) -> Result<()> {
+        if self.len != dst.len() {
+            ug::bail!("size mismatch in copy_device_to_host, src {}, dst: {}", self.len, dst.len())
+        }
+        let ptr = self.buffer.contents() as *const DT;
+        if ptr.is_null() {
+            ug::bail!("unexpected null pointer")
+        }
+        let slice = unsafe { std::slice::from_raw_parts(ptr, self.len) };
+        dst.copy_from_slice(slice);
+        Ok(())
     }
 }
