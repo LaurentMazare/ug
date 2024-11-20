@@ -239,14 +239,14 @@ pub fn eval_ssa<const N: usize>(
                     (Value::None, None)
                 }
             }
-            Instr::Range { lo, up, end_idx } => {
+            Instr::Range { lo, up, step, end_idx } => {
                 if current_idx >= context.values.len() {
                     crate::bail!("get out of bounds {current_idx}")
                 }
                 if context.values[current_idx].is_none() {
                     (context.get(*lo)?, None)
                 } else {
-                    let v = context.values[current_idx].as_i32()?.add(&W::splat(1));
+                    let v = context.values[current_idx].as_i32()?.add(&W::splat(*step as i32));
                     let up = context.get(*up)?;
                     let up = up.as_i32()?;
                     let mut all_jump = true;

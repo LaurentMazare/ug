@@ -53,7 +53,8 @@ impl Range {
 impl Block {
     pub fn range(&mut self, lo: i32, up: i32) -> Range {
         let (range_id, erange_id) = (Id::new(), Id::new());
-        let range = SsaI::Range { lo: lo.into(), up: up.into(), end_idx: erange_id.to_varid() };
+        let range =
+            SsaI::Range { lo: lo.into(), up: up.into(), step: 1, end_idx: erange_id.to_varid() };
         self.0.push((range_id, range));
         Range { range_id, erange_id }
     }
@@ -170,11 +171,11 @@ impl Block {
                     let end_idx = get_id(*end_idx)?;
                     SsaI::If { cond, end_idx }
                 }
-                SsaI::Range { lo, up, end_idx } => {
+                SsaI::Range { lo, up, step, end_idx } => {
                     let lo = get_a(*lo)?;
                     let up = get_a(*up)?;
                     let end_idx = get_id(*end_idx)?;
-                    SsaI::Range { lo, up, end_idx }
+                    SsaI::Range { lo, up, step: *step, end_idx }
                 }
                 SsaI::Load { src, offset, dtype } => {
                     let src = get_id(*src)?;

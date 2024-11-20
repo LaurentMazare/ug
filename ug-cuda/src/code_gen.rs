@@ -105,10 +105,10 @@ pub fn gen<W: std::io::Write>(w: &mut W, func_name: &str, kernel: &ssa::Kernel) 
                 writeln!(w, "{indent}if ({}) {{", A(*cond),)?;
                 depth += 1;
             }
-            I::Range { lo, up, end_idx: _ } => {
+            I::Range { lo, up, step, end_idx: _ } => {
                 writeln!(
                     w,
-                    "{indent}for (int {var_id} = {}; {var_id} < {}; ++{var_id}) {{",
+                    "{indent}for (int {var_id} = {}; {var_id} < {}; {var_id}+={step}) {{",
                     A(*lo),
                     A(*up)
                 )?;

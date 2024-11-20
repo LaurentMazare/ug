@@ -161,8 +161,12 @@ impl lang::Kernel {
             instrs.push((lo_id, SsaI::Const(ssa::Const::I32(0))));
 
             let (range_id, erange_id) = (Id::new(), Id::new());
-            let range =
-                SsaI::Range { lo: lo_id.to_a(), up: len_i.to_a(), end_idx: erange_id.to_varid() };
+            let range = SsaI::Range {
+                lo: lo_id.to_a(),
+                up: len_i.to_a(),
+                step: 1,
+                end_idx: erange_id.to_varid(),
+            };
             instrs.push((range_id, range));
 
             let (src_i, src_b) = src.lower(range_id, &per_arg)?;

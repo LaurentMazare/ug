@@ -686,7 +686,7 @@ pub mod ssa {
         Const(Const),
         Unary { op: UnaryOp, arg: A, dtype: DType },
         Binary { op: BinaryOp, lhs: A, rhs: A, dtype: DType },
-        Range { lo: A, up: A, end_idx: VarId },
+        Range { lo: A, up: A, step: usize, end_idx: VarId },
         Load { src: VarId, offset: A, dtype: DType },
         Assign { dst: VarId, src: A },
         EndRange { start_idx: VarId },
@@ -754,7 +754,7 @@ pub mod ssa {
                     | Instr::Store { dst: _, offset: _, value: _, dtype } => {
                         mem += mult * dtype.size_in_bytes()
                     }
-                    Instr::Range { lo, up, end_idx: _ } => {
+                    Instr::Range { lo, up, step, end_idx: _ } => {
                         mults.push(mult);
                         let lo = match lo {
                             A::Const(Const::I64(lo)) => *lo,
@@ -780,7 +780,7 @@ pub mod ssa {
                                 _ => crate::bail!("range lo is not a const"),
                             },
                         };
-                        mult *= (up - lo).max(0) as usize;
+                        mult *= (up - lo).max(0) as usize / step;
                     }
                     Instr::EndRange { .. } => match mults.pop() {
                         None => crate::bail!("unexpected EndRange"),
