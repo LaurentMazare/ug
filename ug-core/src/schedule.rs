@@ -176,8 +176,7 @@ impl<D: Device> Schedule<D> {
                             let arg = self.get_arg_id(arg_id)?;
                             args.push((arg_id, arg.clone()))
                         }
-                        let func =
-                            self.device.compile(&ssa, kernel_name.as_deref())?;
+                        let func = self.device.compile(&ssa, kernel_name.as_deref())?;
                         let func = std::sync::Arc::new(func);
                         compilation_cache.insert(norm_kernel, func.clone());
                         Func::Kernel { func, args }
