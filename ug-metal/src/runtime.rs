@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use crate::utils::EncoderParam;
 use ug::{Error, Result};
 
 pub trait WithErr {
@@ -32,6 +32,7 @@ impl KernelId {
 #[derive(Clone)]
 pub struct Func {
     inner: metal::Function,
+    launch_config: ug::lang::LaunchConfig,
     device: Device,
 }
 
@@ -45,7 +46,8 @@ impl Func {
 
 #[derive(Debug, Clone)]
 pub struct Device {
-    device: Arc<metal::Device>,
+    device: metal::Device,
+    cq: metal::CommandQueue,
 }
 
 impl Device {
@@ -58,15 +60,20 @@ impl Device {
             Some(device) => device,
             None => ug::bail!("no default device found"),
         };
-        let device = Arc::new(device);
-        Ok(Self { device })
+        let cq = device.new_command_queue();
+        Ok(Self { device, cq })
     }
 
-    pub fn compile_metal(&self, metal_code: &str, func_name: &str) -> Result<Func> {
+    pub fn compile_metal(
+        &self,
+        metal_code: &str,
+        func_name: &str,
+        launch_config: ug::lang::LaunchConfig,
+    ) -> Result<Func> {
         let lib =
             self.device.new_library_with_source(metal_code, &metal::CompileOptions::new()).w()?;
         let inner = lib.get_function(func_name, None).w()?;
-        Ok(Func { inner, device: self.clone() })
+        Ok(Func { inner, device: self.clone(), launch_config })
     }
 
     pub fn zeros<T>(&self, len: usize) -> Result<SliceT<T>> {
@@ -90,8 +97,23 @@ impl ug::Device for Device {
     type Slice = Slice;
     type Func = Func;
 
-    fn run(&self, _f: &Self::Func, _args: &mut [&mut Self::Slice]) -> Result<()> {
-        todo!()
+    fn run(&self, f: &Self::Func, args: &mut [&mut Self::Slice]) -> Result<()> {
+        let cb = self.cq.new_command_buffer();
+        let encoder = cb.new_compute_command_encoder();
+        let pl = f.pipeline()?;
+        encoder.set_compute_pipeline_state(&pl);
+        for (index, arg) in args.iter().enumerate() {
+            <&metal::Buffer>::set_param(encoder, index as u64, &arg.buffer);
+            encoder.use_resource(&arg.buffer, metal::MTLResourceUsage::Write);
+        }
+        let grid_size = metal::MTLSize::new(f.launch_config.grid_dim as u64, 1, 1);
+        let threadgroup_size = metal::MTLSize::new(f.launch_config.block_dim as u64, 1, 1);
+        encoder.dispatch_thread_groups(grid_size, threadgroup_size);
+        // Somehow, using dispatch_threads with non-even group size doesn't work properly here.
+        encoder.end_encoding();
+        cb.commit();
+        cb.wait_until_completed();
+        Ok(())
     }
 
     fn matmul(
@@ -115,7 +137,7 @@ impl ug::Device for Device {
         };
         crate::code_gen::gen(&mut buf, name, kernel)?;
         let metal_code = String::from_utf8(buf)?;
-        self.compile_metal(&metal_code, name)
+        self.compile_metal(&metal_code, name, *kernel.launch_config())
     }
 
     fn synchronize(&self) -> Result<()> {

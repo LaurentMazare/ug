@@ -68,7 +68,12 @@ fn run_one(args: &Args, n_cols: usize) -> Result<()> {
         println!("METAL\n{metal_code}");
     }
     let device = ug_metal::runtime::Device::new()?;
-    let func = device.compile_metal(&metal_code, "mykernel")?;
+    let launch_config = ug::lang::LaunchConfig {
+        grid_dim: n_rows as u32,
+        block_dim: block_dim as u32,
+        shared_mem: 0,
+    };
+    let func = device.compile_metal(&metal_code, "mykernel", launch_config)?;
     let n_elements = n_rows * n_cols;
     let res = device.zeros::<f32>(n_elements)?;
     let arg: Vec<f32> = (0..n_elements).map(|_| rng.gen()).collect();
