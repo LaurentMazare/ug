@@ -159,7 +159,7 @@ impl<D: Device> Schedule<D> {
                         let kernel = kernel.optimize()?;
                         let opts = if D::use_grid()
                             && kernel.ops.len() == 1
-                            && kernel.ops[0].layout.rank() == 1
+                            && kernel.ops[0].layout.rank() >= 1
                         {
                             let size = kernel.ops[0].layout.dims()[0];
                             // TODO: Ensure that size is never 0.
