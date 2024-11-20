@@ -269,9 +269,9 @@ impl ug::Device for Device {
         let cu_code = String::from_utf8(cu_code)?;
         let cfg = kernel.launch_config();
         let cfg = LaunchConfig {
-            grid_dim: (cfg.grid_dim(), 1, 1),
-            block_dim: (cfg.block_dim(), 1, 1),
-            shared_mem_bytes: cfg.shared_mem(),
+            grid_dim: (cfg.grid_dim, 1, 1),
+            block_dim: (cfg.block_dim, 1, 1),
+            shared_mem_bytes: cfg.shared_mem,
         };
 
         let func = self.compile_cu(&cu_code, &func_name, func_name_s)?;
