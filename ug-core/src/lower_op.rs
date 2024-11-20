@@ -515,6 +515,80 @@ impl lang::op::Kernel {
 }
 
 impl lang::op::Store {
+    pub fn name(&self) -> String {
+        fn walk(ast: &Ast, chars: &mut Vec<char>) {
+            use lang::op::AstInner as A;
+            match ast.inner.as_ref() {
+                A::Unary { op, arg } => {
+                    use lang::op::UnaryOp as U;
+                    let c = match op {
+                        U::Id => 'i',
+                        U::Exp => 'e',
+                        U::Cos => 'c',
+                        U::Sin => 's',
+                        U::Neg => 'n',
+                        U::Sqrt => 's',
+                        U::Cast => 'a',
+                    };
+                    chars.push('U');
+                    chars.push(c);
+                    chars.push('_');
+                    walk(arg, chars);
+                }
+                A::Binary { op, lhs, rhs } => {
+                    use lang::op::BinaryOp as B;
+                    let c = match op {
+                        B::Min => 'n',
+                        B::Max => 'x',
+                        B::Add => 'a',
+                        B::Sub => 's',
+                        B::Mul => 'm',
+                        B::Div => 'd',
+                        B::Mod => 'o',
+                    };
+                    chars.push('B');
+                    chars.push(c);
+                    chars.push('_');
+                    walk(lhs, chars);
+                    chars.push('_');
+                    walk(rhs, chars);
+                }
+                A::Load { src: _, layout: _ } => chars.push('O'),
+                A::Reduce { op, arg, dim: _ } => {
+                    use lang::op::ReduceOp as R;
+                    let c = match op {
+                        R::Sum { .. } => 's',
+                        R::Max { .. } => 'x',
+                        R::Min { .. } => 'n',
+                    };
+                    chars.push('R');
+                    chars.push(c);
+                    chars.push('_');
+                    walk(arg, chars);
+                }
+                A::Layout { op, arg } => {
+                    use lang::op::LayoutOp as L;
+                    chars.push('L');
+                    let c = match op {
+                        L::Narrow { .. } => 'n',
+                        L::SplitDim { .. } => 's',
+                        L::MergeDims { .. } => 'm',
+                        L::Transpose { .. } => 't',
+                        L::Broadcast { .. } => 'b',
+                    };
+                    chars.push(c);
+                    chars.push('_');
+                    walk(arg, chars);
+                }
+                A::Const(_) => chars.push('C'),
+                A::Id { .. } => chars.push('I'),
+            }
+        }
+        let mut chars = vec![];
+        walk(&self.value, &mut chars);
+        chars.into_iter().take(40).collect()
+    }
+
     /// When the result at index i is true, the dims i and i + 1 can be merged.
     pub fn can_merge_all(&self) -> bool {
         fn walk(ast: &Ast) -> bool {

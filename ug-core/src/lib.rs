@@ -51,7 +51,7 @@ pub trait Device: Clone + std::fmt::Debug {
     #[allow(clippy::missing_safety_doc)]
     unsafe fn allocate_uninit(&self, dtype: DType, len: usize) -> Result<Self::Slice>;
     fn synchronize(&self) -> Result<()>;
-    fn compile(&self, kernel: &crate::lang::ssa::Kernel) -> Result<Self::Func>;
+    fn compile(&self, kernel: &crate::lang::ssa::Kernel, name: Option<&str>) -> Result<Self::Func>;
     // TODO: currently const parameters are hardcoded in the kernel and new code is generated for
     // these when necessary. Maybe we should have a more generic arg type that could handle
     // `Const` scalars.

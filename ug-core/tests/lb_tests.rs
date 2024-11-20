@@ -40,7 +40,7 @@ fn schedule_cpu() -> Result<()> {
         _ => ug::bail!("unexpected item"),
     };
     let ssa = kernel.lower(&Default::default())?;
-    let func = cpu.compile(&ssa)?;
+    let func = cpu.compile(&ssa, None)?;
     let mut buffer = unsafe { cpu.allocate_uninit(ug::DType::F32, 10)? };
     cpu.run(&func, &mut [&mut buffer])?;
     let buffer = buffer.to_vec::<f32>()?;

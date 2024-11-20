@@ -271,11 +271,16 @@ impl crate::Device for CpuDevice {
         false
     }
 
-    fn compile(&self, kernel: &crate::lang::ssa::Kernel) -> Result<Self::Func> {
+    fn compile(&self, kernel: &crate::lang::ssa::Kernel, name: Option<&str>) -> Result<Self::Func> {
         let mut c_code = Vec::with_capacity(8192);
+        // Compilation for the cpu runtime uses temporary files, so we use the pid to ensure that
+        // there is no name collision.
         let pid = std::process::id();
         let kernel_id = KernelId::new().as_usize();
-        let func_name = format!("ug_{pid}_{kernel_id}");
+        let func_name = match name {
+            Some(name) => format!("ugc_{name}_{pid}_{kernel_id}"),
+            None => format!("ugc_{pid}_{kernel_id}"),
+        };
         crate::cpu_code_gen::gen(&mut c_code, &func_name, kernel)?;
         self.compile_c(&c_code, func_name)
     }

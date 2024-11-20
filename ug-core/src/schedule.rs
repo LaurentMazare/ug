@@ -135,7 +135,7 @@ impl<D: Device> Schedule<D> {
                     if let Some(func) = compilation_cache.get_ssa(ssa.instrs()) {
                         Func::Kernel { func, args: args.to_vec() }
                     } else {
-                        let func = self.device.compile(ssa)?;
+                        let func = self.device.compile(ssa, None)?;
                         let func = std::sync::Arc::new(func);
                         compilation_cache.insert_ssa(ssa.instrs().clone(), func.clone());
                         Func::Kernel { func, args: args.to_vec() }
@@ -156,6 +156,8 @@ impl<D: Device> Schedule<D> {
                         Func::Kernel { func, args }
                     } else {
                         let _guard = self.span_kernel.enter();
+                        let kernel_name =
+                            if kernel.ops.is_empty() { None } else { Some(kernel.ops[0].name()) };
                         let kernel = kernel.optimize()?;
                         let opts = if D::use_grid()
                             && kernel.ops.len() == 1
@@ -174,7 +176,8 @@ impl<D: Device> Schedule<D> {
                             let arg = self.get_arg_id(arg_id)?;
                             args.push((arg_id, arg.clone()))
                         }
-                        let func = self.device.compile(&ssa)?;
+                        let func =
+                            self.device.compile(&ssa, kernel_name.as_ref().map(|v| v.as_str()))?;
                         let func = std::sync::Arc::new(func);
                         compilation_cache.insert(norm_kernel, func.clone());
                         Func::Kernel { func, args }

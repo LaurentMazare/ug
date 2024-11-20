@@ -259,12 +259,14 @@ impl ug::Device for Device {
         self.synchronize()
     }
 
-    fn compile(&self, kernel: &ug::lang::ssa::Kernel) -> Result<Self::Func> {
+    fn compile(&self, kernel: &ug::lang::ssa::Kernel, name: Option<&str>) -> Result<Self::Func> {
         let mut cu_code = Vec::with_capacity(8192);
-        let pid = std::process::id();
         let kernel_id = KernelId::new().as_usize();
-        let func_name = format!("ugc_{pid}_{kernel_id}");
-        crate::code_gen::gen(&mut cu_code, &func_name, kernel)?;
+        let func_name = match name {
+            Some(name) => &format!("ug_{name}_{kernel_id}"),
+            None => &format!("ug_{kernel_id}"),
+        };
+        crate::code_gen::gen(&mut cu_code, func_name, kernel)?;
         let func_name_s = Box::leak(Box::new(func_name.to_string()));
         let cu_code = String::from_utf8(cu_code)?;
         let cfg = kernel.launch_config();
@@ -273,7 +275,7 @@ impl ug::Device for Device {
             block_dim: (cfg.block_dim, 1, 1),
             shared_mem_bytes: cfg.shared_mem,
         };
-        let func = self.compile_cu(&cu_code, &func_name, func_name_s)?;
+        let func = self.compile_cu(&cu_code, func_name, func_name_s)?;
         Ok(Func { func, cfg })
     }
 
