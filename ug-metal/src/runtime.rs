@@ -13,6 +13,22 @@ impl<T> WithErr for std::result::Result<T, String> {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct KernelId(usize);
+
+impl KernelId {
+    pub(crate) fn new() -> Self {
+        // https://users.rust-lang.org/t/idiomatic-rust-way-to-generate-unique-id/33805
+        use std::sync::atomic;
+        static COUNTER: atomic::AtomicUsize = atomic::AtomicUsize::new(1);
+        Self(COUNTER.fetch_add(1, atomic::Ordering::Relaxed))
+    }
+
+    pub fn as_usize(&self) -> usize {
+        self.0
+    }
+}
+
 #[derive(Clone)]
 pub struct Func {
     inner: metal::Function,
@@ -27,7 +43,7 @@ impl Func {
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Device {
     device: Arc<metal::Device>,
 }
@@ -53,30 +69,81 @@ impl Device {
         Ok(Func { inner, device: self.clone() })
     }
 
-    pub fn zeros<T>(&self, len: usize) -> Result<Slice<T>> {
+    pub fn zeros<T>(&self, len: usize) -> Result<SliceT<T>> {
         let options = metal::MTLResourceOptions::StorageModeManaged;
         let bytes_len = (len * std::mem::size_of::<T>()) as u64;
         let buffer = self.device.new_buffer(bytes_len, options);
-        Ok(Slice { buffer, _phantom: std::marker::PhantomData, len })
+        Ok(SliceT { buffer, _phantom: std::marker::PhantomData, len })
     }
 
-    pub fn slice_from_values<T>(&self, data: &[T]) -> Result<Slice<T>> {
+    pub fn slice_from_values<T>(&self, data: &[T]) -> Result<SliceT<T>> {
         let options = metal::MTLResourceOptions::StorageModeManaged;
         let ptr = data.as_ptr() as *const std::ffi::c_void;
         let len = data.len();
         let bytes_len = std::mem::size_of_val(data) as u64;
         let buffer = self.device.new_buffer_with_data(ptr, bytes_len, options);
-        Ok(Slice { buffer, _phantom: std::marker::PhantomData, len })
+        Ok(SliceT { buffer, _phantom: std::marker::PhantomData, len })
     }
 }
 
-pub struct Slice<T> {
+impl ug::Device for Device {
+    type Slice = Slice;
+    type Func = Func;
+
+    fn run(&self, _f: &Self::Func, _args: &mut [&mut Self::Slice]) -> Result<()> {
+        todo!()
+    }
+
+    fn matmul(
+        &self,
+        _dst: &mut Self::Slice,
+        _lhs: &Self::Slice,
+        _rhs: &Self::Slice,
+        _bmnk: (usize, usize, usize, usize),
+        _lhs_l: &ug::Layout,
+        _rhs_l: &ug::Layout,
+    ) -> Result<()> {
+        todo!()
+    }
+
+    fn compile(&self, kernel: &ug::lang::ssa::Kernel, name: Option<&str>) -> Result<Self::Func> {
+        let mut buf = vec![];
+        let kernel_id = KernelId::new().as_usize();
+        let name = match name {
+            Some(name) => &format!("ug_{name}_{kernel_id}"),
+            None => &format!("ug_{kernel_id}"),
+        };
+        crate::code_gen::gen(&mut buf, name, kernel)?;
+        let metal_code = String::from_utf8(buf)?;
+        self.compile_metal(&metal_code, name)
+    }
+
+    fn synchronize(&self) -> Result<()> {
+        // cb.commit();
+        // cb.wait_until_completed();
+        todo!()
+    }
+
+    unsafe fn allocate_uninit(&self, dtype: ug::DType, len: usize) -> Result<Self::Slice> {
+        let options = metal::MTLResourceOptions::StorageModeManaged;
+        let bytes_len = (len * dtype.size_in_bytes()) as u64;
+        let buffer = self.device.new_buffer(bytes_len, options);
+        Ok(Slice { buffer, device: self.clone(), len, dtype })
+    }
+
+    fn use_grid() -> bool {
+        true
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct SliceT<T> {
     buffer: metal::Buffer,
     _phantom: std::marker::PhantomData<T>,
     len: usize,
 }
 
-impl<T: Clone> Slice<T> {
+impl<T: Clone> SliceT<T> {
     pub fn len(&self) -> usize {
         self.len
     }
@@ -94,5 +161,46 @@ impl<T: Clone> Slice<T> {
 
     pub fn buffer(&self) -> &metal::Buffer {
         &self.buffer
+    }
+}
+
+#[allow(unused)]
+#[derive(Debug, Clone)]
+pub struct Slice {
+    buffer: metal::Buffer,
+    device: Device,
+    dtype: ug::DType,
+    len: usize,
+}
+
+impl ug::Slice for Slice {
+    type Device = Device;
+
+    fn len(&self) -> usize {
+        self.len
+    }
+
+    fn dtype(&self) -> ug::DType {
+        self.dtype
+    }
+
+    fn device(&self) -> &Self::Device {
+        &self.device
+    }
+
+    fn to_vec<DT: ug::WithDType>(&self) -> Result<Vec<DT>> {
+        todo!()
+    }
+
+    fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
+    fn copy_host_to_device<DT: ug::WithDType>(&mut self, _src: &[DT]) -> Result<()> {
+        todo!()
+    }
+
+    fn copy_device_to_host<DT: ug::WithDType>(&self, _dst: &mut [DT]) -> Result<()> {
+        todo!()
     }
 }
