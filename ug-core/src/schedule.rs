@@ -156,7 +156,18 @@ impl<D: Device> Schedule<D> {
                         Func::Kernel { func, args }
                     } else {
                         let _guard = self.span_kernel.enter();
-                        let ssa = kernel.lower(&Default::default())?;
+                        let kernel = kernel.optimize()?;
+                        let opts = if D::use_grid()
+                            && kernel.ops.len() == 1
+                            && kernel.ops[0].layout.rank() == 1
+                        {
+                            let size = kernel.ops[0].layout.dims()[0];
+                            // TODO: Ensure that size is never 0.
+                            crate::lower_op::Opts::default().with_global(0, size)
+                        } else {
+                            crate::lower_op::Opts::default()
+                        };
+                        let ssa = kernel.lower(&opts)?;
                         let mut args = vec![];
                         for arg in ssa.args().iter() {
                             let arg_id = arg.0.id();

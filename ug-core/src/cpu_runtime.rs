@@ -267,6 +267,10 @@ impl crate::Device for CpuDevice {
         Ok(())
     }
 
+    fn use_grid() -> bool {
+        false
+    }
+
     fn compile(&self, kernel: &crate::lang::ssa::Kernel) -> Result<Self::Func> {
         let mut c_code = Vec::with_capacity(8192);
         let pid = std::process::id();

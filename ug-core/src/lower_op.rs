@@ -10,7 +10,6 @@ pub struct DimSize {
     pub size: usize,
 }
 
-// Default for bool is false.
 #[derive(Debug, Clone, Default)]
 pub struct Opts {
     local: Option<DimSize>,
@@ -400,14 +399,6 @@ impl lang::op::Kernel {
     fn lower_b(&self, opts: &Opts) -> Result<Block> {
         let mut block = Block::empty();
         let mut per_arg = std::collections::HashMap::new();
-        let grid_id = opts.global().map(|dim| {
-            let id = block.push(SsaI::Special(ssa::Special::GridIdx));
-            (dim, id)
-        });
-        let local_id = opts.local().map(|dim| {
-            let id = block.push(SsaI::Special(ssa::Special::LocalIdx));
-            (dim, id)
-        });
         for (index, arg) in self.args.iter().enumerate() {
             let dtype = match arg.type_() {
                 ssa::Type::Ptr(v) => v,
@@ -416,6 +407,14 @@ impl lang::op::Kernel {
             let id = block.push(SsaI::DefineGlobal { index, dtype });
             per_arg.insert(arg.id(), id.to_varid());
         }
+        let grid_id = opts.global().map(|dim| {
+            let id = block.push(SsaI::Special(ssa::Special::GridIdx));
+            (dim, id)
+        });
+        let local_id = opts.local().map(|dim| {
+            let id = block.push(SsaI::Special(ssa::Special::LocalIdx));
+            (dim, id)
+        });
 
         for lang::op::Store { dst, layout, value } in self.ops.iter() {
             let ptr_i = match per_arg.get(dst) {
@@ -458,7 +457,7 @@ impl lang::op::Kernel {
         Ok(block)
     }
 
-    fn optimize(mut self) -> Result<Self> {
+    pub fn optimize(mut self) -> Result<Self> {
         fn walk(v: &Ast) -> Result<Ast> {
             use lang::op::AstInner as A;
             match v.inner.as_ref() {
@@ -503,10 +502,9 @@ impl lang::op::Kernel {
     }
 
     pub fn lower(self, opts: &Opts) -> Result<ssa::Kernel> {
-        let s = self.optimize()?;
-        let block = s.lower_b(opts)?;
+        let block = self.lower_b(opts)?;
         let instrs = block.relocate()?;
-        let args = s.args.iter().enumerate().map(|(i, a)| (*a, i)).collect();
+        let args = self.args.iter().enumerate().map(|(i, a)| (*a, i)).collect();
         let cfg = lang::LaunchConfig {
             grid_dim: opts.global().map_or(1, |v| v.size as u32),
             block_dim: opts.local().map_or(1, |v| v.size as u32),

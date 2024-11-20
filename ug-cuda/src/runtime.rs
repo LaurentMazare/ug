@@ -273,7 +273,6 @@ impl ug::Device for Device {
             block_dim: (cfg.block_dim, 1, 1),
             shared_mem_bytes: cfg.shared_mem,
         };
-
         let func = self.compile_cu(&cu_code, &func_name, func_name_s)?;
         Ok(Func { func, cfg })
     }
@@ -281,6 +280,16 @@ impl ug::Device for Device {
     fn run(&self, f: &Self::Func, args: &mut [&mut Self::Slice]) -> Result<()> {
         use cudarc::driver::LaunchAsync;
         let func = f.func.clone();
+        // TODO: Avoid these.
+        if f.cfg.block_dim.0 == 0
+            || f.cfg.block_dim.1 == 0
+            || f.cfg.block_dim.2 == 0
+            || f.cfg.grid_dim.0 == 0
+            || f.cfg.grid_dim.1 == 0
+            || f.cfg.grid_dim.2 == 0
+        {
+            return Ok(());
+        }
         match args {
             [a1] => {
                 unsafe { func.launch(f.cfg, (&**a1,)).w()? };
@@ -312,6 +321,10 @@ impl ug::Device for Device {
         rhs_l: &ug::Layout,
     ) -> Result<()> {
         crate::gemm::matmul(&self.blas, dst, lhs, rhs, bmnk, lhs_l, rhs_l)
+    }
+
+    fn use_grid() -> bool {
+        true
     }
 }
 

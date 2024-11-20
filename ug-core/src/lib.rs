@@ -66,4 +66,6 @@ pub trait Device: Clone + std::fmt::Debug {
         _lhs_l: &Layout,
         _rhs_l: &Layout,
     ) -> Result<()>;
+
+    fn use_grid() -> bool;
 }
