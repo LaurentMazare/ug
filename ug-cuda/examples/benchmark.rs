@@ -53,7 +53,7 @@ fn run_one(args: &Args, n_cols: usize) -> Result<()> {
         Which::Softmax => {
             let kernel = ug::samples::op::softmax(n_rows, n_cols)?;
             let lower_opts =
-                ug::lower_op::Opts::default().with_global(0, n_rows).with_local(1, n_cols);
+                ug::lower_op::Opts::default().with_block_axis(0).with_thread_block(1, n_cols);
             (kernel.lower(&lower_opts)?, n_cols)
         }
     };

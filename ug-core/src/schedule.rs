@@ -162,10 +162,27 @@ impl<D: Device> Schedule<D> {
                         let opts = if D::use_grid()
                             && kernel.ops.len() == 1
                             && kernel.ops[0].layout.rank() >= 1
+                            && kernel.ops[0].layout.num_elements() >= 1
                         {
-                            let size = kernel.ops[0].layout.dims()[0];
-                            // TODO: Ensure that size is never 0.
-                            crate::lower_op::Opts::default().with_global(0, size)
+                            let mut dims = kernel.ops[0]
+                                .layout
+                                .dims()
+                                .iter()
+                                .copied()
+                                .enumerate()
+                                .collect::<Vec<_>>();
+                            dims.sort_by(|v1, v2| usize::cmp(&v2.1, &v1.1));
+                            if dims.len() >= 2 && dims[1].1 > 1 {
+                                // TODO: It might be better to use the layout to determine the
+                                // thread dim or to look at reduce dims.
+                                crate::lower_op::Opts::default()
+                                    .with_block_axis(dims[0].0)
+                                    .with_thread_block(dims[1].0, 32)
+                            } else if dims.len() > 1 && dims[0].1 > 1 {
+                                crate::lower_op::Opts::default().with_block_axis(dims[0].0)
+                            } else {
+                                crate::lower_op::Opts::default()
+                            }
                         } else {
                             crate::lower_op::Opts::default()
                         };

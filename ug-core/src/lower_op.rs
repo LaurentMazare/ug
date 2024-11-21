@@ -4,35 +4,36 @@ use crate::{bail, Result, Shape};
 use ssa::{DType, Instr as SsaI};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct DimSize {
+pub struct ThreadBlock {
+    /// dim is the axis along which worker processes are split.
     pub dim: usize,
-    /// size is the number of worker processes on the specified dim.
-    pub size: usize,
+    /// block_dim is the number of worker processes on the specified dim.
+    pub block_dim: usize,
 }
 
 #[derive(Debug, Clone, Default)]
 pub struct Opts {
-    local: Option<DimSize>,
-    global: Option<DimSize>,
+    thread_block: Option<ThreadBlock>,
+    block_axis: Option<usize>,
 }
 
 impl Opts {
-    pub fn with_global(mut self, dim: usize, size: usize) -> Self {
-        self.global = Some(DimSize { dim, size });
+    pub fn with_block_axis(mut self, axis: usize) -> Self {
+        self.block_axis = Some(axis);
         self
     }
 
-    pub fn with_local(mut self, dim: usize, size: usize) -> Self {
-        self.local = Some(DimSize { dim, size });
+    pub fn with_thread_block(mut self, dim: usize, block_dim: usize) -> Self {
+        self.thread_block = Some(ThreadBlock { dim, block_dim });
         self
     }
 
-    pub fn global(&self) -> &Option<DimSize> {
-        &self.global
+    pub fn block_axis(&self) -> Option<usize> {
+        self.block_axis
     }
 
-    pub fn local(&self) -> &Option<DimSize> {
-        &self.local
+    pub fn thread_block(&self) -> Option<&ThreadBlock> {
+        self.thread_block.as_ref()
     }
 }
 
@@ -347,7 +348,7 @@ impl Ast {
 
                 // TODO(laurent): generalize to other dim as long as the values in arg do not
                 // depend on the dim.
-                if opts.local.map_or(false, |v| v.dim == *dim) {
+                if opts.thread_block.map_or(false, |v| v.dim == *dim) {
                     let (arg_i, arg_b) = arg.lower(idxs, opts, per_arg)?;
                     block.0.extend_from_slice(&arg_b.0);
                     block.0.push((dst_i, SsaI::ReduceLocal { op: *op, arg: arg_i.to_a(), dtype }))
@@ -407,11 +408,11 @@ impl lang::op::Kernel {
             let id = block.push(SsaI::DefineGlobal { index, dtype });
             per_arg.insert(arg.id(), id.to_varid());
         }
-        let block_id = opts.global().map(|dim| {
+        let block_id = opts.block_axis().map(|dim| {
             let id = block.push(SsaI::Special(ssa::Special::BlockIdx));
             (dim, id)
         });
-        let thread_id = opts.local().map(|dim| {
+        let thread_id = opts.thread_block().map(|dim| {
             let id = block.push(SsaI::Special(ssa::Special::ThreadIdx));
             (dim, id)
         });
@@ -425,13 +426,13 @@ impl lang::op::Kernel {
             let mut idxs = Vec::with_capacity(layout.rank());
             for (dim_idx, &len) in layout.dims().iter().enumerate() {
                 let id = match (block_id, thread_id) {
-                    (Some((g, block_id)), _) if g.dim == dim_idx => block_id,
+                    (Some((g_dim, block_id)), _) if g_dim == dim_idx => block_id,
                     (_, Some((l, thread_id))) if l.dim == dim_idx => {
-                        if len == l.size {
+                        if len == l.block_dim {
                             thread_id
                         } else {
                             // The for loop steps by blockDim.x
-                            let r = block.range(0, len as i32, l.size);
+                            let r = block.range(0, len as i32, l.block_dim);
                             let id = r.id();
                             ranges.push(r);
                             id
@@ -515,11 +516,12 @@ impl lang::op::Kernel {
         let block = self.lower_b(opts)?;
         let instrs = block.relocate()?;
         let args = self.args.iter().enumerate().map(|(i, a)| (*a, i)).collect();
-        let cfg = lang::LaunchConfig {
-            grid_dim: opts.global().map_or(1, |v| v.size as u32),
-            block_dim: opts.local().map_or(1, |v| v.size as u32),
-            shared_mem: 0,
+        let grid_dim = match opts.block_axis() {
+            Some(idx) => self.ops[0].layout.dims().get(idx).map_or(1, |v| *v as u32),
+            None => 1,
         };
+        let block_dim = opts.thread_block().map_or(1, |v| v.block_dim as u32);
+        let cfg = lang::LaunchConfig { grid_dim, block_dim, shared_mem: 0 };
         Ok(ssa::Kernel::new(instrs, args, cfg))
     }
 }
