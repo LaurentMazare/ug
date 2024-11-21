@@ -21,6 +21,10 @@ jobs:
         with:
           command: check
           args: -p ug
+      - uses: actions-rs/cargo@v1
+        with:
+          command: check
+          args: -p ug-llama
 
   test:
     name: Test Suite
@@ -72,3 +76,7 @@ jobs:
         with:
           command: clippy
           args: -p ug --tests --examples -- -D warnings
+      - uses: actions-rs/cargo@v1
+        with:
+          command: clippy
+          args: -p ug-llama --tests --examples -- -D warnings

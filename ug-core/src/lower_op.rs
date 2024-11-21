@@ -363,7 +363,7 @@ impl Ast {
                         }
                         Some(v) => *v,
                     };
-                    let r = block.range(0, reduce_len as i32);
+                    let r = block.range(0, reduce_len as i32, 1);
 
                     let mut reduce_idxs = idxs.clone();
                     reduce_idxs.0[*dim] = r.id().into();
@@ -426,9 +426,19 @@ impl lang::op::Kernel {
             for (dim_idx, &len) in layout.dims().iter().enumerate() {
                 let id = match (block_id, thread_id) {
                     (Some((g, block_id)), _) if g.dim == dim_idx => block_id,
-                    (_, Some((l, thread_id))) if l.dim == dim_idx => thread_id,
+                    (_, Some((l, thread_id))) if l.dim == dim_idx => {
+                        if len == l.size {
+                            thread_id
+                        } else {
+                            // The for loop steps by blockDim.x
+                            let r = block.range(0, len as i32, l.size);
+                            let id = r.id();
+                            ranges.push(r);
+                            id
+                        }
+                    }
                     (_, _) => {
-                        let r = block.range(0, len as i32);
+                        let r = block.range(0, len as i32, 1);
                         let id = r.id();
                         ranges.push(r);
                         id

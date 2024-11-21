@@ -45,11 +45,11 @@ fn index_select<D: Device>(src: &LB<D>, ids: &LB<D>) -> Result<LB<D>> {
         let src = b.push(arg(0, dtype)).to_varid();
         let ids = b.push(arg(1, DType::I32)).to_varid();
         let dst = b.push(arg(2, dtype)).to_varid();
-        let r1 = b.range(0, (b_sz * seq_len) as i32);
+        let r1 = b.range(0, (b_sz * seq_len) as i32, 1);
         let src_off = b.push(I::Load { src: ids, offset: r1.id().to_a(), dtype });
         let src_off = b.mul(src_off, h as i32);
         let dst_off = b.mul(r1.id(), h as i32);
-        let r2 = b.range(0, h as i32);
+        let r2 = b.range(0, h as i32, 1);
         let src_off = b.binary(ug::lang::BinaryOp::Add, src_off, r2.id(), DType::I32);
         let dst_off = b.binary(ug::lang::BinaryOp::Add, dst_off, r2.id(), DType::I32);
         let load_i = b.push(I::Load { src, offset: src_off.to_a(), dtype });

@@ -89,7 +89,7 @@ fn run_one(args: &Args, n_cols: usize) -> Result<()> {
         encoder.use_resource(arg, metal::MTLResourceUsage::Read);
         encoder.use_resource(res, metal::MTLResourceUsage::Write);
         let grid_size = metal::MTLSize::new(n_rows as u64, 1, 1);
-        let threadgroup_size = metal::MTLSize::new(block_dim as u64, 1, 1);
+        let threadgroup_size = metal::MTLSize::new(usize::min(block_dim, 1024) as u64, 1, 1);
         encoder.dispatch_thread_groups(grid_size, threadgroup_size);
         // Somehow, using dispatch_threads with non-even group size doesn't work properly here.
         encoder.end_encoding();

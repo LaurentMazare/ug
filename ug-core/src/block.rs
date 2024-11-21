@@ -51,10 +51,10 @@ impl Range {
 }
 
 impl Block {
-    pub fn range(&mut self, lo: i32, up: i32) -> Range {
+    pub fn range(&mut self, lo: i32, up: i32, step: usize) -> Range {
         let (range_id, erange_id) = (Id::new(), Id::new());
         let range =
-            SsaI::Range { lo: lo.into(), up: up.into(), step: 1, end_idx: erange_id.to_varid() };
+            SsaI::Range { lo: lo.into(), up: up.into(), step, end_idx: erange_id.to_varid() };
         self.0.push((range_id, range));
         Range { range_id, erange_id }
     }
