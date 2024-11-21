@@ -384,10 +384,10 @@ pub fn eval_ssa<const N: usize>(
             Instr::DefineAcc(Const::F32(v)) => (Value::F32(W::splat(**v)), None),
             Instr::DefineAcc(Const::I32(v)) => (Value::I32(W::splat(*v)), None),
             Instr::DefineAcc(Const::I64(v)) => (Value::I64(W::splat(*v)), None),
-            Instr::Special(ssa::Special::LocalIdx) => {
+            Instr::Special(ssa::Special::ThreadIdx) => {
                 (Value::I32(W(std::array::from_fn(|i| i as i32))), None)
             }
-            Instr::Special(ssa::Special::GridIdx) => (Value::I32(W::splat(grid_idx as i32)), None),
+            Instr::Special(ssa::Special::BlockIdx) => (Value::I32(W::splat(grid_idx as i32)), None),
             Instr::Barrier => (Value::None, None),
             Instr::ReduceLocal { op, arg, dtype: _ } => {
                 use crate::lang::ssa::ReduceOp as R;

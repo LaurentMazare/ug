@@ -626,8 +626,8 @@ pub mod ssa {
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub enum Special {
-        LocalIdx,
-        GridIdx,
+        ThreadIdx,
+        BlockIdx,
     }
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]

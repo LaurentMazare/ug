@@ -161,8 +161,8 @@ pub fn gen<W: std::io::Write>(w: &mut W, func_name: &str, kernel: &ssa::Kernel) 
                 };
                 writeln!(w, "{indent}{} {var_id} = {op}({});", D(*dtype), A(*arg))?;
             }
-            I::Special(ssa::Special::LocalIdx) => writeln!(w, "{indent}int {var_id} = tpitg.x;")?,
-            I::Special(ssa::Special::GridIdx) => writeln!(w, "{indent}int {var_id} = tgpig.x;")?,
+            I::Special(ssa::Special::ThreadIdx) => writeln!(w, "{indent}int {var_id} = tpitg.x;")?,
+            I::Special(ssa::Special::BlockIdx) => writeln!(w, "{indent}int {var_id} = tgpig.x;")?,
             I::Barrier => writeln!(w, "{indent}threadgroup_barrier(mem_flags::mem_threadgroup);")?,
             I::ReduceLocal { op, arg, dtype } => {
                 let op = match op {

@@ -407,12 +407,12 @@ impl lang::op::Kernel {
             let id = block.push(SsaI::DefineGlobal { index, dtype });
             per_arg.insert(arg.id(), id.to_varid());
         }
-        let grid_id = opts.global().map(|dim| {
-            let id = block.push(SsaI::Special(ssa::Special::GridIdx));
+        let block_id = opts.global().map(|dim| {
+            let id = block.push(SsaI::Special(ssa::Special::BlockIdx));
             (dim, id)
         });
-        let local_id = opts.local().map(|dim| {
-            let id = block.push(SsaI::Special(ssa::Special::LocalIdx));
+        let thread_id = opts.local().map(|dim| {
+            let id = block.push(SsaI::Special(ssa::Special::ThreadIdx));
             (dim, id)
         });
 
@@ -424,9 +424,9 @@ impl lang::op::Kernel {
             let mut ranges = Vec::with_capacity(layout.rank());
             let mut idxs = Vec::with_capacity(layout.rank());
             for (dim_idx, &len) in layout.dims().iter().enumerate() {
-                let id = match (grid_id, local_id) {
-                    (Some((g, grid_id)), _) if g.dim == dim_idx => grid_id,
-                    (_, Some((l, local_id))) if l.dim == dim_idx => local_id,
+                let id = match (block_id, thread_id) {
+                    (Some((g, block_id)), _) if g.dim == dim_idx => block_id,
+                    (_, Some((l, thread_id))) if l.dim == dim_idx => thread_id,
                     (_, _) => {
                         let r = block.range(0, len as i32);
                         let id = r.id();

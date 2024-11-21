@@ -161,10 +161,12 @@ pub fn gen<W: std::io::Write>(w: &mut W, func_name: &str, kernel: &ssa::Kernel) 
                 };
                 writeln!(w, "{indent}{} {var_id} = {op}({});", D(*dtype), A(*arg))?;
             }
-            I::Special(ssa::Special::LocalIdx) => {
+            I::Special(ssa::Special::ThreadIdx) => {
                 writeln!(w, "{indent}int {var_id} = threadIdx.x;")?
             }
-            I::Special(ssa::Special::GridIdx) => writeln!(w, "{indent}int {var_id} = blockIdx.x;")?,
+            I::Special(ssa::Special::BlockIdx) => {
+                writeln!(w, "{indent}int {var_id} = blockIdx.x;")?
+            }
             I::Barrier => writeln!(w, "{indent}__syncthreads();")?,
             I::ReduceLocal { op, arg, dtype } => {
                 let op = match op {

@@ -131,7 +131,7 @@ impl lang::IndexExprNode {
                 vec![(dst_id, instr)]
             }
             E::ProgramId => {
-                let instr = SsaI::Special(ssa::Special::GridIdx);
+                let instr = SsaI::Special(ssa::Special::BlockIdx);
                 vec![(dst_id, instr)]
             }
         };

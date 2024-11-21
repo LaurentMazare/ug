@@ -54,8 +54,8 @@ pub mod ssa {
         let dtype = DType::F32;
         let src_i = b.push(arg(0, DType::F32));
         let dst_i = b.push(arg(1, DType::F32));
-        let g_i = b.push(I::Special(ssa::Special::GridIdx));
-        let l_i = b.push(I::Special(ssa::Special::LocalIdx));
+        let g_i = b.push(I::Special(ssa::Special::BlockIdx));
+        let l_i = b.push(I::Special(ssa::Special::ThreadIdx));
         let off_i = b.mul(g_i, block_size as i32);
         let off_i = b.binary(BinaryOp::Add, off_i, l_i, DType::I32);
         let load_i = b.push(I::Load { src: src_i.to_varid(), offset: off_i.to_a(), dtype });
@@ -79,8 +79,8 @@ pub mod ssa {
         let dtype = DType::F32;
         let src_i = b.push(arg(0, DType::F32));
         let dst_i = b.push(arg(1, DType::F32));
-        let g_i = b.push(I::Special(ssa::Special::GridIdx));
-        let l_i = b.push(I::Special(ssa::Special::LocalIdx));
+        let g_i = b.push(I::Special(ssa::Special::BlockIdx));
+        let l_i = b.push(I::Special(ssa::Special::ThreadIdx));
         let off_i = b.mul(g_i, dim2 as i32);
         let off_i = b.binary(BinaryOp::Add, off_i, l_i, DType::I32);
 
@@ -104,8 +104,8 @@ pub mod ssa {
         let src_i = b.push(arg(0, DType::F32));
         let dst_i = b.push(arg(1, DType::F32));
         let sto_i = b.push(I::DefineLocal { size: (2 * dim2), dtype: DType::F32 }).to_varid();
-        let g_i = b.push(I::Special(ssa::Special::GridIdx));
-        let l_i = b.push(I::Special(ssa::Special::LocalIdx));
+        let g_i = b.push(I::Special(ssa::Special::BlockIdx));
+        let l_i = b.push(I::Special(ssa::Special::ThreadIdx));
         let base_off_i = b.mul(g_i, dim2 as i32);
         let global_off_i = b.binary(BinaryOp::Add, base_off_i, l_i, DType::I32);
         let load_i = b.push(I::Load { src: src_i.to_varid(), offset: global_off_i.to_a(), dtype });
@@ -162,8 +162,8 @@ pub mod ssa {
         let dtype = DType::F32;
         let src_i = b.push(arg(0, dtype));
         let dst_i = b.push(arg(1, dtype));
-        let g_i = b.push(I::Special(ssa::Special::GridIdx));
-        let l_i = b.push(I::Special(ssa::Special::LocalIdx));
+        let g_i = b.push(I::Special(ssa::Special::BlockIdx));
+        let l_i = b.push(I::Special(ssa::Special::ThreadIdx));
         let base_off_i = b.mul(g_i, dim2 as i32);
         let global_off_i = b.binary(BinaryOp::Add, base_off_i, l_i, DType::I32);
         let load_i = b.push(I::Load { src: src_i.to_varid(), offset: global_off_i.to_a(), dtype });
@@ -191,8 +191,8 @@ pub mod ssa {
         let dtype = DType::F32;
         let src_i = b.push(arg(0, dtype));
         let dst_i = b.push(arg(1, dtype));
-        let g_i = b.push(I::Special(ssa::Special::GridIdx));
-        let l_i = b.push(I::Special(ssa::Special::LocalIdx));
+        let g_i = b.push(I::Special(ssa::Special::BlockIdx));
+        let l_i = b.push(I::Special(ssa::Special::ThreadIdx));
         let base_off_i = b.mul(g_i, dim2 as i32);
         let global_off_i = b.binary(BinaryOp::Add, base_off_i, l_i, DType::I32);
 
