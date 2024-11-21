@@ -51,7 +51,7 @@ impl Range {
 }
 
 impl Block {
-    pub fn range(&mut self, lo: i32, up: i32, step: usize) -> Range {
+    pub fn range<L: Into<ssa::A>, U: Into<ssa::A>>(&mut self, lo: L, up: U, step: usize) -> Range {
         let (range_id, erange_id) = (Id::new(), Id::new());
         let range =
             SsaI::Range { lo: lo.into(), up: up.into(), step, end_idx: erange_id.to_varid() };

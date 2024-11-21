@@ -432,7 +432,7 @@ impl lang::op::Kernel {
                             thread_id
                         } else {
                             // The for loop steps by blockDim.x
-                            let r = block.range(0, len as i32, l.block_dim);
+                            let r = block.range(thread_id, len as i32, l.block_dim);
                             let id = r.id();
                             ranges.push(r);
                             id
