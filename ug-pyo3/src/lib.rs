@@ -313,7 +313,7 @@ mod ssa {
         #[staticmethod]
         fn range(lo: usize, up: usize, end_idx: usize) -> Self {
             let end_idx = ssa::VarId::new(end_idx);
-            Self(ssa::Instr::Range { lo: a(lo), up: a(up), end_idx })
+            Self(ssa::Instr::Range { lo: a(lo), up: a(up), end_idx, step: 1 })
         }
 
         #[staticmethod]
@@ -337,13 +337,13 @@ mod ssa {
         }
 
         #[staticmethod]
-        fn special_l() -> Self {
-            Self(ssa::Instr::Special(ssa::Special::LocalIdx))
+        fn special_ti() -> Self {
+            Self(ssa::Instr::Special(ssa::Special::ThreadIdx))
         }
 
         #[staticmethod]
-        fn special_g() -> Self {
-            Self(ssa::Instr::Special(ssa::Special::GridIdx))
+        fn special_bi() -> Self {
+            Self(ssa::Instr::Special(ssa::Special::BlockIdx))
         }
 
         #[staticmethod]
