@@ -179,7 +179,7 @@ impl<D: Device> Schedule<D> {
                                     .with_block_axis(dims[0].0)
                                     .with_thread_block(dims[1].0, 32)
                             } else if dims.len() > 1 && dims[0].1 > 1 {
-                                crate::lower_op::Opts::default().with_block_axis(dims[0].0)
+                                crate::lower_op::Opts::default().with_global_axis(dims[0].0, 32)
                             } else {
                                 crate::lower_op::Opts::default()
                             }

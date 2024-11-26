@@ -18,6 +18,12 @@ pub struct Opts {
 }
 
 impl Opts {
+    pub fn with_global_axis(mut self, axis: usize, block_dim: usize) -> Self {
+        self.block_axis = Some(axis);
+        self.thread_block = Some(ThreadBlock { dim: axis, block_dim });
+        self
+    }
+
     pub fn with_block_axis(mut self, axis: usize) -> Self {
         self.block_axis = Some(axis);
         self
@@ -348,7 +354,9 @@ impl Ast {
 
                 // TODO(laurent): generalize to other dim as long as the values in arg do not
                 // depend on the dim.
-                if opts.thread_block.map_or(false, |v| v.dim == *dim) {
+                if opts.thread_block.map_or(false, |v| v.dim == *dim)
+                    && !opts.block_axis().map_or(false, |v| v == *dim)
+                {
                     let (arg_i, arg_b) = arg.lower(idxs, opts, per_arg)?;
                     block.0.extend_from_slice(&arg_b.0);
                     block.0.push((dst_i, SsaI::ReduceLocal { op: *op, arg: arg_i.to_a(), dtype }))
@@ -426,6 +434,19 @@ impl lang::op::Kernel {
             let mut idxs = Vec::with_capacity(layout.rank());
             for (dim_idx, &len) in layout.dims().iter().enumerate() {
                 let id = match (block_id, thread_id) {
+                    (Some((g_dim, block_id)), Some((l, thread_id)))
+                        if g_dim == dim_idx && l.dim == dim_idx =>
+                    {
+                        // This acts like an `if` rather than a `for`, maybe we should have a
+                        // specific construct for this.
+                        let global_id = block.mul(block_id, l.block_dim as i32);
+                        let global_id =
+                            block.binary(ssa::BinaryOp::Add, global_id, thread_id, DType::I32);
+                        let r = block.range(global_id, len as i32, len);
+                        let id = r.id();
+                        ranges.push(r);
+                        id
+                    }
                     (Some((g_dim, block_id)), _) if g_dim == dim_idx => block_id,
                     (_, Some((l, thread_id))) if l.dim == dim_idx => {
                         if len == l.block_dim {
@@ -517,7 +538,16 @@ impl lang::op::Kernel {
         let instrs = block.relocate()?;
         let args = self.args.iter().enumerate().map(|(i, a)| (*a, i)).collect();
         let grid_dim = match opts.block_axis() {
-            Some(idx) => self.ops[0].layout.dims().get(idx).map_or(1, |v| *v as u32),
+            Some(idx) => {
+                let local = opts.thread_block().map_or(1, |v| {
+                    if v.dim == idx {
+                        v.block_dim as u32
+                    } else {
+                        1
+                    }
+                });
+                self.ops[0].layout.dims().get(idx).map_or(1, |v| *v as u32).div_ceil(local)
+            }
             None => 1,
         };
         let block_dim = opts.thread_block().map_or(1, |v| v.block_dim as u32);
