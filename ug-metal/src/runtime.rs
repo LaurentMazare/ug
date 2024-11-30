@@ -259,3 +259,9 @@ impl ug::Slice for Slice {
         Ok(())
     }
 }
+
+impl Slice {
+    pub fn buffer(&self) -> &metal::Buffer {
+        &self.buffer
+    }
+}

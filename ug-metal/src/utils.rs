@@ -60,6 +60,18 @@ impl EncoderParam for &mut Buffer {
     }
 }
 
+impl EncoderParam for &crate::runtime::Slice {
+    fn set_param(encoder: &ComputeCommandEncoderRef, position: u64, data: Self) {
+        encoder.set_buffer(position, Some(data.buffer()), 0);
+    }
+}
+
+impl EncoderParam for &mut crate::runtime::Slice {
+    fn set_param(encoder: &ComputeCommandEncoderRef, position: u64, data: Self) {
+        encoder.set_buffer(position, Some(data.buffer()), 0);
+    }
+}
+
 impl EncoderParam for (&mut Buffer, usize) {
     fn set_param(encoder: &ComputeCommandEncoderRef, position: u64, data: Self) {
         encoder.set_buffer(position, Some(data.0), data.1 as u64);

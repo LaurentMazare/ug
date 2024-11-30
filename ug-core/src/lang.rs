@@ -38,6 +38,12 @@ pub struct LaunchConfig {
     pub shared_mem: u32,
 }
 
+impl LaunchConfig {
+    pub fn for_num_elems(n: u32) -> Self {
+        LaunchConfig { grid_dim: n.div_ceil(32), block_dim: 32, shared_mem: 0 }
+    }
+}
+
 impl BinaryOp {
     fn as_str(&self) -> &'static str {
         match self {
