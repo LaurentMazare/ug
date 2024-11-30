@@ -32,6 +32,7 @@ num_cpus = "1.16.0"
 objc = "0.2.7"
 ug = { path = "./ug-core", version = "0.1.0" }
 ug-cuda = { path = "./ug-cuda", version = "0.1.0" }
+ug-metal = { path = "./ug-metal", version = "0.1.0" }
 rand = "0.8.5"
 rand_distr = "0.4.3"
 rayon = "1.7.0"

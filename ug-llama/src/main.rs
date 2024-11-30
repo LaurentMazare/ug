@@ -5,6 +5,8 @@ mod cpu_ops;
 #[cfg(feature = "cuda")]
 mod cuda_ops;
 mod custom;
+#[cfg(feature = "metal")]
+mod metal_ops;
 mod model;
 use model::{Cache, Model};
 

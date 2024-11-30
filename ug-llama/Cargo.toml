@@ -12,6 +12,7 @@ license.workspace = true
 clap = { workspace = true }
 cudarc = { workspace = true, optional = true }
 hf-hub = { workspace = true }
+metal = { workspace = true, optional = true }
 rand = { workspace = true }
 rand_distr = { workspace = true }
 rayon = { workspace = true }
@@ -23,7 +24,9 @@ tracing-chrome = { workspace = true }
 tracing-subscriber = { workspace = true }
 ug = { workspace = true }
 ug-cuda = { workspace = true, optional = true }
+ug-metal = { workspace = true, optional = true }
 
 [features]
 default = []
 cuda = ["cudarc", "ug-cuda"]
+metal = ["dep:metal", "ug-metal"]
