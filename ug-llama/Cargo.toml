@@ -27,6 +27,6 @@ ug-cuda = { workspace = true, optional = true }
 ug-metal = { workspace = true, optional = true }
 
 [features]
-default = ["metal"]
+default = []
 cuda = ["cudarc", "ug-cuda"]
 metal = ["dep:metal", "ug-metal"]
