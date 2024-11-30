@@ -495,6 +495,7 @@ fn call_mlx_gemm(
         (GemmDType::F16, true, true) => "gemm_tt_f16_f16_32_32_16_2_2",
     };
 
+    // TODO: Avoid recompiling the code for each matmul.
     let lib = device.device.new_library_with_source(MLX_GEMM, &metal::CompileOptions::new()).w()?;
     let func =
         lib.get_function(name, constants.as_ref().map(|c| c.function_constant_values())).w()?;
