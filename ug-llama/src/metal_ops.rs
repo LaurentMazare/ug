@@ -35,6 +35,9 @@ impl crate::Device for ug_metal::runtime::Device {
                     encoder,
                     (src, cos, sin, pos, dst, (b * h) as u32, (t * d) as u32, d as u32)
                 );
+                let grid_size = metal::MTLSize::new(cfg.grid_dim as u64, 1, 1);
+                let threadgroup_size = metal::MTLSize::new(cfg.block_dim as u64, 1, 1);
+                encoder.dispatch_thread_groups(grid_size, threadgroup_size);
                 encoder.end_encoding();
                 cb.commit();
             };
@@ -70,6 +73,9 @@ impl crate::Device for ug_metal::runtime::Device {
                     encoder,
                     (src, cos, sin, pos, dst, (b * h) as u32, (t * d) as u32, d as u32)
                 );
+                let grid_size = metal::MTLSize::new(cfg.grid_dim as u64, 1, 1);
+                let threadgroup_size = metal::MTLSize::new(cfg.block_dim as u64, 1, 1);
+                encoder.dispatch_thread_groups(grid_size, threadgroup_size);
                 encoder.end_encoding();
                 cb.commit();
             };
@@ -121,6 +127,9 @@ impl crate::Device for ug_metal::runtime::Device {
                     encoder,
                     (lhs, rhs, dst, d1 as u32, d2_l as u32, d2_r as u32, d2_lr as u32)
                 );
+                let grid_size = metal::MTLSize::new(cfg.grid_dim as u64, 1, 1);
+                let threadgroup_size = metal::MTLSize::new(cfg.block_dim as u64, 1, 1);
+                encoder.dispatch_thread_groups(grid_size, threadgroup_size);
                 encoder.end_encoding();
                 cb.commit();
             };
@@ -149,6 +158,9 @@ impl crate::Device for ug_metal::runtime::Device {
             let pl = func.pipeline()?;
             encoder.set_compute_pipeline_state(&pl);
             ug_metal::set_params!(encoder, (num_elements as u32, dim_m1 as u32, src, dst));
+            let grid_size = metal::MTLSize::new(cfg.grid_dim as u64, 1, 1);
+            let threadgroup_size = metal::MTLSize::new(cfg.block_dim as u64, 1, 1);
+            encoder.dispatch_thread_groups(grid_size, threadgroup_size);
             encoder.end_encoding();
             cb.commit();
             Ok(())
