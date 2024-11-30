@@ -133,7 +133,8 @@ impl crate::Device for ug_metal::runtime::Device {
         let device = src.device();
         let rank = src.rank();
         let dim_m1 = src.dims()[rank - 1];
-        let n_rows = src.shape().num_elements() / dim_m1;
+        let num_elements = src.shape().num_elements();
+        let n_rows = num_elements / dim_m1;
         let cfg = LaunchConfig { grid_dim: n_rows as u32, block_dim: 32, shared_mem: 0 };
 
         // TODO: Use get_or_try_init when available.
@@ -147,7 +148,7 @@ impl crate::Device for ug_metal::runtime::Device {
             let encoder = cb.new_compute_command_encoder();
             let pl = func.pipeline()?;
             encoder.set_compute_pipeline_state(&pl);
-            ug_metal::set_params!(encoder, (src, dst, dim_m1 as i32));
+            ug_metal::set_params!(encoder, (num_elements as u32, dim_m1 as u32, src, dst));
             encoder.end_encoding();
             cb.commit();
             Ok(())
