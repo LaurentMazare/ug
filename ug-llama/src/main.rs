@@ -86,7 +86,16 @@ fn main() -> Result<()> {
             run(&device, &args)?;
         }
     }
-    #[cfg(not(feature = "cuda"))]
+    #[cfg(feature = "metal")]
+    {
+        if args.cpu {
+            run(&ug::CpuDevice, &args)?;
+        } else {
+            let device = ug_metal::runtime::Device::new()?;
+            run(&device, &args)?;
+        }
+    }
+    #[cfg(all(not(feature = "cuda"), not(feature = "metal")))]
     run(&ug::CpuDevice, &args)?;
 
     Ok(())
