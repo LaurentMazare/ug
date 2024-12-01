@@ -577,6 +577,7 @@ mod tests {
 pub struct Layout {
     shape: Shape,
     strides: Vec<usize>,
+    // TODO: We only have a single offset here, maybe we should have one offset per dimension?
     offset: usize,
 }
 
@@ -651,6 +652,10 @@ impl Layout {
 
     pub fn offset(&self) -> usize {
         self.offset
+    }
+
+    pub fn set_offset(&mut self, offset: usize) {
+        self.offset = offset
     }
 
     pub fn c_contiguous(&self) -> bool {
