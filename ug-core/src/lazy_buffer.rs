@@ -499,6 +499,35 @@ impl<D: Device> LazyBuffer<D> {
         Ok(lb)
     }
 
+    // Contrary to pytorch, this returns an error if the target dimension does not have
+    // a size 1.
+    pub fn squeeze<D1: Dim>(&self, dim: D1) -> Result<Self> {
+        let dim = dim.to_index(self.shape(), "squeeze")?;
+        let mut dims = self.dims().to_vec();
+        if dims[dim] != 1 {
+            bail!("cannot squeeze on dim {dim} for shape {dims:?}")
+        }
+        dims.remove(dim);
+        self.reshape(dims)
+    }
+
+    pub fn get_on_dim<D1: Dim>(&self, dim: D1, index: usize) -> Result<Self> {
+        let dim = dim.to_index(self.shape(), "get")?;
+        let narrowed = self.narrow(dim, index, 1)?;
+        narrowed.squeeze(dim)
+    }
+
+    pub fn get(&self, index: usize) -> Result<Self> {
+        self.get_on_dim(0, index)
+    }
+
+    pub fn unsqueeze<D1: Dim>(&self, dim: D1) -> Result<Self> {
+        let mut dims = self.dims().to_vec();
+        let dim = dim.to_index_plus_one(self.shape(), "unsqueeze")?;
+        dims.insert(dim, 1);
+        self.reshape(dims)
+    }
+
     pub fn reshape<S: Into<Shape>>(&self, s: S) -> Result<Self> {
         let s: Shape = s.into();
         let dst_nel = s.num_elements();
