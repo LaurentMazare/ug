@@ -208,8 +208,9 @@ impl lang::op::Layout {
         if idxs.0.len() != strides.len() {
             bail!("len mismatch between strides {self:?} and idxs {idxs:?}")
         }
-        let mut acc_id = None;
         let mut block = Block::empty();
+        let mut acc_id =
+            if self.offset() == 0 { None } else { Some(block.cst(self.offset() as i32)) };
         for (idx, &stride) in idxs.0.iter().zip(strides.iter()) {
             let dim_id = idx.eval(&mut block);
             let dim_id = block.mul(dim_id, stride as i32);

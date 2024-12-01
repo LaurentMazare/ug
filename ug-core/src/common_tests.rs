@@ -39,7 +39,14 @@ pub mod lb {
             None => bail!("no data"),
             Some(v) => v,
         };
-        assert_eq!(data, [4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0]);
+        assert_eq!(data, [1.0, 2.0, 3.0, 4.0, 1.1, 2.1, 3.1, 4.1, 1.2, 2.2, 3.2, 4.2]);
+        let lb = LB::<D>::cat(&[&arg0, &arg1, &arg2], 1)?;
+        lb.realize()?;
+        let data = match lb.data_vec::<f32>()? {
+            None => bail!("no data"),
+            Some(v) => v,
+        };
+        assert_eq!(data, [1.0, 2.0, 1.1, 2.1, 1.2, 2.2, 3.2, 4.2, 0.0, 0.0, 0.0, 0.0]);
         Ok(())
     }
 }

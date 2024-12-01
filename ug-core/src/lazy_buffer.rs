@@ -357,11 +357,14 @@ impl<D: Device> LazyBuffer<D> {
             .dims()
             .iter()
             .zip(dst_layout.strides().iter())
-            .map(|(d, s)| d * s)
+            .map(|(d, s)| d.saturating_sub(1) * s)
             .sum::<usize>()
             + dst_layout.offset();
         if max_offset >= self.shape().elem_count() {
-            bail!("set_l out of bounds, dst shape {:?}, layout {dst_layout:?}", self.shape())
+            bail!(
+                "set_l out of bounds, dst shape {:?}, layout {dst_layout:?}, max off {max_offset}",
+                self.shape()
+            )
         }
         if dst_layout.num_elements() != values.shape().elem_count() {
             bail!(
@@ -729,6 +732,7 @@ impl<D: Device> LazyBuffer<D> {
         }
         let dim = dim.to_index(arg0.shape(), "cat")?;
         let mut dims = arg0.dims().to_vec();
+        dims[dim] = 0;
         for (arg_idx, arg) in args.iter().enumerate() {
             if arg.dtype() != arg0.dtype() {
                 let shapes: Vec<_> = args.iter().map(|a| a.dtype()).collect();
