@@ -521,6 +521,29 @@ impl<D: Device> LazyBuffer<D> {
         Ok(lb)
     }
 
+    pub fn narrow<D1: Dim>(&self, dim: D1, offset: usize, length: usize) -> Result<Self> {
+        let dim = dim.to_index(self.shape(), "narrow")?;
+        let size = self.dims()[dim];
+        if offset + length > size {
+            bail!("cannot narrow, offset {offset} + length {length} > size {dim}")
+        }
+        if offset == 0 && length == size {
+            return Ok(self.clone());
+        }
+        let mut dims = self.dims().to_vec();
+        dims[dim] = length;
+        let inner = LazyBufferInner {
+            id: Id::new(),
+            data: Arc::new(RefCell::new(None)),
+            op: Op::Layout(crate::lang::op::LayoutOp::Narrow { dim, offset }, self.clone()),
+            dtype: self.dtype,
+            device: self.device.clone(),
+            shape: dims.into(),
+        };
+        let lb = LazyBuffer(Arc::new(inner));
+        Ok(lb)
+    }
+
     pub fn broadcast<S: Into<Shape>>(&self, s: S) -> Result<Self> {
         let s: Shape = s.into();
         if self.shape().rank() > s.rank() {
