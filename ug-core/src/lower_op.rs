@@ -644,7 +644,7 @@ impl lang::op::Store {
                 A::Layout { op, arg: _ } => {
                     use lang::op::LayoutOp as L;
                     match op {
-                        &L::Narrow { dim: _, offset } => offset == 0,
+                        L::Narrow { dim: _, offset: _ } => false,
                         L::SplitDim { dim: _, lhs: _, rhs: _ } => false,
                         L::MergeDims { dim: _, lhs: _, rhs: _ } => false,
                         &L::Transpose { dim1: _, dim2: _ } => false,
