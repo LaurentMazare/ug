@@ -352,7 +352,7 @@ impl<D: Device> LazyBuffer<D> {
         Ok(lb)
     }
 
-    pub fn set_l(&self, src: Self, dst_layout: crate::Layout) -> Result<Self> {
+    pub fn set_l(&self, values: Self, dst_layout: crate::Layout) -> Result<Self> {
         let max_offset = dst_layout
             .dims()
             .iter()
@@ -362,19 +362,19 @@ impl<D: Device> LazyBuffer<D> {
         if max_offset >= self.shape().elem_count() {
             bail!("set_l out of bounds, dst shape {:?}, layout {dst_layout:?}", self.shape())
         }
-        if dst_layout.num_elements() != src.shape().elem_count() {
+        if dst_layout.num_elements() != values.shape().elem_count() {
             bail!(
-                "set_l mismatch between the src shape {:?} and layout {dst_layout:?}",
-                src.shape()
+                "set_l mismatch between the values shape {:?} and layout {dst_layout:?}",
+                values.shape()
             )
         }
-        if self.dtype != src.dtype {
-            bail!("dtype mismatch in set, {:?} vs {:?}", self.dtype, src.dtype)
+        if self.dtype != values.dtype {
+            bail!("dtype mismatch in set, {:?} vs {:?}", self.dtype, values.dtype)
         }
         let inner = LazyBufferInner {
             id: Id::new(),
             data: self.data.clone(),
-            op: Op::Set { values: src, src: self.clone(), dst_layout },
+            op: Op::Set { values, src: self.clone(), dst_layout },
             dtype: self.dtype,
             device: self.device.clone(),
             shape: self.shape.clone(),
