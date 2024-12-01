@@ -84,13 +84,6 @@ pub enum Op<D: Device> {
 
 pub struct LazyBuffer<D: Device>(Arc<LazyBufferInner<D>>);
 
-impl<D: Device> std::fmt::Debug for LazyBuffer<D> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "[{:?} {:?} {:?}]", self.id(), self.shape(), self.dtype())?;
-        Ok(())
-    }
-}
-
 impl<D: Device> Clone for LazyBuffer<D> {
     fn clone(&self) -> Self {
         Self(self.0.clone())
@@ -199,6 +192,10 @@ impl<D: Device> LazyBuffer<D> {
 
     pub fn shape(&self) -> &Shape {
         &self.shape
+    }
+
+    pub fn elem_count(&self) -> usize {
+        self.shape.elem_count()
     }
 
     pub fn dims(&self) -> &[usize] {

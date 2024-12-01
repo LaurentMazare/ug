@@ -28,6 +28,7 @@ libloading = "0.8.5"
 memmap2 = { version = "0.9.5", features = ["stable_deref_trait"] }
 metal = "0.29.0"
 num = "0.4.3"
+num-traits = "0.2.19"
 num_cpus = "1.16.0"
 objc = "0.2.7"
 ug = { path = "./ug-core", version = "0.1.0" }

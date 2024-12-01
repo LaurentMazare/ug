@@ -4,6 +4,7 @@ pub mod common_tests;
 pub mod r#const;
 pub mod cpu_code_gen;
 pub mod cpu_runtime;
+pub mod display;
 pub mod dtype;
 pub mod error;
 pub mod interpreter;
