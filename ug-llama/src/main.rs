@@ -146,7 +146,7 @@ fn run<D: Device>(dev: &D, args: &Args) -> Result<()> {
 
         let start_time = std::time::Instant::now();
         schedule.run()?;
-        let prs = tensor.data_vec::<f32>()?.unwrap();
+        let prs = tensor.data_vec::<f32>()?;
         let dt_run = start_time.elapsed();
         let dist = rand_distr::WeightedIndex::new(prs).map_err(Error::wrap)?;
         last_token = dist.sample(&mut rng) as u32;

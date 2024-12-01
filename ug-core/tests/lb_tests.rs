@@ -76,7 +76,7 @@ fn lb_copy() -> Result<()> {
     let schedule = ug::Schedule::create_one(&lb)?;
     let schedule = schedule.compile()?;
     schedule.run()?;
-    let data = lb.data_vec::<f32>()?.unwrap();
+    let data = lb.data_vec::<f32>()?;
     assert_eq!(data, [1.0, 1.5, 2.0, 2.5, 3.0, 3.5]);
 
     {
@@ -90,7 +90,7 @@ fn lb_copy() -> Result<()> {
     }
 
     schedule.run()?;
-    let data = lb.data_vec::<f32>()?.unwrap();
+    let data = lb.data_vec::<f32>()?;
     assert_eq!(data, [1.0, 1.0, -3.0, 2.5, 3.0, 0.0]);
 
     Ok(())
@@ -103,10 +103,7 @@ fn schedule_broadcast() -> Result<()> {
     let rhs = LB::cst(2., (), &cpu)?;
     let rhs = rhs.broadcast((5, 2))?;
     let lb = lhs.binary(ug::lang::BinaryOp::Add, rhs)?;
-    let schedule = ug::Schedule::create_one(&lb)?;
-    let schedule = schedule.compile()?;
-    schedule.run()?;
-    let data = lb.data_vec::<f32>()?.unwrap();
+    let data = lb.data_vec::<f32>()?;
     assert_eq!(data, [42., 42., 42., 42., 42., 42., 42., 42., 42., 42.]);
     Ok(())
 }
@@ -127,10 +124,12 @@ fn lb_custom() -> Result<()> {
     let two_lb = LB::cst(2., shape, &cpu)?;
     let lb = LB::custom(add_one, vec![buf_lb.clone()], shape, ug::DType::F32, &cpu)?;
     let lb = lb.binary(ug::lang::BinaryOp::Mul, two_lb)?;
+
     let schedule = ug::Schedule::create_one(&lb)?;
     let schedule = schedule.compile()?;
     schedule.run()?;
-    let data = lb.data_vec::<f32>()?.unwrap();
+
+    let data = lb.data_vec::<f32>()?;
     assert_eq!(data, [2., 4., 6., 8., 10., 12.]);
 
     {
@@ -144,7 +143,7 @@ fn lb_custom() -> Result<()> {
     }
 
     schedule.run()?;
-    let data = lb.data_vec::<f32>()?.unwrap();
+    let data = lb.data_vec::<f32>()?;
     assert_eq!(data, [2., 2., -14., 8., 10., -2.]);
 
     Ok(())
@@ -158,21 +157,14 @@ fn lb_layout() -> Result<()> {
     let lb = LB::copy(buf, shape, &cpu)?;
 
     let lb = lb.transpose(0, 1)?;
-    let schedule = ug::Schedule::create_one(&lb)?;
-    let schedule = schedule.compile()?;
-    schedule.run()?;
-    let data = lb.data_vec::<f32>()?.unwrap();
+    let data = lb.data_vec::<f32>()?;
     assert_eq!(data, [0.0, 3.0, 1.0, 4.0, 2.0, 5.0]);
 
     let lb = lb.transpose(0, 1)?;
     let lb = lb.merge_dims(0)?;
     assert_eq!(lb.dims(), [6]);
 
-    let schedule = ug::Schedule::create_one(&lb)?;
-    let schedule = schedule.compile()?;
-    schedule.run()?;
-
-    let data = lb.data_vec::<f32>()?.unwrap();
+    let data = lb.data_vec::<f32>()?;
     assert_eq!(data, [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]);
 
     Ok(())
@@ -193,10 +185,7 @@ fn lb_custom_in_place() -> Result<()> {
     let lb = lb.custom_ip(add_one, vec![])?;
     let lb = lb.custom_ip(add_one, vec![])?;
     let lb = lb.custom_ip(add_one, vec![])?;
-    let schedule = ug::Schedule::create_one(&lb)?;
-    let schedule = schedule.compile()?;
-    schedule.run()?;
-    let data = lb.data_vec::<f32>()?.unwrap();
+    let data = lb.data_vec::<f32>()?;
     assert_eq!(data, [3., 4., 5., 6., 7., 8.]);
 
     {
@@ -209,8 +198,7 @@ fn lb_custom_in_place() -> Result<()> {
         }
     }
 
-    schedule.run()?;
-    let data = lb.data_vec::<f32>()?.unwrap();
+    let data = lb.data_vec::<f32>()?;
     assert_eq!(data, [6., 3., -5., 9., 10., 1.]);
     Ok(())
 }
@@ -222,23 +210,20 @@ fn lb_set() -> Result<()> {
     let buf = [0f32, 1f32, 2f32, 3f32, 4f32, 5f32].as_slice();
     let dst_lb = LB::copy(buf, shape, &cpu)?;
     let src_lb = dst_lb.binary(ug::lang::BinaryOp::Mul, dst_lb.clone())?;
-    src_lb.realize()?;
-    let data = src_lb.data_vec::<f32>()?.unwrap();
+    let data = src_lb.data_vec::<f32>()?;
     assert_eq!(data, [0.0, 1.0, 4.0, 9.0, 16.0, 25.0]);
-    let data = dst_lb.data_vec::<f32>()?.unwrap();
+    let data = dst_lb.data_vec::<f32>()?;
     assert_eq!(data, [0., 1., 2., 3., 4., 5.]);
     let dst_lb = dst_lb.set(src_lb)?;
     // TODO: the current behavior is very error prone as if realize is not called, the
     // 'set' op is not executed and the data is not modified.
-    dst_lb.realize()?;
-    let data = dst_lb.data_vec::<f32>()?.unwrap();
+    let data = dst_lb.data_vec::<f32>()?;
     assert_eq!(data, [0.0, 1.0, 4.0, 9.0, 16.0, 25.0]);
 
     let buf = [3f32, 1f32, 2f32].as_slice();
     let vs = LB::copy(buf, (3,), &cpu)?;
     let dst_lb = dst_lb.set_l(vs, ug::Layout::from_shape(3))?;
-    dst_lb.realize()?;
-    let data = dst_lb.data_vec::<f32>()?.unwrap();
+    let data = dst_lb.data_vec::<f32>()?;
     assert_eq!(data, [3.0, 1.0, 2.0, 9.0, 16.0, 25.0]);
     Ok(())
 }

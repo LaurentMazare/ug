@@ -174,19 +174,19 @@ impl<D: Device> LazyBuffer<D> {
         &self.data
     }
 
-    pub fn data_vec<DT: crate::WithDType>(&self) -> Result<Option<Vec<DT>>> {
+    pub fn data_vec<DT: crate::WithDType>(&self) -> Result<Vec<DT>> {
         use crate::Slice;
 
+        self.realize()?;
         let data = self.data.as_ref().try_borrow()?;
-        let data = match data.as_ref() {
-            None => None,
+        match data.as_ref() {
+            None => bail!("no data"),
             Some(data) => {
                 let mut vs = vec![DT::zero(); self.shape.num_elements()];
                 D::Slice::copy_device_to_host(data, &mut vs)?;
-                Some(vs)
+                Ok(vs)
             }
-        };
-        Ok(data)
+        }
     }
 
     pub fn device(&self) -> &D {
