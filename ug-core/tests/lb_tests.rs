@@ -50,30 +50,12 @@ fn schedule_cpu() -> Result<()> {
 
 #[test]
 fn schedule_cpu_compile() -> Result<()> {
-    let cpu = ug::CpuDevice;
-    let lhs = LB::cst(40., (5, 2), &cpu)?;
-    let rhs = LB::cst(2., (5, 2), &cpu)?;
-    let lb = lhs.binary(ug::lang::BinaryOp::Add, rhs)?;
-    let schedule = ug::Schedule::create_one(&lb)?;
-    let schedule = schedule.compile()?;
-    schedule.run()?;
-    let data = lb.data_vec::<f32>()?.unwrap();
-    assert_eq!(data, [42., 42., 42., 42., 42., 42., 42., 42., 42., 42.]);
-    Ok(())
+    ug::common_tests::lb::add(&ug::CpuDevice)
 }
 
 #[test]
 fn schedule_mm() -> Result<()> {
-    let cpu = ug::CpuDevice;
-    let lhs = LB::cst(1., (4, 2), &cpu)?;
-    let rhs = LB::cst(2., (2, 3), &cpu)?;
-    let lb = lhs.matmul(rhs)?;
-    let schedule = ug::Schedule::create_one(&lb)?;
-    let schedule = schedule.compile()?;
-    schedule.run()?;
-    let data = lb.data_vec::<f32>()?.unwrap();
-    assert_eq!(data, [4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0]);
-    Ok(())
+    ug::common_tests::lb::mm(&ug::CpuDevice)
 }
 
 #[test]

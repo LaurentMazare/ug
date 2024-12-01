@@ -1,5 +1,6 @@
 pub mod block;
 pub mod cache;
+pub mod common_tests;
 pub mod r#const;
 pub mod cpu_code_gen;
 pub mod cpu_runtime;
