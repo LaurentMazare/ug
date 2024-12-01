@@ -59,6 +59,11 @@ fn schedule_mm() -> Result<()> {
 }
 
 #[test]
+fn schedule_cat() -> Result<()> {
+    ug::common_tests::lb::cat(&ug::CpuDevice)
+}
+
+#[test]
 fn lb_copy() -> Result<()> {
     let cpu = ug::CpuDevice;
     let shape = (2, 3);

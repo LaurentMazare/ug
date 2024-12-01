@@ -358,7 +358,8 @@ impl<D: Device> LazyBuffer<D> {
             .iter()
             .zip(dst_layout.strides().iter())
             .map(|(d, s)| d * s)
-            .sum::<usize>();
+            .sum::<usize>()
+            + dst_layout.offset();
         if max_offset >= self.shape().elem_count() {
             bail!("set_l out of bounds, dst shape {:?}, layout {dst_layout:?}", self.shape())
         }
@@ -718,24 +719,23 @@ impl<D: Device> LazyBuffer<D> {
         Ok(lb)
     }
 
-    pub fn cat<A: AsRef<Self>, D1: Dim>(args: &[A], dim: D1) -> Result<Self> {
+    pub fn cat<D1: Dim>(args: &[&Self], dim: D1) -> Result<Self> {
         if args.is_empty() {
             bail!("empty list in cat")
         }
-        let arg0 = args[0].as_ref();
+        let arg0 = args[0];
         if args.len() == 1 {
             return Ok(arg0.clone());
         }
         let dim = dim.to_index(arg0.shape(), "cat")?;
         let mut dims = arg0.dims().to_vec();
         for (arg_idx, arg) in args.iter().enumerate() {
-            let arg = arg.as_ref();
             if arg.dtype() != arg0.dtype() {
-                let shapes: Vec<_> = args.iter().map(|a| a.as_ref().dtype()).collect();
+                let shapes: Vec<_> = args.iter().map(|a| a.dtype()).collect();
                 bail!("mismatch between dtypes in cat, shapes: {shapes:?}")
             }
             if arg.rank() != arg0.rank() {
-                let shapes: Vec<_> = args.iter().map(|a| a.as_ref().shape()).collect();
+                let shapes: Vec<_> = args.iter().map(|a| a.shape()).collect();
                 bail!("mismatch between ranks in cat, shapes: {shapes:?}")
             }
             dims[dim] += arg.dims()[dim];
@@ -755,8 +755,7 @@ impl<D: Device> LazyBuffer<D> {
         }
         let mut offset = 0;
         let mut vs = Self::alloc_uninit(arg0.dtype, dims, arg0.device())?;
-        for arg in args.iter() {
-            let arg = arg.as_ref();
+        for &arg in args.iter() {
             let mut dst_layout = crate::Layout::from_shape(arg.shape());
             dst_layout.set_offset(offset * stride);
             vs = vs.set_l(arg.clone(), dst_layout)?;
