@@ -585,6 +585,9 @@ impl Layout {
     pub fn can_be_compressed(&self) -> bool {
         let strides = self.strides();
         let dims = self.dims();
+        if dims.len() <= 1 {
+            return false;
+        }
         for i in 0..dims.len() - 1 {
             if strides[i] != strides[i + 1] * dims[i + 1] {
                 return false;

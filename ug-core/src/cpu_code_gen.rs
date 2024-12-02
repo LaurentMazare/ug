@@ -153,7 +153,7 @@ pub fn gen<W: std::io::Write>(w: &mut W, func_name: &str, kernel: &ssa::Kernel) 
                     ssa::UnaryOp::Cos => Cow::Borrowed("cosf"),
                     ssa::UnaryOp::Neg => Cow::Borrowed("-"),
                     ssa::UnaryOp::Id => Cow::Borrowed(""),
-                    ssa::UnaryOp::Cast => format!("({})", D(*dtype)).into(),
+                    ssa::UnaryOp::Cast(_) => format!("({})", D(*dtype)).into(),
                 };
                 writeln!(w, "{indent}{} {var_id} = {op}({});", D(*dtype), A(*arg))?;
             }

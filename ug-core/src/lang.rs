@@ -17,7 +17,7 @@ pub enum UnaryOp {
     Cos,
     Neg,
     Sqrt,
-    Cast,
+    Cast(DType),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -484,7 +484,10 @@ pub mod op {
     }
 
     pub fn unary(op: UnaryOp, arg: Ast) -> Result<Ast> {
-        let dtype = arg.dtype;
+        let dtype = match op {
+            UnaryOp::Cast(dtype) => dtype,
+            _ => arg.dtype,
+        };
         let shape = arg.shape.clone();
         let inner = AstInner::Unary { op, arg };
         Ok(Ast { inner: Arc::new(inner), dtype, shape })

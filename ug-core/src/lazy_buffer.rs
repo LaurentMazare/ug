@@ -247,7 +247,7 @@ impl<D: Device> LazyBuffer<D> {
         let inner = LazyBufferInner {
             id: Id::new(),
             data: Arc::new(RefCell::new(None)),
-            op: Op::Unary(crate::lang::UnaryOp::Cast, self.clone()),
+            op: Op::Unary(crate::lang::UnaryOp::Cast(dtype), self.clone()),
             dtype,
             shape: self.shape.clone(),
             device: self.device.clone(),

@@ -571,7 +571,7 @@ impl lang::op::Store {
                         U::Sin => 's',
                         U::Neg => 'n',
                         U::Sqrt => 's',
-                        U::Cast => 'a',
+                        U::Cast(_) => 'a',
                     };
                     chars.push('U');
                     chars.push(c);
