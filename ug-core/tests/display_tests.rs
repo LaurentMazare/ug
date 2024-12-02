@@ -24,16 +24,16 @@ fn display_scalar() -> Result<()> {
     Ok(())
 }
 
-/*
 #[test]
 fn display_vector() -> Result<()> {
-    let t = Tensor::new::<&[u32; 0]>(&[], &Cpu)?;
+    let dev = &CpuDevice;
+    let t = LB::copy::<&[i32], _>([].as_slice(), 0, dev)?;
     let s = format!("{t}");
-    assert_eq!(&s, "[]\nTensor[[0], u32]");
-    let t = Tensor::new(&[0.1234567, 1.0, -1.2, 4.1, f64::NAN], &Cpu)?;
+    assert_eq!(&s, "[]\nTensor[[0], i32]");
+    let t = LB::copy([0.1234567, 1.0, -1.2, 4.1, f32::NAN].as_slice(), 5, dev)?;
     let s = format!("{t}");
-    assert_eq!(&s, "[ 0.1235,  1.0000, -1.2000,  4.1000,     NaN]\nTensor[[5], f64]");
-    let t = (Tensor::ones(50, DType::F32, &Cpu)? * 42.)?;
+    assert_eq!(&s, "[ 0.1235,  1.0000, -1.2000,  4.1000,     NaN]\nTensor[[5], f32]");
+    let t = LB::cst(42., 50, dev)?;
     let s = format!("\n{t}");
     let expected = r#"
 [42., 42., 42., 42., 42., 42., 42., 42., 42., 42., 42., 42., 42., 42., 42., 42.,
@@ -42,12 +42,13 @@ fn display_vector() -> Result<()> {
  42., 42.]
 Tensor[[50], f32]"#;
     assert_eq!(&s, expected);
-    let t = (Tensor::ones(11000, DType::F32, &Cpu)? * 42.)?;
+    let t = LB::cst(42., 11000, dev)?;
     let s = format!("{t}");
     assert_eq!(&s, "[42., 42., 42., ..., 42., 42., 42.]\nTensor[[11000], f32]");
     Ok(())
 }
 
+/*
 #[test]
 fn display_multi_dim() -> Result<()> {
     let t = (LB::ones((200, 100), DType::F32, &Cpu)? * 42.)?;
