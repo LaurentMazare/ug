@@ -48,10 +48,9 @@ Tensor[[50], f32]"#;
     Ok(())
 }
 
-/*
 #[test]
 fn display_multi_dim() -> Result<()> {
-    let t = (LB::ones((200, 100), DType::F32, &Cpu)? * 42.)?;
+    let t = LB::cst(42f32, (200, 100), &CpuDevice)?;
     let s = format!("\n{t}");
     let expected = r#"
 [[42., 42., 42., ..., 42., 42., 42.],
@@ -84,4 +83,3 @@ Tensor[[2, 1, 1, 100, 100], f32]"#;
     assert_eq!(&t, expected);
     Ok(())
 }
-*/
