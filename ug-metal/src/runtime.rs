@@ -59,6 +59,10 @@ impl Device {
         self.device.new_command_queue()
     }
 
+    pub fn new_command_buffer(&self) -> &metal::CommandBufferRef {
+        self.cq.new_command_buffer()
+    }
+
     pub fn new() -> Result<Self> {
         let device = match metal::Device::system_default() {
             Some(device) => device,
@@ -108,6 +112,7 @@ impl ug::Device for Device {
         encoder.set_compute_pipeline_state(&pl);
         for (index, arg) in args.iter().enumerate() {
             <&metal::Buffer>::set_param(encoder, index as u64, &arg.buffer);
+            encoder.use_resource(&arg.buffer, metal::MTLResourceUsage::Read);
             encoder.use_resource(&arg.buffer, metal::MTLResourceUsage::Write);
         }
         let grid_size = metal::MTLSize::new(f.launch_config.grid_dim as u64, 1, 1);

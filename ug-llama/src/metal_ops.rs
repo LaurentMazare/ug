@@ -22,8 +22,7 @@ impl crate::Device for ug_metal::runtime::Device {
             // TODO: check the dtypes.
             let [src, cos, sin, pos, dst]: [&mut Slice; 5] = vs.try_into().unwrap();
             unsafe {
-                let cq = device.new_command_queue();
-                let cb = cq.new_command_buffer();
+                let cb = device.new_command_buffer();
                 let encoder = cb.new_compute_command_encoder();
                 let pl = func.pipeline()?;
                 encoder.set_compute_pipeline_state(&pl);
@@ -41,6 +40,7 @@ impl crate::Device for ug_metal::runtime::Device {
                 encoder.dispatch_thread_groups(grid_size, threadgroup_size);
                 encoder.end_encoding();
                 cb.commit();
+                cb.wait_until_completed();
             };
             Ok(())
         };
@@ -66,8 +66,7 @@ impl crate::Device for ug_metal::runtime::Device {
             // TODO: check the dtypes.
             let [src, cos, sin, pos, dst]: [&mut Slice; 5] = vs.try_into().unwrap();
             unsafe {
-                let cq = device.new_command_queue();
-                let cb = cq.new_command_buffer();
+                let cb = device.new_command_buffer();
                 let encoder = cb.new_compute_command_encoder();
                 let pl = func.pipeline()?;
                 encoder.set_compute_pipeline_state(&pl);
@@ -85,6 +84,7 @@ impl crate::Device for ug_metal::runtime::Device {
                 encoder.dispatch_thread_groups(grid_size, threadgroup_size);
                 encoder.end_encoding();
                 cb.commit();
+                cb.wait_until_completed();
             };
             Ok(())
         };
@@ -126,8 +126,7 @@ impl crate::Device for ug_metal::runtime::Device {
         let f = move |vs: Vec<&mut Slice>| -> Result<()> {
             let [lhs, rhs, dst]: [&mut Slice; 3] = vs.try_into().unwrap();
             unsafe {
-                let cq = device.new_command_queue();
-                let cb = cq.new_command_buffer();
+                let cb = device.new_command_buffer();
                 let encoder = cb.new_compute_command_encoder();
                 let pl = func.pipeline()?;
                 encoder.set_compute_pipeline_state(&pl);
@@ -143,6 +142,7 @@ impl crate::Device for ug_metal::runtime::Device {
                 encoder.dispatch_thread_groups(grid_size, threadgroup_size);
                 encoder.end_encoding();
                 cb.commit();
+                cb.wait_until_completed();
             };
             Ok(())
         };
@@ -164,8 +164,7 @@ impl crate::Device for ug_metal::runtime::Device {
         let device = device.clone();
         let f = move |vs: Vec<&mut Slice>| -> Result<()> {
             let [src, dst]: [&mut Slice; 2] = vs.try_into().unwrap();
-            let cq = device.new_command_queue();
-            let cb = cq.new_command_buffer();
+            let cb = device.new_command_buffer();
             let encoder = cb.new_compute_command_encoder();
             let pl = func.pipeline()?;
             encoder.set_compute_pipeline_state(&pl);
@@ -177,6 +176,7 @@ impl crate::Device for ug_metal::runtime::Device {
             encoder.dispatch_thread_groups(grid_size, threadgroup_size);
             encoder.end_encoding();
             cb.commit();
+            cb.wait_until_completed();
             Ok(())
         };
         LB::custom(f, vec![src.clone()], src.shape(), src.dtype(), src.device())
