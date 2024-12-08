@@ -21,27 +21,25 @@ impl crate::Device for ug_metal::runtime::Device {
         let f = move |vs: Vec<&mut Slice>| -> Result<()> {
             // TODO: check the dtypes.
             let [src, cos, sin, pos, dst]: [&mut Slice; 5] = vs.try_into().unwrap();
-            unsafe {
-                let cb = device.new_command_buffer();
-                let encoder = cb.new_compute_command_encoder();
-                let pl = func.pipeline()?;
-                encoder.set_compute_pipeline_state(&pl);
-                ug_metal::set_params!(
-                    encoder,
-                    (&*src, &*cos, &*sin, &*pos, &*dst, (b * h) as u32, (t * d) as u32, d as u32)
-                );
-                let grid_size = metal::MTLSize::new(cfg.grid_dim as u64, 1, 1);
-                let threadgroup_size = metal::MTLSize::new(cfg.block_dim as u64, 1, 1);
-                encoder.use_resource(src.buffer(), metal::MTLResourceUsage::Read);
-                encoder.use_resource(cos.buffer(), metal::MTLResourceUsage::Read);
-                encoder.use_resource(sin.buffer(), metal::MTLResourceUsage::Read);
-                encoder.use_resource(pos.buffer(), metal::MTLResourceUsage::Read);
-                encoder.use_resource(dst.buffer(), metal::MTLResourceUsage::Write);
-                encoder.dispatch_thread_groups(grid_size, threadgroup_size);
-                encoder.end_encoding();
-                cb.commit();
-                cb.wait_until_completed();
-            };
+            let cb = device.new_command_buffer();
+            let encoder = cb.new_compute_command_encoder();
+            let pl = func.pipeline()?;
+            encoder.set_compute_pipeline_state(&pl);
+            ug_metal::set_params!(
+                encoder,
+                (&*src, &*cos, &*sin, &*pos, &*dst, (b * h) as u32, (t * d) as u32, d as u32)
+            );
+            let grid_size = metal::MTLSize::new(cfg.grid_dim as u64, 1, 1);
+            let threadgroup_size = metal::MTLSize::new(cfg.block_dim as u64, 1, 1);
+            encoder.use_resource(src.buffer(), metal::MTLResourceUsage::Read);
+            encoder.use_resource(cos.buffer(), metal::MTLResourceUsage::Read);
+            encoder.use_resource(sin.buffer(), metal::MTLResourceUsage::Read);
+            encoder.use_resource(pos.buffer(), metal::MTLResourceUsage::Read);
+            encoder.use_resource(dst.buffer(), metal::MTLResourceUsage::Write);
+            encoder.dispatch_thread_groups(grid_size, threadgroup_size);
+            encoder.end_encoding();
+            cb.commit();
+            cb.wait_until_completed();
             Ok(())
         };
         LB::custom(
@@ -65,27 +63,25 @@ impl crate::Device for ug_metal::runtime::Device {
         let f = move |vs: Vec<&mut Slice>| -> Result<()> {
             // TODO: check the dtypes.
             let [src, cos, sin, pos, dst]: [&mut Slice; 5] = vs.try_into().unwrap();
-            unsafe {
-                let cb = device.new_command_buffer();
-                let encoder = cb.new_compute_command_encoder();
-                let pl = func.pipeline()?;
-                encoder.set_compute_pipeline_state(&pl);
-                ug_metal::set_params!(
-                    encoder,
-                    (&*src, &*cos, &*sin, &*pos, &*dst, (b * h) as u32, (t * d) as u32, d as u32)
-                );
-                let grid_size = metal::MTLSize::new(cfg.grid_dim as u64, 1, 1);
-                let threadgroup_size = metal::MTLSize::new(cfg.block_dim as u64, 1, 1);
-                encoder.use_resource(src.buffer(), metal::MTLResourceUsage::Read);
-                encoder.use_resource(cos.buffer(), metal::MTLResourceUsage::Read);
-                encoder.use_resource(sin.buffer(), metal::MTLResourceUsage::Read);
-                encoder.use_resource(pos.buffer(), metal::MTLResourceUsage::Read);
-                encoder.use_resource(dst.buffer(), metal::MTLResourceUsage::Write);
-                encoder.dispatch_thread_groups(grid_size, threadgroup_size);
-                encoder.end_encoding();
-                cb.commit();
-                cb.wait_until_completed();
-            };
+            let cb = device.new_command_buffer();
+            let encoder = cb.new_compute_command_encoder();
+            let pl = func.pipeline()?;
+            encoder.set_compute_pipeline_state(&pl);
+            ug_metal::set_params!(
+                encoder,
+                (&*src, &*cos, &*sin, &*pos, &*dst, (b * h) as u32, (t * d) as u32, d as u32)
+            );
+            let grid_size = metal::MTLSize::new(cfg.grid_dim as u64, 1, 1);
+            let threadgroup_size = metal::MTLSize::new(cfg.block_dim as u64, 1, 1);
+            encoder.use_resource(src.buffer(), metal::MTLResourceUsage::Read);
+            encoder.use_resource(cos.buffer(), metal::MTLResourceUsage::Read);
+            encoder.use_resource(sin.buffer(), metal::MTLResourceUsage::Read);
+            encoder.use_resource(pos.buffer(), metal::MTLResourceUsage::Read);
+            encoder.use_resource(dst.buffer(), metal::MTLResourceUsage::Write);
+            encoder.dispatch_thread_groups(grid_size, threadgroup_size);
+            encoder.end_encoding();
+            cb.commit();
+            cb.wait_until_completed();
             Ok(())
         };
         LB::custom(
@@ -125,25 +121,23 @@ impl crate::Device for ug_metal::runtime::Device {
         let device = device.clone();
         let f = move |vs: Vec<&mut Slice>| -> Result<()> {
             let [lhs, rhs, dst]: [&mut Slice; 3] = vs.try_into().unwrap();
-            unsafe {
-                let cb = device.new_command_buffer();
-                let encoder = cb.new_compute_command_encoder();
-                let pl = func.pipeline()?;
-                encoder.set_compute_pipeline_state(&pl);
-                ug_metal::set_params!(
-                    encoder,
-                    (&*lhs, &*rhs, &*dst, d1 as u32, d2_l as u32, d2_r as u32, d2_lr as u32)
-                );
-                let grid_size = metal::MTLSize::new(cfg.grid_dim as u64, 1, 1);
-                let threadgroup_size = metal::MTLSize::new(cfg.block_dim as u64, 1, 1);
-                encoder.use_resource(lhs.buffer(), metal::MTLResourceUsage::Read);
-                encoder.use_resource(rhs.buffer(), metal::MTLResourceUsage::Read);
-                encoder.use_resource(dst.buffer(), metal::MTLResourceUsage::Write);
-                encoder.dispatch_thread_groups(grid_size, threadgroup_size);
-                encoder.end_encoding();
-                cb.commit();
-                cb.wait_until_completed();
-            };
+            let cb = device.new_command_buffer();
+            let encoder = cb.new_compute_command_encoder();
+            let pl = func.pipeline()?;
+            encoder.set_compute_pipeline_state(&pl);
+            ug_metal::set_params!(
+                encoder,
+                (&*lhs, &*rhs, &*dst, d1 as u32, d2_l as u32, d2_r as u32, d2_lr as u32)
+            );
+            let grid_size = metal::MTLSize::new(cfg.grid_dim as u64, 1, 1);
+            let threadgroup_size = metal::MTLSize::new(cfg.block_dim as u64, 1, 1);
+            encoder.use_resource(lhs.buffer(), metal::MTLResourceUsage::Read);
+            encoder.use_resource(rhs.buffer(), metal::MTLResourceUsage::Read);
+            encoder.use_resource(dst.buffer(), metal::MTLResourceUsage::Write);
+            encoder.dispatch_thread_groups(grid_size, threadgroup_size);
+            encoder.end_encoding();
+            cb.commit();
+            cb.wait_until_completed();
             Ok(())
         };
         LB::custom(f, vec![lhs.clone(), rhs.clone()], dst_dims, lhs.dtype(), lhs.device())

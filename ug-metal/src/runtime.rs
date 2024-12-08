@@ -147,7 +147,7 @@ impl ug::Device for Device {
             rhs_l.strides(),
             rhs_l.offset(),
             rhs.buffer(),
-            &mut dst.buffer,
+            dst.buffer(),
         )?;
         encoder.end_encoding();
         cb.commit();
