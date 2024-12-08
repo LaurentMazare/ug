@@ -1,5 +1,6 @@
 use crate::utils::EncoderParam;
 use metal::{FunctionConstantValues, MTLDataType};
+use std::sync::OnceLock;
 use ug::{Error, Result};
 
 const MLX_GEMM: &str = include_str!("mlx_gemm.metal");
@@ -375,9 +376,6 @@ impl ConstantValues {
     }
 }
 
-use std::sync::OnceLock;
-static MLX_GEMMI: OnceLock<Func> = OnceLock::new();
-
 #[allow(clippy::too_many_arguments)]
 fn call_mlx_gemm(
     device: &Device,
@@ -393,6 +391,7 @@ fn call_mlx_gemm(
     output: &metal::Buffer,
 ) -> Result<()> {
     use std::ffi::c_void;
+    static LIB: OnceLock<core::result::Result<metal::Library, String>> = OnceLock::new();
 
     #[derive(Debug)]
     #[repr(C)]
@@ -496,7 +495,13 @@ fn call_mlx_gemm(
     };
 
     // TODO: Avoid recompiling the code for each matmul.
-    let lib = device.device.new_library_with_source(MLX_GEMM, &metal::CompileOptions::new()).w()?;
+    let lib = LIB.get_or_init(|| {
+        device.device.new_library_with_source(MLX_GEMM, &metal::CompileOptions::new())
+    });
+    let lib = match lib {
+        Ok(lib) => lib,
+        Err(err) => ug::bail!("error compiling the gemm kernels {err}"),
+    };
     let func =
         lib.get_function(name, constants.as_ref().map(|c| c.function_constant_values())).w()?;
 

@@ -1,4 +1,5 @@
 use crate::LB;
+use std::sync::OnceLock;
 use ug::{lang::LaunchConfig, Result};
 use ug_metal::runtime::{Func, Slice};
 
@@ -7,14 +8,9 @@ const ROPE_M: &str = include_str!("rope.metal");
 const ROPEI_M: &str = include_str!("ropei.metal");
 const SOFTMAX_M: &str = include_str!("softmax.metal");
 
-use std::sync::OnceLock;
-static ROPEI: OnceLock<Func> = OnceLock::new();
-static ROPE: OnceLock<Func> = OnceLock::new();
-static CAT: OnceLock<Func> = OnceLock::new();
-static CUSTOM_SOFTMAX: OnceLock<Func> = OnceLock::new();
-
 impl crate::Device for ug_metal::runtime::Device {
     fn rope_i(src: &LB<Self>, cos: &LB<Self>, sin: &LB<Self>, pos: &LB<Self>) -> Result<LB<Self>> {
+        static ROPEI: OnceLock<Func> = OnceLock::new();
         let device = src.device();
         let (b, h, t, d) = src.shape().dims4()?;
         let cfg = LaunchConfig::for_num_elems((b * h * t * d) as u32 / 2);
@@ -53,6 +49,7 @@ impl crate::Device for ug_metal::runtime::Device {
     }
 
     fn rope(src: &LB<Self>, cos: &LB<Self>, sin: &LB<Self>, pos: &LB<Self>) -> Result<LB<Self>> {
+        static ROPE: OnceLock<Func> = OnceLock::new();
         let device = src.device();
         let (b, h, t, d) = src.shape().dims4()?;
         let cfg = LaunchConfig::for_num_elems((b * h * t * d) as u32 / 2);
@@ -91,6 +88,7 @@ impl crate::Device for ug_metal::runtime::Device {
     }
 
     fn cat(lhs: &LB<Self>, rhs: &LB<Self>, axis: usize) -> Result<LB<Self>> {
+        static CAT: OnceLock<Func> = OnceLock::new();
         let device = lhs.device();
         let l_dims = lhs.dims();
         let r_dims = rhs.dims();
@@ -139,6 +137,7 @@ impl crate::Device for ug_metal::runtime::Device {
     }
 
     fn custom_softmax(src: &LB<Self>) -> Result<LB<Self>> {
+        static CUSTOM_SOFTMAX: OnceLock<Func> = OnceLock::new();
         let device = src.device();
         let rank = src.rank();
         let dim_m1 = src.dims()[rank - 1];
