@@ -355,8 +355,8 @@ impl Ast {
 
                 // TODO(laurent): generalize to other dim as long as the values in arg do not
                 // depend on the dim.
-                if opts.thread_block.map_or(false, |v| v.dim == *dim)
-                    && !opts.block_axis().map_or(false, |v| v == *dim)
+                if opts.thread_block.is_some_and(|v| v.dim == *dim)
+                    && opts.block_axis() != Some(*dim)
                 {
                     let (arg_i, arg_b) = arg.lower(idxs, opts, per_arg)?;
                     block.0.extend_from_slice(&arg_b.0);
