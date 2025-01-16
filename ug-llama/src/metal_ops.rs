@@ -1,4 +1,5 @@
 use crate::LB;
+use std::sync::OnceLock;
 use ug::{lang::LaunchConfig, Result};
 use ug_metal::runtime::{Func, Slice};
 
@@ -7,14 +8,9 @@ const ROPE_M: &str = include_str!("rope.metal");
 const ROPEI_M: &str = include_str!("ropei.metal");
 const SOFTMAX_M: &str = include_str!("softmax.metal");
 
-use std::sync::OnceLock;
-static ROPEI: OnceLock<Func> = OnceLock::new();
-static ROPE: OnceLock<Func> = OnceLock::new();
-static CAT: OnceLock<Func> = OnceLock::new();
-static CUSTOM_SOFTMAX: OnceLock<Func> = OnceLock::new();
-
 impl crate::Device for ug_metal::runtime::Device {
     fn rope_i(src: &LB<Self>, cos: &LB<Self>, sin: &LB<Self>, pos: &LB<Self>) -> Result<LB<Self>> {
+        static ROPEI: OnceLock<Func> = OnceLock::new();
         let device = src.device();
         let (b, h, t, d) = src.shape().dims4()?;
         let cfg = LaunchConfig::for_num_elems((b * h * t * d) as u32 / 2);
@@ -25,22 +21,25 @@ impl crate::Device for ug_metal::runtime::Device {
         let f = move |vs: Vec<&mut Slice>| -> Result<()> {
             // TODO: check the dtypes.
             let [src, cos, sin, pos, dst]: [&mut Slice; 5] = vs.try_into().unwrap();
-            unsafe {
-                let cq = device.new_command_queue();
-                let cb = cq.new_command_buffer();
-                let encoder = cb.new_compute_command_encoder();
-                let pl = func.pipeline()?;
-                encoder.set_compute_pipeline_state(&pl);
-                ug_metal::set_params!(
-                    encoder,
-                    (src, cos, sin, pos, dst, (b * h) as u32, (t * d) as u32, d as u32)
-                );
-                let grid_size = metal::MTLSize::new(cfg.grid_dim as u64, 1, 1);
-                let threadgroup_size = metal::MTLSize::new(cfg.block_dim as u64, 1, 1);
-                encoder.dispatch_thread_groups(grid_size, threadgroup_size);
-                encoder.end_encoding();
-                cb.commit();
-            };
+            let cb = device.new_command_buffer();
+            let encoder = cb.new_compute_command_encoder();
+            let pl = func.pipeline()?;
+            encoder.set_compute_pipeline_state(&pl);
+            ug_metal::set_params!(
+                encoder,
+                (&*src, &*cos, &*sin, &*pos, &*dst, (b * h) as u32, (t * d) as u32, d as u32)
+            );
+            let grid_size = metal::MTLSize::new(cfg.grid_dim as u64, 1, 1);
+            let threadgroup_size = metal::MTLSize::new(cfg.block_dim as u64, 1, 1);
+            encoder.use_resource(src.buffer(), metal::MTLResourceUsage::Read);
+            encoder.use_resource(cos.buffer(), metal::MTLResourceUsage::Read);
+            encoder.use_resource(sin.buffer(), metal::MTLResourceUsage::Read);
+            encoder.use_resource(pos.buffer(), metal::MTLResourceUsage::Read);
+            encoder.use_resource(dst.buffer(), metal::MTLResourceUsage::Write);
+            encoder.dispatch_thread_groups(grid_size, threadgroup_size);
+            encoder.end_encoding();
+            cb.commit();
+            cb.wait_until_completed();
             Ok(())
         };
         LB::custom(
@@ -53,6 +52,7 @@ impl crate::Device for ug_metal::runtime::Device {
     }
 
     fn rope(src: &LB<Self>, cos: &LB<Self>, sin: &LB<Self>, pos: &LB<Self>) -> Result<LB<Self>> {
+        static ROPE: OnceLock<Func> = OnceLock::new();
         let device = src.device();
         let (b, h, t, d) = src.shape().dims4()?;
         let cfg = LaunchConfig::for_num_elems((b * h * t * d) as u32 / 2);
@@ -63,22 +63,25 @@ impl crate::Device for ug_metal::runtime::Device {
         let f = move |vs: Vec<&mut Slice>| -> Result<()> {
             // TODO: check the dtypes.
             let [src, cos, sin, pos, dst]: [&mut Slice; 5] = vs.try_into().unwrap();
-            unsafe {
-                let cq = device.new_command_queue();
-                let cb = cq.new_command_buffer();
-                let encoder = cb.new_compute_command_encoder();
-                let pl = func.pipeline()?;
-                encoder.set_compute_pipeline_state(&pl);
-                ug_metal::set_params!(
-                    encoder,
-                    (src, cos, sin, pos, dst, (b * h) as u32, (t * d) as u32, d as u32)
-                );
-                let grid_size = metal::MTLSize::new(cfg.grid_dim as u64, 1, 1);
-                let threadgroup_size = metal::MTLSize::new(cfg.block_dim as u64, 1, 1);
-                encoder.dispatch_thread_groups(grid_size, threadgroup_size);
-                encoder.end_encoding();
-                cb.commit();
-            };
+            let cb = device.new_command_buffer();
+            let encoder = cb.new_compute_command_encoder();
+            let pl = func.pipeline()?;
+            encoder.set_compute_pipeline_state(&pl);
+            ug_metal::set_params!(
+                encoder,
+                (&*src, &*cos, &*sin, &*pos, &*dst, (b * h) as u32, (t * d) as u32, d as u32)
+            );
+            let grid_size = metal::MTLSize::new(cfg.grid_dim as u64, 1, 1);
+            let threadgroup_size = metal::MTLSize::new(cfg.block_dim as u64, 1, 1);
+            encoder.use_resource(src.buffer(), metal::MTLResourceUsage::Read);
+            encoder.use_resource(cos.buffer(), metal::MTLResourceUsage::Read);
+            encoder.use_resource(sin.buffer(), metal::MTLResourceUsage::Read);
+            encoder.use_resource(pos.buffer(), metal::MTLResourceUsage::Read);
+            encoder.use_resource(dst.buffer(), metal::MTLResourceUsage::Write);
+            encoder.dispatch_thread_groups(grid_size, threadgroup_size);
+            encoder.end_encoding();
+            cb.commit();
+            cb.wait_until_completed();
             Ok(())
         };
         LB::custom(
@@ -91,6 +94,7 @@ impl crate::Device for ug_metal::runtime::Device {
     }
 
     fn cat(lhs: &LB<Self>, rhs: &LB<Self>, axis: usize) -> Result<LB<Self>> {
+        static CAT: OnceLock<Func> = OnceLock::new();
         let device = lhs.device();
         let l_dims = lhs.dims();
         let r_dims = rhs.dims();
@@ -117,28 +121,30 @@ impl crate::Device for ug_metal::runtime::Device {
         let device = device.clone();
         let f = move |vs: Vec<&mut Slice>| -> Result<()> {
             let [lhs, rhs, dst]: [&mut Slice; 3] = vs.try_into().unwrap();
-            unsafe {
-                let cq = device.new_command_queue();
-                let cb = cq.new_command_buffer();
-                let encoder = cb.new_compute_command_encoder();
-                let pl = func.pipeline()?;
-                encoder.set_compute_pipeline_state(&pl);
-                ug_metal::set_params!(
-                    encoder,
-                    (lhs, rhs, dst, d1 as u32, d2_l as u32, d2_r as u32, d2_lr as u32)
-                );
-                let grid_size = metal::MTLSize::new(cfg.grid_dim as u64, 1, 1);
-                let threadgroup_size = metal::MTLSize::new(cfg.block_dim as u64, 1, 1);
-                encoder.dispatch_thread_groups(grid_size, threadgroup_size);
-                encoder.end_encoding();
-                cb.commit();
-            };
+            let cb = device.new_command_buffer();
+            let encoder = cb.new_compute_command_encoder();
+            let pl = func.pipeline()?;
+            encoder.set_compute_pipeline_state(&pl);
+            ug_metal::set_params!(
+                encoder,
+                (&*lhs, &*rhs, &*dst, d1 as u32, d2_l as u32, d2_r as u32, d2_lr as u32)
+            );
+            let grid_size = metal::MTLSize::new(cfg.grid_dim as u64, 1, 1);
+            let threadgroup_size = metal::MTLSize::new(cfg.block_dim as u64, 1, 1);
+            encoder.use_resource(lhs.buffer(), metal::MTLResourceUsage::Read);
+            encoder.use_resource(rhs.buffer(), metal::MTLResourceUsage::Read);
+            encoder.use_resource(dst.buffer(), metal::MTLResourceUsage::Write);
+            encoder.dispatch_thread_groups(grid_size, threadgroup_size);
+            encoder.end_encoding();
+            cb.commit();
+            cb.wait_until_completed();
             Ok(())
         };
         LB::custom(f, vec![lhs.clone(), rhs.clone()], dst_dims, lhs.dtype(), lhs.device())
     }
 
     fn custom_softmax(src: &LB<Self>) -> Result<LB<Self>> {
+        static CUSTOM_SOFTMAX: OnceLock<Func> = OnceLock::new();
         let device = src.device();
         let rank = src.rank();
         let dim_m1 = src.dims()[rank - 1];
@@ -152,17 +158,19 @@ impl crate::Device for ug_metal::runtime::Device {
         let device = device.clone();
         let f = move |vs: Vec<&mut Slice>| -> Result<()> {
             let [src, dst]: [&mut Slice; 2] = vs.try_into().unwrap();
-            let cq = device.new_command_queue();
-            let cb = cq.new_command_buffer();
+            let cb = device.new_command_buffer();
             let encoder = cb.new_compute_command_encoder();
             let pl = func.pipeline()?;
             encoder.set_compute_pipeline_state(&pl);
-            ug_metal::set_params!(encoder, (num_elements as u32, dim_m1 as u32, src, dst));
+            ug_metal::set_params!(encoder, (num_elements as u32, dim_m1 as u32, &*src, &*dst));
             let grid_size = metal::MTLSize::new(cfg.grid_dim as u64, 1, 1);
             let threadgroup_size = metal::MTLSize::new(cfg.block_dim as u64, 1, 1);
+            encoder.use_resource(src.buffer(), metal::MTLResourceUsage::Read);
+            encoder.use_resource(dst.buffer(), metal::MTLResourceUsage::Write);
             encoder.dispatch_thread_groups(grid_size, threadgroup_size);
             encoder.end_encoding();
             cb.commit();
+            cb.wait_until_completed();
             Ok(())
         };
         LB::custom(f, vec![src.clone()], src.shape(), src.dtype(), src.device())

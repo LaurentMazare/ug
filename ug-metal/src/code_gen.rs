@@ -151,7 +151,7 @@ pub fn gen<W: std::io::Write>(w: &mut W, func_name: &str, kernel: &ssa::Kernel) 
                     ssa::UnaryOp::Cos => "cos",
                     ssa::UnaryOp::Neg => "-",
                     ssa::UnaryOp::Id => "",
-                    ssa::UnaryOp::Cast => match dtype {
+                    ssa::UnaryOp::Cast(_) => match dtype {
                         ssa::DType::BF16 => "static_cast<bfloat>",
                         ssa::DType::F16 => "static_cast<half>",
                         ssa::DType::F32 => "static_cast<float>",

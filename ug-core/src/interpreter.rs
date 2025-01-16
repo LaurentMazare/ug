@@ -362,17 +362,17 @@ pub fn eval_ssa<const N: usize>(
                     (U::Sin, _) => crate::bail!("dtype mismatch for {op:?} {arg:?}"),
                     (U::Cos, Value::F32(v)) => Value::F32(v.cos()),
                     (U::Cos, _) => crate::bail!("dtype mismatch for {op:?} {arg:?}"),
-                    (U::Cast, Value::F32(v)) => match dtype {
+                    (U::Cast(_), Value::F32(v)) => match dtype {
                         ssa::DType::F32 => Value::F32(*v),
                         ssa::DType::I32 => Value::I32(W(v.0.map(|v| v as i32))),
                         _ => crate::bail!("dtype mismatch for {op:?} {arg:?} {dtype:?}"),
                     },
-                    (U::Cast, Value::I32(v)) => match dtype {
+                    (U::Cast(_), Value::I32(v)) => match dtype {
                         ssa::DType::I32 => Value::I32(*v),
                         ssa::DType::F32 => Value::F32(W(v.0.map(|v| v as f32))),
                         _ => crate::bail!("dtype mismatch for {op:?} {arg:?} {dtype:?}"),
                     },
-                    (U::Cast, _) => crate::bail!("dtype mismatch for {op:?} {arg:?}"),
+                    (U::Cast(_), _) => crate::bail!("dtype mismatch for {op:?} {arg:?}"),
                 };
                 (v, None)
             }

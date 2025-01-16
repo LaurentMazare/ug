@@ -1,5 +1,6 @@
 use crate::utils::EncoderParam;
 use metal::{FunctionConstantValues, MTLDataType};
+use std::sync::OnceLock;
 use ug::{Error, Result};
 
 const MLX_GEMM: &str = include_str!("mlx_gemm.metal");
@@ -58,6 +59,10 @@ impl Device {
         self.device.new_command_queue()
     }
 
+    pub fn new_command_buffer(&self) -> &metal::CommandBufferRef {
+        self.cq.new_command_buffer()
+    }
+
     pub fn new() -> Result<Self> {
         let device = match metal::Device::system_default() {
             Some(device) => device,
@@ -107,6 +112,7 @@ impl ug::Device for Device {
         encoder.set_compute_pipeline_state(&pl);
         for (index, arg) in args.iter().enumerate() {
             <&metal::Buffer>::set_param(encoder, index as u64, &arg.buffer);
+            encoder.use_resource(&arg.buffer, metal::MTLResourceUsage::Read);
             encoder.use_resource(&arg.buffer, metal::MTLResourceUsage::Write);
         }
         let grid_size = metal::MTLSize::new(f.launch_config.grid_dim as u64, 1, 1);
@@ -141,7 +147,7 @@ impl ug::Device for Device {
             rhs_l.strides(),
             rhs_l.offset(),
             rhs.buffer(),
-            &mut dst.buffer,
+            dst.buffer(),
         )?;
         encoder.end_encoding();
         cb.commit();
@@ -375,9 +381,6 @@ impl ConstantValues {
     }
 }
 
-use std::sync::OnceLock;
-static MLX_GEMMI: OnceLock<Func> = OnceLock::new();
-
 #[allow(clippy::too_many_arguments)]
 fn call_mlx_gemm(
     device: &Device,
@@ -393,6 +396,7 @@ fn call_mlx_gemm(
     output: &metal::Buffer,
 ) -> Result<()> {
     use std::ffi::c_void;
+    static LIB: OnceLock<core::result::Result<metal::Library, String>> = OnceLock::new();
 
     #[derive(Debug)]
     #[repr(C)]
@@ -496,7 +500,13 @@ fn call_mlx_gemm(
     };
 
     // TODO: Avoid recompiling the code for each matmul.
-    let lib = device.device.new_library_with_source(MLX_GEMM, &metal::CompileOptions::new()).w()?;
+    let lib = LIB.get_or_init(|| {
+        device.device.new_library_with_source(MLX_GEMM, &metal::CompileOptions::new())
+    });
+    let lib = match lib {
+        Ok(lib) => lib,
+        Err(err) => ug::bail!("error compiling the gemm kernels {err}"),
+    };
     let func =
         lib.get_function(name, constants.as_ref().map(|c| c.function_constant_values())).w()?;
 
