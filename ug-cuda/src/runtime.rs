@@ -1,5 +1,6 @@
-use cudarc::driver::DeviceRepr;
-pub use cudarc::driver::{CudaFunction, DeviceSlice, LaunchConfig};
+pub use cudarc::driver::{
+    CudaFunction, CudaStream, DevicePtr, DevicePtrMut, DeviceSlice, LaunchConfig,
+};
 use std::sync::Arc;
 use ug::{Device as D, Error, Result, Slice as S, WithDType};
 
@@ -48,43 +49,38 @@ impl KernelId {
 #[derive(Clone)]
 pub struct Func {
     func: CudaFunction,
+    stream: Arc<CudaStream>,
     cfg: LaunchConfig,
 }
 
 impl Func {
-    pub fn new(func: CudaFunction, cfg: LaunchConfig) -> Self {
-        Self { func, cfg }
+    pub fn new(stream: Arc<CudaStream>, func: CudaFunction, cfg: LaunchConfig) -> Self {
+        Self { func, stream, cfg }
+    }
+
+    pub fn builder(&self) -> cudarc::driver::LaunchArgs<'_> {
+        self.stream.launch_builder(&self.func)
+    }
+
+    pub fn launch_cfg(&self) -> &LaunchConfig {
+        &self.cfg
     }
 }
 
-macro_rules! impl_launch { ($name:ident, [$($Vars:tt),*]) => {
-    pub unsafe fn $name<$($Vars: DeviceRepr),*>(
-        &self,
-        args: ($($Vars, )*)
-    ) -> Result<()> {
-        use cudarc::driver::LaunchAsync;
-        let func = self.func.clone();
-        unsafe { func.launch(self.cfg, args).w()? };
-        Ok(())
-    }
-}
-}
-
-#[allow(clippy::missing_safety_doc)]
-impl Func {
-    impl_launch!(launch1, [P1]);
-    impl_launch!(launch2, [P1, P2]);
-    impl_launch!(launch3, [P1, P2, P3]);
-    impl_launch!(launch4, [P1, P2, P3, P4]);
-    impl_launch!(launch5, [P1, P2, P3, P4, P5]);
-    impl_launch!(launch6, [P1, P2, P3, P4, P5, P6]);
-    impl_launch!(launch7, [P1, P2, P3, P4, P5, P6, P7]);
-    impl_launch!(launch8, [P1, P2, P3, P4, P5, P6, P7, P8]);
+#[macro_export]
+macro_rules! bargs {
+    ($b:ident, $($arg:expr),*) => {
+        $(
+            let __arg = $arg;
+            $b.arg(&__arg);
+        )*
+    };
 }
 
 #[derive(Debug, Clone)]
 pub struct Device {
-    device: Arc<cudarc::driver::CudaDevice>,
+    context: Arc<cudarc::driver::CudaContext>,
+    stream: Arc<cudarc::driver::CudaStream>,
     blas: Arc<cudarc::cublas::CudaBlas>,
 }
 
@@ -136,79 +132,68 @@ impl Slice {
     }
 }
 
-unsafe impl cudarc::driver::safe::DeviceRepr for &Slice {
-    fn as_kernel_param(&self) -> *mut std::ffi::c_void {
+impl Slice {
+    pub fn device_ptr<'a>(
+        &'a self,
+        stream: &'a Arc<CudaStream>,
+    ) -> (u64, cudarc::driver::SyncOnDrop<'a>) {
         match &self.inner {
-            SliceInner::BF16(v) => v.as_kernel_param(),
-            SliceInner::F16(v) => v.as_kernel_param(),
-            SliceInner::F32(v) => v.as_kernel_param(),
-            SliceInner::I32(v) => v.as_kernel_param(),
-            SliceInner::I64(v) => v.as_kernel_param(),
+            SliceInner::BF16(v) => v.device_ptr(stream),
+            SliceInner::F16(v) => v.device_ptr(stream),
+            SliceInner::F32(v) => v.device_ptr(stream),
+            SliceInner::I32(v) => v.device_ptr(stream),
+            SliceInner::I64(v) => v.device_ptr(stream),
         }
     }
-}
 
-unsafe impl cudarc::driver::safe::DeviceRepr for &mut Slice {
-    fn as_kernel_param(&self) -> *mut std::ffi::c_void {
-        match &self.inner {
-            SliceInner::BF16(v) => v.as_kernel_param(),
-            SliceInner::F16(v) => v.as_kernel_param(),
-            SliceInner::F32(v) => v.as_kernel_param(),
-            SliceInner::I32(v) => v.as_kernel_param(),
-            SliceInner::I64(v) => v.as_kernel_param(),
+    pub fn device_ptr_mut<'a>(
+        &'a mut self,
+        stream: &'a Arc<CudaStream>,
+    ) -> (u64, cudarc::driver::SyncOnDrop<'a>) {
+        match &mut self.inner {
+            SliceInner::BF16(v) => v.device_ptr_mut(stream),
+            SliceInner::F16(v) => v.device_ptr_mut(stream),
+            SliceInner::F32(v) => v.device_ptr_mut(stream),
+            SliceInner::I32(v) => v.device_ptr_mut(stream),
+            SliceInner::I64(v) => v.device_ptr_mut(stream),
         }
     }
 }
 
 impl Device {
     pub fn new(device_index: usize) -> Result<Self> {
-        let device = cudarc::driver::CudaDevice::new(device_index).w()?;
-        let blas = cudarc::cublas::CudaBlas::new(device.clone()).w()?;
-        Ok(Self { device, blas: Arc::new(blas) })
+        let context = cudarc::driver::CudaContext::new(device_index).w()?;
+        let stream = context.default_stream();
+        let blas = cudarc::cublas::CudaBlas::new(stream.clone()).w()?;
+        Ok(Self { context, stream, blas: Arc::new(blas) })
     }
 
-    pub fn cudarc_device(&self) -> &cudarc::driver::CudaDevice {
-        self.device.as_ref()
+    pub fn cudarc_stream(&self) -> &Arc<cudarc::driver::CudaStream> {
+        &self.stream
     }
 
     pub fn blas(&self) -> &cudarc::cublas::CudaBlas {
         self.blas.as_ref()
     }
 
-    pub fn compile_cu(
-        &self,
-        cu_code: &str,
-        module_name: &str,
-        func_name: &'static str,
-    ) -> Result<CudaFunction> {
+    pub fn compile_cu(&self, cu_code: &str, func_name: &str) -> Result<CudaFunction> {
         let opts =
             cudarc::nvrtc::CompileOptions { use_fast_math: Some(true), ..Default::default() };
         let ptx = cudarc::nvrtc::safe::compile_ptx_with_opts(cu_code, opts).w()?;
-        self.device.load_ptx(ptx, module_name, &[func_name]).w()?;
-        let func = match self.device.get_func(module_name, func_name) {
-            Some(func) => func,
-            None => ug::bail!("unknown function {module_name}::{func_name}"),
-        };
+        let mdl = self.context.load_module(ptx).w()?;
+        let func = mdl.load_function(func_name).w()?;
         Ok(func)
     }
 
-    pub fn compile_ptx(
-        &self,
-        ptx_code: &str,
-        module_name: &str,
-        func_name: &'static str,
-    ) -> Result<CudaFunction> {
+    pub fn compile_ptx(&self, ptx_code: &str, func_name: &'static str) -> Result<CudaFunction> {
         let ptx = cudarc::nvrtc::safe::Ptx::from_src(ptx_code);
-        self.device.load_ptx(ptx, module_name, &[func_name]).w()?;
-        let func = match self.device.get_func(module_name, func_name) {
-            Some(func) => func,
-            None => ug::bail!("unknown function {module_name}::{func_name}"),
-        };
+        let mdl = self.context.load_module(ptx).w()?;
+        let func = mdl.load_function(func_name).w()?;
         Ok(func)
     }
 
     pub fn zeros(&self, len: usize) -> Result<Slice> {
-        let slice = self.device.alloc_zeros::<f32>(len).w()?;
+        let slice = self.stream.alloc_zeros::<f32>(len).w()?;
         Ok(Slice { inner: SliceInner::F32(slice), device: self.clone() })
     }
 
@@ -219,7 +204,7 @@ impl Device {
     }
 
     pub fn synchronize(&self) -> Result<()> {
-        self.device.synchronize().w()?;
+        self.stream.synchronize().w()?;
         Ok(())
     }
 }
@@ -232,23 +217,23 @@ impl ug::Device for Device {
     unsafe fn allocate_uninit(&self, dtype: ug::DType, len: usize) -> Result<Self::Slice> {
         let inner = match dtype {
             ug::DType::F32 => {
-                let slice = self.device.alloc::<f32>(len).w()?;
+                let slice = self.stream.alloc::<f32>(len).w()?;
                 SliceInner::F32(slice)
             }
             ug::DType::F16 => {
-                let slice = self.device.alloc::<half::f16>(len).w()?;
+                let slice = self.stream.alloc::<half::f16>(len).w()?;
                 SliceInner::F16(slice)
             }
             ug::DType::BF16 => {
-                let slice = self.device.alloc::<half::bf16>(len).w()?;
+                let slice = self.stream.alloc::<half::bf16>(len).w()?;
                 SliceInner::BF16(slice)
             }
             ug::DType::I32 => {
-                let slice = self.device.alloc::<i32>(len).w()?;
+                let slice = self.stream.alloc::<i32>(len).w()?;
                 SliceInner::I32(slice)
             }
             ug::DType::I64 => {
-                let slice = self.device.alloc::<i64>(len).w()?;
+                let slice = self.stream.alloc::<i64>(len).w()?;
                 SliceInner::I64(slice)
             }
         };
@@ -267,7 +252,6 @@ impl ug::Device for Device {
             None => &format!("ug_{kernel_id}"),
         };
         crate::code_gen::gen(&mut cu_code, func_name, kernel)?;
-        let func_name_s = Box::leak(Box::new(func_name.to_string()));
         let cu_code = String::from_utf8(cu_code)?;
         let cfg = kernel.launch_config();
         let cfg = LaunchConfig {
@@ -275,13 +259,12 @@ impl ug::Device for Device {
             block_dim: (cfg.block_dim, 1, 1),
             shared_mem_bytes: cfg.shared_mem,
         };
-        let func = self.compile_cu(&cu_code, func_name, func_name_s)?;
-        Ok(Func { func, cfg })
+        let func = self.compile_cu(&cu_code, func_name)?;
+        Ok(Func { func, stream: self.stream.clone(), cfg })
     }
 
     fn run(&self, f: &Self::Func, args: &mut [&mut Self::Slice]) -> Result<()> {
-        use cudarc::driver::LaunchAsync;
-        let func = f.func.clone();
+        use cudarc::driver::PushKernelArg;
         // TODO: Avoid these.
         if f.cfg.block_dim.0 == 0
             || f.cfg.block_dim.1 == 0
@@ -294,19 +277,54 @@ impl ug::Device for Device {
         }
         match args {
             [a1] => {
-                unsafe { func.launch(f.cfg, (&**a1,)).w()? };
+                let mut builder = f.builder();
+                let (a1, _guard1) = a1.device_ptr_mut(&f.stream);
+                builder.arg(&a1);
+                unsafe { builder.launch(f.cfg).w()? };
             }
             [a1, a2] => {
-                unsafe { func.launch(f.cfg, (&**a1, &**a2)).w()? };
+                let mut builder = f.builder();
+                let (a1, _guard1) = a1.device_ptr_mut(&f.stream);
+                builder.arg(&a1);
+                let (a2, _guard2) = a2.device_ptr_mut(&f.stream);
+                builder.arg(&a2);
+                unsafe { builder.launch(f.cfg).w()? };
             }
             [a1, a2, a3] => {
-                unsafe { func.launch(f.cfg, (&**a1, &**a2, &**a3)).w()? };
+                let mut builder = f.builder();
+                let (a1, _guard1) = a1.device_ptr_mut(&f.stream);
+                builder.arg(&a1);
+                let (a2, _guard2) = a2.device_ptr_mut(&f.stream);
+                builder.arg(&a2);
+                let (a3, _guard3) = a3.device_ptr_mut(&f.stream);
+                builder.arg(&a3);
+                unsafe { builder.launch(f.cfg).w()? };
             }
             [a1, a2, a3, a4] => {
-                unsafe { func.launch(f.cfg, (&**a1, &**a2, &**a3, &**a4)).w()? };
+                let mut builder = f.builder();
+                let (a1, _guard1) = a1.device_ptr_mut(&f.stream);
+                builder.arg(&a1);
+                let (a2, _guard2) = a2.device_ptr_mut(&f.stream);
+                builder.arg(&a2);
+                let (a3, _guard3) = a3.device_ptr_mut(&f.stream);
+                builder.arg(&a3);
+                let (a4, _guard4) = a4.device_ptr_mut(&f.stream);
+                builder.arg(&a4);
+                unsafe { builder.launch(f.cfg).w()? };
             }
             [a1, a2, a3, a4, a5] => {
-                unsafe { func.launch(f.cfg, (&**a1, &**a2, &**a3, &**a4, &**a5)).w()? };
+                let mut builder = f.builder();
+                let (a1, _guard1) = a1.device_ptr_mut(&f.stream);
+                builder.arg(&a1);
+                let (a2, _guard2) = a2.device_ptr_mut(&f.stream);
+                builder.arg(&a2);
+                let (a3, _guard3) = a3.device_ptr_mut(&f.stream);
+                builder.arg(&a3);
+                let (a4, _guard4) = a4.device_ptr_mut(&f.stream);
+                builder.arg(&a4);
+                let (a5, _guard5) = a5.device_ptr_mut(&f.stream);
+                builder.arg(&a5);
+                unsafe { builder.launch(f.cfg).w()? };
             }
             _ => ug::bail!("unsupported number of args for kernel {}", args.len()),
         }
@@ -350,11 +368,11 @@ impl ug::Slice for Slice {
         use ug::CpuStorageRef as C;
         use SliceInner as S;
         match (&mut self.inner, DT::to_cpu_storage(src)) {
-            (S::BF16(dst), C::BF16(src)) => self.device.device.htod_sync_copy_into(src, dst).w()?,
-            (S::F16(dst), C::F16(src)) => self.device.device.htod_sync_copy_into(src, dst).w()?,
-            (S::F32(dst), C::F32(src)) => self.device.device.htod_sync_copy_into(src, dst).w()?,
-            (S::I32(dst), C::I32(src)) => self.device.device.htod_sync_copy_into(src, dst).w()?,
-            (S::I64(dst), C::I64(src)) => self.device.device.htod_sync_copy_into(src, dst).w()?,
+            (S::BF16(dst), C::BF16(src)) => self.device.stream.memcpy_htod(src, dst).w()?,
+            (S::F16(dst), C::F16(src)) => self.device.stream.memcpy_htod(src, dst).w()?,
+            (S::F32(dst), C::F32(src)) => self.device.stream.memcpy_htod(src, dst).w()?,
+            (S::I32(dst), C::I32(src)) => self.device.stream.memcpy_htod(src, dst).w()?,
+            (S::I64(dst), C::I64(src)) => self.device.stream.memcpy_htod(src, dst).w()?,
             (_, _) => ug::bail!("htod dtype mismatch, dst {:?}, src {:?}", self.dtype(), DT::DTYPE),
         }
         Ok(())
@@ -364,11 +382,11 @@ impl ug::Slice for Slice {
         use ug::CpuStorageRefMut as C;
         use SliceInner as S;
         match (&self.inner, DT::to_cpu_storage_mut(dst)) {
-            (S::BF16(src), C::BF16(dst)) => self.device.device.dtoh_sync_copy_into(src, dst).w()?,
-            (S::F16(src), C::F16(dst)) => self.device.device.dtoh_sync_copy_into(src, dst).w()?,
-            (S::F32(src), C::F32(dst)) => self.device.device.dtoh_sync_copy_into(src, dst).w()?,
-            (S::I32(src), C::I32(dst)) => self.device.device.dtoh_sync_copy_into(src, dst).w()?,
-            (S::I64(src), C::I64(dst)) => self.device.device.dtoh_sync_copy_into(src, dst).w()?,
+            (S::BF16(src), C::BF16(dst)) => self.device.stream.memcpy_dtoh(src, dst).w()?,
+            (S::F16(src), C::F16(dst)) => self.device.stream.memcpy_dtoh(src, dst).w()?,
+            (S::F32(src), C::F32(dst)) => self.device.stream.memcpy_dtoh(src, dst).w()?,
+            (S::I32(src), C::I32(dst)) => self.device.stream.memcpy_dtoh(src, dst).w()?,
+            (S::I64(src), C::I64(dst)) => self.device.stream.memcpy_dtoh(src, dst).w()?,
             (_, _) => ug::bail!("dtoh dtype mismatch, dst {:?}, src {:?}", DT::DTYPE, self.dtype()),
         }
         Ok(())

@@ -3,8 +3,6 @@ use std::sync::Arc;
 use ug::Slice as S;
 use ug_cuda::runtime as cuda;
 
-const MODULE_NAME: &str = "ug-pyo3-mod";
-
 fn w<E: ToString>(err: E) -> PyErr {
     pyo3::exceptions::PyValueError::new_err(err.to_string())
 }
@@ -29,6 +27,7 @@ struct Func(cuda::Func);
 impl Func {
     #[pyo3(signature = (s1, s2, s3))]
     fn launch3(&self, s1: &Slice, s2: &Slice, s3: &mut Slice) -> PyResult<()> {
+        use ug_cuda::cudarc::driver::PushKernelArg;
         let len = s3.0.len();
         let len1 = s1.0.len();
         let len2 = s2.0.len();
@@ -38,15 +37,15 @@ impl Func {
         if len2 != len {
             py_bail!("length mismatch {len2} <> {len}")
         }
-        unsafe {
-            self.0
-                .launch3((
-                    s1.0.slice::<f32>().map_err(w)?,
-                    s2.0.slice::<f32>().map_err(w)?,
-                    s3.0.slice::<f32>().map_err(w)?,
-                ))
-                .map_err(w)?
-        };
+        let mut builder = self.0.builder();
+        let s1 = s1.0.slice::<f32>().map_err(w)?;
+        let s2 = s2.0.slice::<f32>().map_err(w)?;
+        let s3 = s3.0.slice::<f32>().map_err(w)?;
+        builder.arg(s1);
+        builder.arg(s2);
+        builder.arg(s3);
+
+        unsafe { builder.launch(*self.0.launch_cfg()).map_err(w)? };
         Ok(())
     }
 }
@@ -430,8 +429,9 @@ impl Device {
             block_dim: (block_dim, 1, 1),
             shared_mem_bytes,
         };
-        let func = self.0.compile_ptx(ptx_code, MODULE_NAME, func_name).map_err(w)?;
-        let func = ug_cuda::runtime::Func::new(func, cfg);
+        let func = self.0.compile_ptx(ptx_code, func_name).map_err(w)?;
+        let stream = self.0.cudarc_stream();
+        let func = ug_cuda::runtime::Func::new(stream.clone(), func, cfg);
         Ok(Func(func))
     }
 
@@ -450,8 +450,9 @@ impl Device {
             block_dim: (block_dim, 1, 1),
             shared_mem_bytes,
         };
-        let func = self.0.compile_cu(cu_code, MODULE_NAME, func_name).map_err(w)?;
-        let func = ug_cuda::runtime::Func::new(func, cfg);
+        let stream = self.0.cudarc_stream();
+        let func = self.0.compile_cu(cu_code, func_name).map_err(w)?;
+        let func = ug_cuda::runtime::Func::new(stream.clone(), func, cfg);
         Ok(Func(func))
     }
 

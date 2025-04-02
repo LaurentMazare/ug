@@ -1,6 +1,7 @@
 use crate::LB;
 use ug::Result;
-use ug_cuda::runtime::{CudaFunction, Func, LaunchConfig, Slice};
+use ug_cuda::cudarc::driver::PushKernelArg;
+use ug_cuda::runtime::{CudaFunction, Func, LaunchConfig, Slice, WithErr};
 
 const CAT_CU: &str = include_str!("cat.cu");
 const ROPE_CU: &str = include_str!("rope.cu");
@@ -18,16 +19,32 @@ impl crate::Device for ug_cuda::runtime::Device {
         let (b, h, t, d) = src.shape().dims4()?;
         let cfg = LaunchConfig::for_num_elems((b * h * t * d) as u32 / 2);
         // TODO: Use get_or_try_init when available.
-        let func = ROPEI
-            .get_or_init(|| src.device().compile_cu(ROPEI_CU, "ropei_f32", "ropei_f32").unwrap());
-        let func = Func::new(func.clone(), cfg);
+        let func = ROPEI.get_or_init(|| src.device().compile_cu(ROPEI_CU, "ropei_f32").unwrap());
+        let stream = src.device().cudarc_stream();
+        let func = Func::new(stream.clone(), func.clone(), cfg);
+        let stream = stream.clone();
 
         let f = move |vs: Vec<&mut Slice>| -> Result<()> {
             // TODO: check the dtypes.
             let [src, cos, sin, pos, dst]: [&mut Slice; 5] = vs.try_into().unwrap();
-            unsafe {
-                func.launch8((src, cos, sin, pos, dst, (b * h) as u32, (t * d) as u32, d as u32))?
-            };
+            let mut builder = func.builder();
+            let (src, _guard) = src.device_ptr_mut(&stream);
+            let (cos, _guard) = cos.device_ptr_mut(&stream);
+            let (sin, _guard) = sin.device_ptr_mut(&stream);
+            let (pos, _guard) = pos.device_ptr_mut(&stream);
+            let (dst, _guard) = dst.device_ptr_mut(&stream);
+            ug_cuda::bargs!(
+                builder,
+                src,
+                cos,
+                sin,
+                pos,
+                dst,
+                (b * h) as u32,
+                (t * d) as u32,
+                d as u32
+            );
+            unsafe { builder.launch(*func.launch_cfg()).w()? };
             Ok(())
         };
         LB::custom(
@@ -43,16 +60,32 @@ impl crate::Device for ug_cuda::runtime::Device {
         let (b, h, t, d) = src.shape().dims4()?;
         let cfg = LaunchConfig::for_num_elems((b * h * t * d) as u32 / 2);
         // TODO: Use get_or_try_init when available.
-        let func =
-            ROPE.get_or_init(|| src.device().compile_cu(ROPE_CU, "rope_f32", "rope_f32").unwrap());
-        let func = Func::new(func.clone(), cfg);
+        let func = ROPE.get_or_init(|| src.device().compile_cu(ROPE_CU, "rope_f32").unwrap());
+        let stream = src.device().cudarc_stream();
+        let func = Func::new(stream.clone(), func.clone(), cfg);
+        let stream = stream.clone();
 
         let f = move |vs: Vec<&mut Slice>| -> Result<()> {
             // TODO: check the dtypes.
             let [src, cos, sin, pos, dst]: [&mut Slice; 5] = vs.try_into().unwrap();
-            unsafe {
-                func.launch8((src, cos, sin, pos, dst, (b * h) as u32, (t * d) as u32, d as u32))?
-            };
+            let mut builder = func.builder();
+            let (src, _guard) = src.device_ptr_mut(&stream);
+            let (cos, _guard) = cos.device_ptr_mut(&stream);
+            let (sin, _guard) = sin.device_ptr_mut(&stream);
+            let (pos, _guard) = pos.device_ptr_mut(&stream);
+            let (dst, _guard) = dst.device_ptr_mut(&stream);
+            ug_cuda::bargs!(
+                builder,
+                src,
+                cos,
+                sin,
+                pos,
+                dst,
+                (b * h) as u32,
+                (t * d) as u32,
+                d as u32
+            );
+            unsafe { builder.launch(*func.launch_cfg()).w()? };
             Ok(())
         };
         LB::custom(
@@ -90,14 +123,27 @@ impl crate::Device for ug_cuda::runtime::Device {
             shared_mem_bytes: 0,
         };
         // TODO: Use get_or_try_init when available.
-        let func =
-            CAT.get_or_init(|| lhs.device().compile_cu(CAT_CU, "cat_f32", "cat_f32").unwrap());
-        let func = Func::new(func.clone(), cfg);
+        let func = CAT.get_or_init(|| lhs.device().compile_cu(CAT_CU, "cat_f32").unwrap());
+        let stream = lhs.device().cudarc_stream();
+        let func = Func::new(stream.clone(), func.clone(), cfg);
+        let stream = stream.clone();
         let f = move |vs: Vec<&mut Slice>| -> Result<()> {
             let [lhs, rhs, dst]: [&mut Slice; 3] = vs.try_into().unwrap();
-            unsafe {
-                func.launch7((lhs, rhs, dst, d1 as u32, d2_l as u32, d2_r as u32, d2_lr as u32))?
-            };
+            let (lhs, _guard) = lhs.device_ptr_mut(&stream);
+            let (rhs, _guard) = rhs.device_ptr_mut(&stream);
+            let (dst, _guard) = dst.device_ptr_mut(&stream);
+            let mut builder = func.builder();
+            ug_cuda::bargs!(
+                builder,
+                lhs,
+                rhs,
+                dst,
+                d1 as u32,
+                d2_l as u32,
+                d2_r as u32,
+                d2_lr as u32
+            );
+            unsafe { builder.launch(*func.launch_cfg()).w()? };
             Ok(())
         };
         LB::custom(f, vec![lhs.clone(), rhs.clone()], dst_dims, lhs.dtype(), lhs.device())
@@ -114,13 +160,18 @@ impl crate::Device for ug_cuda::runtime::Device {
         };
 
         // TODO: Use get_or_try_init when available.
-        let func = CUSTOM_SOFTMAX.get_or_init(|| {
-            src.device().compile_cu(SOFTMAX_CU, "softmax_f32", "softmax_f32").unwrap()
-        });
-        let func = Func::new(func.clone(), cfg);
+        let func = CUSTOM_SOFTMAX
+            .get_or_init(|| src.device().compile_cu(SOFTMAX_CU, "softmax_f32").unwrap());
+        let stream = src.device().cudarc_stream();
+        let func = Func::new(stream.clone(), func.clone(), cfg);
+        let stream = stream.clone();
         let f = move |vs: Vec<&mut Slice>| -> Result<()> {
             let [src, dst]: [&mut Slice; 2] = vs.try_into().unwrap();
-            unsafe { func.launch3((src, dst, dim_m1 as i32))? };
+            let (src, _guard) = src.device_ptr_mut(&stream);
+            let (dst, _guard) = dst.device_ptr_mut(&stream);
+            let mut builder = func.builder();
+            ug_cuda::bargs!(builder, src, dst, dim_m1 as i32);
+            unsafe { builder.launch(*func.launch_cfg()).w()? };
             Ok(())
         };
         LB::custom(f, vec![src.clone()], src.shape(), src.dtype(), src.device())
