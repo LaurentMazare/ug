@@ -3,8 +3,6 @@ use std::sync::Arc;
 use ug::Slice as S;
 use ug_cuda::runtime as cuda;
 
-const MODULE_NAME: &str = "ug-pyo3-mod";
-
 fn w<E: ToString>(err: E) -> PyErr {
     pyo3::exceptions::PyValueError::new_err(err.to_string())
 }
@@ -430,8 +428,9 @@ impl Device {
             block_dim: (block_dim, 1, 1),
             shared_mem_bytes,
         };
-        let func = self.0.compile_ptx(ptx_code, MODULE_NAME, func_name).map_err(w)?;
-        let func = ug_cuda::runtime::Func::new(func, cfg);
+        let func = self.0.compile_ptx(ptx_code, func_name).map_err(w)?;
+        let stream = self.0.cudarc_stream();
+        let func = ug_cuda::runtime::Func::new(stream.clone(), func, cfg);
         Ok(Func(func))
     }
 
@@ -450,8 +449,9 @@ impl Device {
             block_dim: (block_dim, 1, 1),
             shared_mem_bytes,
         };
-        let func = self.0.compile_cu(cu_code, MODULE_NAME, func_name).map_err(w)?;
-        let func = ug_cuda::runtime::Func::new(func, cfg);
+        let stream = self.0.cudarc_stream();
+        let func = self.0.compile_cu(cu_code, func_name).map_err(w)?;
+        let func = ug_cuda::runtime::Func::new(stream.clone(), func, cfg);
         Ok(Func(func))
     }
 
