@@ -24,9 +24,9 @@ tracing-chrome = { workspace = true }
 tracing-subscriber = { workspace = true }
 ug = { workspace = true }
 ug-cuda = { workspace = true, optional = true }
-# ug-metal = { workspace = true, optional = true }
+ug-metal = { workspace = true, optional = true }
 
 [features]
-default = ["cuda"]
+default = []
 cuda = ["cudarc", "ug-cuda"]
-# metal = ["dep:metal", "ug-metal"]
+metal = ["dep:metal", "ug-metal"]
