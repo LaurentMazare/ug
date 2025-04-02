@@ -1,7 +1,8 @@
 use crate::runtime::{Slice, WithErr};
-use cudarc::cublas::{GemmConfig, StridedBatchedConfig};
+use cudarc::cublas::{sys, GemmConfig, StridedBatchedConfig};
 use cudarc::driver::{CudaSlice, DevicePtr};
 use half::{bf16, f16};
+use std::sync::Arc;
 use ug::{Layout, Result, Slice as _};
 
 fn gemm_config<T>(
@@ -127,15 +128,13 @@ pub fn set_gemm_reduced_precision_bf16(b: bool) {
 }
 
 unsafe fn gemm_strided_batched_f32(
+    stream: &Arc<cudarc::driver::CudaStream>,
     cublas: &cudarc::cublas::CudaBlas,
     cfg: StridedBatchedConfig<f32>,
     a: &cudarc::driver::CudaView<f32>,
     b: &cudarc::driver::CudaView<f32>,
     c: &mut CudaSlice<f32>,
 ) -> std::result::Result<(), cudarc::cublas::result::CublasError> {
-    use cudarc::cublas::sys;
-    use cudarc::driver::DevicePtrMut;
-
     let compute_type = if gemm_reduced_precision_f32() {
         sys::cublasComputeType_t::CUBLAS_COMPUTE_32F_FAST_TF32
     } else {
@@ -143,6 +142,9 @@ unsafe fn gemm_strided_batched_f32(
     };
     let alpha = &cfg.gemm.alpha as *const f32 as *const _;
     let beta = &cfg.gemm.beta as *const f32 as *const _;
+    let (a, _guard) = a.device_ptr(&stream);
+    let (b, _guard) = b.device_ptr(&stream);
+    let (c, _guard) = c.device_ptr(&stream);
 
     cudarc::cublas::result::gemm_strided_batched_ex(
         *cublas.handle(),
@@ -152,16 +154,16 @@ unsafe fn gemm_strided_batched_f32(
         cfg.gemm.n,
         cfg.gemm.k,
         alpha,
-        *a.device_ptr() as *const _,
+        a as *const _,
         sys::cudaDataType_t::CUDA_R_32F,
         cfg.gemm.lda,
         cfg.stride_a,
-        *b.device_ptr() as *const _,
+        b as *const _,
         sys::cudaDataType_t::CUDA_R_32F,
         cfg.gemm.ldb,
         cfg.stride_b,
         beta,
-        *c.device_ptr_mut() as *mut _,
+        c as *mut _,
         sys::cudaDataType_t::CUDA_R_32F,
         cfg.gemm.ldc,
         cfg.stride_c,
@@ -172,6 +174,7 @@ unsafe fn gemm_strided_batched_f32(
 }
 
 unsafe fn gemm_strided_batched_f16(
+    stream: &Arc<cudarc::driver::CudaStream>,
     cublas: &cudarc::cublas::CudaBlas,
     cfg: StridedBatchedConfig<f16>,
     a: &cudarc::driver::CudaView<f16>,
@@ -179,7 +182,6 @@ unsafe fn gemm_strided_batched_f16(
     c: &mut CudaSlice<f16>,
 ) -> std::result::Result<(), cudarc::cublas::result::CublasError> {
     use cudarc::cublas::sys;
-    use cudarc::driver::DevicePtrMut;
 
     let alpha = cfg.gemm.alpha;
     let beta = cfg.gemm.beta;
@@ -199,6 +201,9 @@ unsafe fn gemm_strided_batched_f16(
         )
     };
 
+    let (a, _guard) = a.device_ptr(&stream);
+    let (b, _guard) = b.device_ptr(&stream);
+    let (c, _guard) = c.device_ptr(&stream);
     cudarc::cublas::result::gemm_strided_batched_ex(
         *cublas.handle(),
         cfg.gemm.transa,
@@ -207,16 +212,16 @@ unsafe fn gemm_strided_batched_f16(
         cfg.gemm.n,
         cfg.gemm.k,
         alpha,
-        *a.device_ptr() as *const _,
+        a as *const _,
         sys::cudaDataType_t::CUDA_R_16F,
         cfg.gemm.lda,
         cfg.stride_a,
-        *b.device_ptr() as *const _,
+        b as *const _,
         sys::cudaDataType_t::CUDA_R_16F,
         cfg.gemm.ldb,
         cfg.stride_b,
         beta,
-        *c.device_ptr_mut() as *mut _,
+        c as *mut _,
         sys::cudaDataType_t::CUDA_R_16F,
         cfg.gemm.ldc,
         cfg.stride_c,
@@ -227,6 +232,7 @@ unsafe fn gemm_strided_batched_f16(
 }
 
 unsafe fn gemm_strided_batched_bf16(
+    stream: &Arc<cudarc::driver::CudaStream>,
     cublas: &cudarc::cublas::CudaBlas,
     cfg: StridedBatchedConfig<bf16>,
     a: &cudarc::driver::CudaView<bf16>,
@@ -234,7 +240,6 @@ unsafe fn gemm_strided_batched_bf16(
     c: &mut CudaSlice<bf16>,
 ) -> std::result::Result<(), cudarc::cublas::result::CublasError> {
     use cudarc::cublas::sys;
-    use cudarc::driver::DevicePtrMut;
 
     let alpha_f32: f32 = cfg.gemm.alpha.to_f32();
     let beta_f32: f32 = cfg.gemm.beta.to_f32();
@@ -254,6 +259,9 @@ unsafe fn gemm_strided_batched_bf16(
         )
     };
 
+    let (a, _guard) = a.device_ptr(&stream);
+    let (b, _guard) = b.device_ptr(&stream);
+    let (c, _guard) = c.device_ptr(&stream);
     cudarc::cublas::result::gemm_strided_batched_ex(
         *cublas.handle(),
         cfg.gemm.transa,
@@ -262,16 +270,16 @@ unsafe fn gemm_strided_batched_bf16(
         cfg.gemm.n,
         cfg.gemm.k,
         alpha,
-        *a.device_ptr() as *const _,
+        a as *const _,
         sys::cudaDataType_t::CUDA_R_16BF,
         cfg.gemm.lda,
         cfg.stride_a,
-        *b.device_ptr() as *const _,
+        b as *const _,
         sys::cudaDataType_t::CUDA_R_16BF,
         cfg.gemm.ldb,
         cfg.stride_b,
         beta,
-        *c.device_ptr_mut() as *mut _,
+        c as *mut _,
         sys::cudaDataType_t::CUDA_R_16BF,
         cfg.gemm.ldc,
         cfg.stride_c,
@@ -294,22 +302,25 @@ pub(crate) fn matmul(
     let (dst_dt, lhs_dt, rhs_dt) = (dst.dtype(), lhs.dtype(), rhs.dtype());
     match (&mut dst.inner, &lhs.inner, &rhs.inner) {
         (BF16(dst), BF16(lhs), BF16(rhs)) => {
+            let stream = lhs.stream();
             let lhs = &lhs.slice(lhs_l.offset()..);
             let rhs = &rhs.slice(rhs_l.offset()..);
             let cfg = gemm_config(bf16::ONE, bf16::ZERO, bmnk, lhs_l, rhs_l)?;
-            unsafe { gemm_strided_batched_bf16(blas, cfg, rhs, lhs, dst) }.w()?;
+            unsafe { gemm_strided_batched_bf16(stream, blas, cfg, rhs, lhs, dst) }.w()?;
         }
         (F16(dst), F16(lhs), F16(rhs)) => {
+            let stream = lhs.stream();
             let lhs = &lhs.slice(lhs_l.offset()..);
             let rhs = &rhs.slice(rhs_l.offset()..);
             let cfg = gemm_config(f16::ONE, f16::ZERO, bmnk, lhs_l, rhs_l)?;
-            unsafe { gemm_strided_batched_f16(blas, cfg, rhs, lhs, dst) }.w()?;
+            unsafe { gemm_strided_batched_f16(stream, blas, cfg, rhs, lhs, dst) }.w()?;
         }
         (F32(dst), F32(lhs), F32(rhs)) => {
+            let stream = lhs.stream();
             let lhs = &lhs.slice(lhs_l.offset()..);
             let rhs = &rhs.slice(rhs_l.offset()..);
             let cfg = gemm_config(1., 0., bmnk, lhs_l, rhs_l)?;
-            unsafe { gemm_strided_batched_f32(blas, cfg, rhs, lhs, dst) }.w()?;
+            unsafe { gemm_strided_batched_f32(stream, blas, cfg, rhs, lhs, dst) }.w()?;
         }
         _ => {
             ug::bail!(

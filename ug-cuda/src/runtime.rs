@@ -1,5 +1,5 @@
 use cudarc::driver::DeviceRepr;
-pub use cudarc::driver::{CudaFunction, DeviceSlice, LaunchConfig};
+pub use cudarc::driver::{CudaFunction, CudaStream, DeviceSlice, LaunchConfig};
 use std::sync::Arc;
 use ug::{Device as D, Error, Result, Slice as S, WithDType};
 
@@ -48,16 +48,17 @@ impl KernelId {
 #[derive(Clone)]
 pub struct Func {
     func: CudaFunction,
+    stream: Arc<CudaStream>,
     cfg: LaunchConfig,
 }
 
 impl Func {
-    pub fn new(func: CudaFunction, cfg: LaunchConfig) -> Self {
-        Self { func, cfg }
+    pub fn new(stream: Arc<CudaStream>, func: CudaFunction, cfg: LaunchConfig) -> Self {
+        Self { func, stream, cfg }
     }
 }
 
-macro_rules! impl_launch { ($name:ident, [$($Vars:tt),*]) => {
+macro_rules! impl_launch { ($name:ident, $($Vars:tt),*) => {
     pub unsafe fn $name<$($Vars: DeviceRepr),*>(
         &self,
         args: ($($Vars, )*)
@@ -72,14 +73,14 @@ macro_rules! impl_launch { ($name:ident, [$($Vars:tt),*]) => {
 
 #[allow(clippy::missing_safety_doc)]
 impl Func {
-    impl_launch!(launch1, [P1]);
-    impl_launch!(launch2, [P1, P2]);
-    impl_launch!(launch3, [P1, P2, P3]);
-    impl_launch!(launch4, [P1, P2, P3, P4]);
-    impl_launch!(launch5, [P1, P2, P3, P4, P5]);
-    impl_launch!(launch6, [P1, P2, P3, P4, P5, P6]);
-    impl_launch!(launch7, [P1, P2, P3, P4, P5, P6, P7]);
-    impl_launch!(launch8, [P1, P2, P3, P4, P5, P6, P7, P8]);
+    impl_launch!(launch1, P1);
+    impl_launch!(launch2, P1, P2);
+    impl_launch!(launch3, P1, P2, P3);
+    impl_launch!(launch4, P1, P2, P3, P4);
+    impl_launch!(launch5, P1, P2, P3, P4, P5);
+    impl_launch!(launch6, P1, P2, P3, P4, P5, P6);
+    impl_launch!(launch7, P1, P2, P3, P4, P5, P6, P7);
+    impl_launch!(launch8, P1, P2, P3, P4, P5, P6, P7, P8);
 }
 
 #[derive(Debug, Clone)]

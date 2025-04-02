@@ -6,10 +6,13 @@ members = [
   "ug-metal",
   "ug-pyo3",
 ]
+exclude = [
+]
+
 resolver = "2"
 
 [workspace.package]
-version = "0.1.1"
+version = "0.2.0"
 edition = "2021"
 description = "Micro compiler for tensor operations."
 repository = "https://github.com/LaurentMazare/ug"
@@ -20,7 +23,7 @@ license = "MIT OR Apache-2.0"
 [workspace.dependencies]
 anyhow = { version = "1", features = ["backtrace"] }
 clap = { version = "4.5.20", features = ["derive"] }
-cudarc = { version = "0.13.5", features = ["f16", "cuda-version-from-build-system"] }
+cudarc = { version = "0.14", features = ["f16", "cuda-version-from-build-system"] }
 gemm = { version = "0.18.0", features = ["wasm-simd128-enable"] }
 half = { version = "2.3.1", features = ["num-traits", "use-intrinsics", "rand_distr"] }
 hf-hub = "0.3.2"
@@ -31,9 +34,9 @@ num = "0.4.3"
 num-traits = "0.2.19"
 num_cpus = "1.16.0"
 objc = "0.2.7"
-ug = { path = "./ug-core", version = "0.1.1" }
-ug-cuda = { path = "./ug-cuda", version = "0.1.1" }
-ug-metal = { path = "./ug-metal", version = "0.1.1" }
+ug = { path = "./ug-core", version = "0.2.0" }
+ug-cuda = { path = "./ug-cuda", version = "0.2.0" }
+ug-metal = { path = "./ug-metal", version = "0.2.0" }
 rand = "0.8.5"
 rand_distr = "0.4.3"
 rayon = "1.7.0"
