@@ -1,5 +1,7 @@
 use cudarc::driver::DeviceRepr;
-pub use cudarc::driver::{CudaFunction, CudaStream, DeviceSlice, LaunchConfig};
+pub use cudarc::driver::{
+    CudaFunction, CudaStream, DevicePtr, DevicePtrMut, DeviceSlice, LaunchConfig,
+};
 use std::sync::Arc;
 use ug::{Device as D, Error, Result, Slice as S, WithDType};
 
@@ -56,6 +58,10 @@ impl Func {
     pub fn new(stream: Arc<CudaStream>, func: CudaFunction, cfg: LaunchConfig) -> Self {
         Self { func, stream, cfg }
     }
+
+    pub fn builder(&self) -> cudarc::driver::LaunchArgs<'_> {
+        self.stream.launch_builder(&self.func)
+    }
 }
 
 macro_rules! impl_launch { ($name:ident, $($Vars:tt),*) => {
@@ -63,7 +69,7 @@ macro_rules! impl_launch { ($name:ident, $($Vars:tt),*) => {
         &self,
         _args: ($($Vars, )*)
     ) -> Result<()> {
-        let mut builder = self.stream.launch_builder(&self.func);
+        let mut builder = self.builder();
         unsafe { builder.launch(self.cfg).w()? };
         Ok(())
     }
@@ -137,26 +143,30 @@ impl Slice {
     }
 }
 
-unsafe impl cudarc::driver::safe::DeviceRepr for &Slice {
-    fn as_kernel_param(&self) -> *mut std::ffi::c_void {
+impl Slice {
+    fn device_ptr<'a>(
+        &'a self,
+        stream: &'a Arc<CudaStream>,
+    ) -> (u64, cudarc::driver::SyncOnDrop<'a>) {
         match &self.inner {
-            SliceInner::BF16(v) => v.as_kernel_param(),
-            SliceInner::F16(v) => v.as_kernel_param(),
-            SliceInner::F32(v) => v.as_kernel_param(),
-            SliceInner::I32(v) => v.as_kernel_param(),
-            SliceInner::I64(v) => v.as_kernel_param(),
+            SliceInner::BF16(v) => v.device_ptr(stream),
+            SliceInner::F16(v) => v.device_ptr(stream),
+            SliceInner::F32(v) => v.device_ptr(stream),
+            SliceInner::I32(v) => v.device_ptr(stream),
+            SliceInner::I64(v) => v.device_ptr(stream),
         }
     }
-}
 
-unsafe impl cudarc::driver::safe::DeviceRepr for &mut Slice {
-    fn as_kernel_param(&self) -> *mut std::ffi::c_void {
-        match &self.inner {
-            SliceInner::BF16(v) => v.as_kernel_param(),
-            SliceInner::F16(v) => v.as_kernel_param(),
-            SliceInner::F32(v) => v.as_kernel_param(),
-            SliceInner::I32(v) => v.as_kernel_param(),
-            SliceInner::I64(v) => v.as_kernel_param(),
+    fn device_ptr_mut<'a>(
+        &'a mut self,
+        stream: &'a Arc<CudaStream>,
+    ) -> (u64, cudarc::driver::SyncOnDrop<'a>) {
+        match &mut self.inner {
+            SliceInner::BF16(v) => v.device_ptr_mut(stream),
+            SliceInner::F16(v) => v.device_ptr_mut(stream),
+            SliceInner::F32(v) => v.device_ptr_mut(stream),
+            SliceInner::I32(v) => v.device_ptr_mut(stream),
+            SliceInner::I64(v) => v.device_ptr_mut(stream),
         }
     }
 }
@@ -181,14 +191,14 @@ impl Device {
         let opts =
             cudarc::nvrtc::CompileOptions { use_fast_math: Some(true), ..Default::default() };
         let ptx = cudarc::nvrtc::safe::compile_ptx_with_opts(cu_code, opts).w()?;
-        let mdl = self.context.load_module(ptx.into()).w()?;
+        let mdl = self.context.load_module(ptx).w()?;
         let func = mdl.load_function(func_name).w()?;
         Ok(func)
     }
 
     pub fn compile_ptx(&self, ptx_code: &str, func_name: &'static str) -> Result<CudaFunction> {
         let ptx = cudarc::nvrtc::safe::Ptx::from_src(ptx_code);
-        let mdl = self.context.load_module(ptx.into()).w()?;
+        let mdl = self.context.load_module(ptx).w()?;
         let func = mdl.load_function(func_name).w()?;
         Ok(func)
     }
@@ -265,7 +275,7 @@ impl ug::Device for Device {
     }
 
     fn run(&self, f: &Self::Func, args: &mut [&mut Self::Slice]) -> Result<()> {
-        let func = f.func.clone();
+        use cudarc::driver::PushKernelArg;
         // TODO: Avoid these.
         if f.cfg.block_dim.0 == 0
             || f.cfg.block_dim.1 == 0
@@ -278,19 +288,54 @@ impl ug::Device for Device {
         }
         match args {
             [a1] => {
-                unsafe { func.launch(f.cfg, (&**a1,)).w()? };
+                let mut builder = f.builder();
+                let (a1, _guard1) = a1.device_ptr_mut(&f.stream);
+                builder.arg(&a1);
+                unsafe { builder.launch(f.cfg).w()? };
             }
             [a1, a2] => {
-                unsafe { func.launch(f.cfg, (&**a1, &**a2)).w()? };
+                let mut builder = f.builder();
+                let (a1, _guard1) = a1.device_ptr_mut(&f.stream);
+                builder.arg(&a1);
+                let (a2, _guard2) = a2.device_ptr_mut(&f.stream);
+                builder.arg(&a2);
+                unsafe { builder.launch(f.cfg).w()? };
             }
             [a1, a2, a3] => {
-                unsafe { func.launch(f.cfg, (&**a1, &**a2, &**a3)).w()? };
+                let mut builder = f.builder();
+                let (a1, _guard1) = a1.device_ptr_mut(&f.stream);
+                builder.arg(&a1);
+                let (a2, _guard2) = a2.device_ptr_mut(&f.stream);
+                builder.arg(&a2);
+                let (a3, _guard3) = a3.device_ptr_mut(&f.stream);
+                builder.arg(&a3);
+                unsafe { builder.launch(f.cfg).w()? };
             }
             [a1, a2, a3, a4] => {
-                unsafe { func.launch(f.cfg, (&**a1, &**a2, &**a3, &**a4)).w()? };
+                let mut builder = f.builder();
+                let (a1, _guard1) = a1.device_ptr_mut(&f.stream);
+                builder.arg(&a1);
+                let (a2, _guard2) = a2.device_ptr_mut(&f.stream);
+                builder.arg(&a2);
+                let (a3, _guard3) = a3.device_ptr_mut(&f.stream);
+                builder.arg(&a3);
+                let (a4, _guard4) = a4.device_ptr_mut(&f.stream);
+                builder.arg(&a4);
+                unsafe { builder.launch(f.cfg).w()? };
             }
             [a1, a2, a3, a4, a5] => {
-                unsafe { func.launch(f.cfg, (&**a1, &**a2, &**a3, &**a4, &**a5)).w()? };
+                let mut builder = f.builder();
+                let (a1, _guard1) = a1.device_ptr_mut(&f.stream);
+                builder.arg(&a1);
+                let (a2, _guard2) = a2.device_ptr_mut(&f.stream);
+                builder.arg(&a2);
+                let (a3, _guard3) = a3.device_ptr_mut(&f.stream);
+                builder.arg(&a3);
+                let (a4, _guard4) = a4.device_ptr_mut(&f.stream);
+                builder.arg(&a4);
+                let (a5, _guard5) = a5.device_ptr_mut(&f.stream);
+                builder.arg(&a5);
+                unsafe { builder.launch(f.cfg).w()? };
             }
             _ => ug::bail!("unsupported number of args for kernel {}", args.len()),
         }

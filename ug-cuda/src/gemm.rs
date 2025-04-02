@@ -142,9 +142,9 @@ unsafe fn gemm_strided_batched_f32(
     };
     let alpha = &cfg.gemm.alpha as *const f32 as *const _;
     let beta = &cfg.gemm.beta as *const f32 as *const _;
-    let (a, _guard) = a.device_ptr(&stream);
-    let (b, _guard) = b.device_ptr(&stream);
-    let (c, _guard) = c.device_ptr(&stream);
+    let (a, _guard) = a.device_ptr(stream);
+    let (b, _guard) = b.device_ptr(stream);
+    let (c, _guard) = c.device_ptr(stream);
 
     cudarc::cublas::result::gemm_strided_batched_ex(
         *cublas.handle(),
@@ -201,9 +201,9 @@ unsafe fn gemm_strided_batched_f16(
         )
     };
 
-    let (a, _guard) = a.device_ptr(&stream);
-    let (b, _guard) = b.device_ptr(&stream);
-    let (c, _guard) = c.device_ptr(&stream);
+    let (a, _guard) = a.device_ptr(stream);
+    let (b, _guard) = b.device_ptr(stream);
+    let (c, _guard) = c.device_ptr(stream);
     cudarc::cublas::result::gemm_strided_batched_ex(
         *cublas.handle(),
         cfg.gemm.transa,
@@ -259,9 +259,9 @@ unsafe fn gemm_strided_batched_bf16(
         )
     };
 
-    let (a, _guard) = a.device_ptr(&stream);
-    let (b, _guard) = b.device_ptr(&stream);
-    let (c, _guard) = c.device_ptr(&stream);
+    let (a, _guard) = a.device_ptr(stream);
+    let (b, _guard) = b.device_ptr(stream);
+    let (c, _guard) = c.device_ptr(stream);
     cudarc::cublas::result::gemm_strided_batched_ex(
         *cublas.handle(),
         cfg.gemm.transa,
