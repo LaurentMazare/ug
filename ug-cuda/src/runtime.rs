@@ -61,11 +61,10 @@ impl Func {
 macro_rules! impl_launch { ($name:ident, $($Vars:tt),*) => {
     pub unsafe fn $name<$($Vars: DeviceRepr),*>(
         &self,
-        args: ($($Vars, )*)
+        _args: ($($Vars, )*)
     ) -> Result<()> {
-        use cudarc::driver::LaunchAsync;
-        let func = self.func.clone();
-        unsafe { func.launch(self.cfg, args).w()? };
+        let mut builder = self.stream.launch_builder(&self.func);
+        unsafe { builder.launch(self.cfg).w()? };
         Ok(())
     }
 }
@@ -85,7 +84,8 @@ impl Func {
 
 #[derive(Debug, Clone)]
 pub struct Device {
-    device: Arc<cudarc::driver::CudaDevice>,
+    context: Arc<cudarc::driver::CudaContext>,
+    stream: Arc<cudarc::driver::CudaStream>,
     blas: Arc<cudarc::cublas::CudaBlas>,
 }
 
@@ -163,53 +163,38 @@ unsafe impl cudarc::driver::safe::DeviceRepr for &mut Slice {
 
 impl Device {
     pub fn new(device_index: usize) -> Result<Self> {
-        let device = cudarc::driver::CudaDevice::new(device_index).w()?;
-        let blas = cudarc::cublas::CudaBlas::new(device.clone()).w()?;
-        Ok(Self { device, blas: Arc::new(blas) })
+        let context = cudarc::driver::CudaContext::new(device_index).w()?;
+        let stream = context.default_stream();
+        let blas = cudarc::cublas::CudaBlas::new(stream.clone()).w()?;
+        Ok(Self { context, stream, blas: Arc::new(blas) })
     }
 
-    pub fn cudarc_device(&self) -> &cudarc::driver::CudaDevice {
-        self.device.as_ref()
+    pub fn cudarc_stream(&self) -> &Arc<cudarc::driver::CudaStream> {
+        &self.stream
     }
 
     pub fn blas(&self) -> &cudarc::cublas::CudaBlas {
         self.blas.as_ref()
     }
 
-    pub fn compile_cu(
-        &self,
-        cu_code: &str,
-        module_name: &str,
-        func_name: &'static str,
-    ) -> Result<CudaFunction> {
+    pub fn compile_cu(&self, cu_code: &str, func_name: &str) -> Result<CudaFunction> {
         let opts =
             cudarc::nvrtc::CompileOptions { use_fast_math: Some(true), ..Default::default() };
         let ptx = cudarc::nvrtc::safe::compile_ptx_with_opts(cu_code, opts).w()?;
-        self.device.load_ptx(ptx, module_name, &[func_name]).w()?;
-        let func = match self.device.get_func(module_name, func_name) {
-            Some(func) => func,
-            None => ug::bail!("unknown function {module_name}::{func_name}"),
-        };
+        let mdl = self.context.load_module(ptx.into()).w()?;
+        let func = mdl.load_function(func_name).w()?;
         Ok(func)
     }
 
-    pub fn compile_ptx(
-        &self,
-        ptx_code: &str,
-        module_name: &str,
-        func_name: &'static str,
-    ) -> Result<CudaFunction> {
+    pub fn compile_ptx(&self, ptx_code: &str, func_name: &'static str) -> Result<CudaFunction> {
         let ptx = cudarc::nvrtc::safe::Ptx::from_src(ptx_code);
-        self.device.load_ptx(ptx, module_name, &[func_name]).w()?;
-        let func = match self.device.get_func(module_name, func_name) {
-            Some(func) => func,
-            None => ug::bail!("unknown function {module_name}::{func_name}"),
-        };
+        let mdl = self.context.load_module(ptx.into()).w()?;
+        let func = mdl.load_function(func_name).w()?;
         Ok(func)
     }
 
     pub fn zeros(&self, len: usize) -> Result<Slice> {
-        let slice = self.device.alloc_zeros::<f32>(len).w()?;
+        let slice = self.stream.alloc_zeros::<f32>(len).w()?;
         Ok(Slice { inner: SliceInner::F32(slice), device: self.clone() })
     }
 
@@ -220,7 +205,7 @@ impl Device {
     }
 
     pub fn synchronize(&self) -> Result<()> {
-        self.device.synchronize().w()?;
+        self.stream.synchronize().w()?;
         Ok(())
     }
 }
@@ -233,23 +218,23 @@ impl ug::Device for Device {
     unsafe fn allocate_uninit(&self, dtype: ug::DType, len: usize) -> Result<Self::Slice> {
         let inner = match dtype {
             ug::DType::F32 => {
-                let slice = self.device.alloc::<f32>(len).w()?;
+                let slice = self.stream.alloc::<f32>(len).w()?;
                 SliceInner::F32(slice)
             }
             ug::DType::F16 => {
-                let slice = self.device.alloc::<half::f16>(len).w()?;
+                let slice = self.stream.alloc::<half::f16>(len).w()?;
                 SliceInner::F16(slice)
             }
             ug::DType::BF16 => {
-                let slice = self.device.alloc::<half::bf16>(len).w()?;
+                let slice = self.stream.alloc::<half::bf16>(len).w()?;
                 SliceInner::BF16(slice)
             }
             ug::DType::I32 => {
-                let slice = self.device.alloc::<i32>(len).w()?;
+                let slice = self.stream.alloc::<i32>(len).w()?;
                 SliceInner::I32(slice)
             }
             ug::DType::I64 => {
-                let slice = self.device.alloc::<i64>(len).w()?;
+                let slice = self.stream.alloc::<i64>(len).w()?;
                 SliceInner::I64(slice)
             }
         };
@@ -268,7 +253,6 @@ impl ug::Device for Device {
             None => &format!("ug_{kernel_id}"),
         };
         crate::code_gen::gen(&mut cu_code, func_name, kernel)?;
-        let func_name_s = Box::leak(Box::new(func_name.to_string()));
         let cu_code = String::from_utf8(cu_code)?;
         let cfg = kernel.launch_config();
         let cfg = LaunchConfig {
@@ -276,12 +260,11 @@ impl ug::Device for Device {
             block_dim: (cfg.block_dim, 1, 1),
             shared_mem_bytes: cfg.shared_mem,
         };
-        let func = self.compile_cu(&cu_code, func_name, func_name_s)?;
-        Ok(Func { func, cfg })
+        let func = self.compile_cu(&cu_code, func_name)?;
+        Ok(Func { func, stream: self.stream.clone(), cfg })
     }
 
     fn run(&self, f: &Self::Func, args: &mut [&mut Self::Slice]) -> Result<()> {
-        use cudarc::driver::LaunchAsync;
         let func = f.func.clone();
         // TODO: Avoid these.
         if f.cfg.block_dim.0 == 0
@@ -351,11 +334,11 @@ impl ug::Slice for Slice {
         use ug::CpuStorageRef as C;
         use SliceInner as S;
         match (&mut self.inner, DT::to_cpu_storage(src)) {
-            (S::BF16(dst), C::BF16(src)) => self.device.device.htod_sync_copy_into(src, dst).w()?,
-            (S::F16(dst), C::F16(src)) => self.device.device.htod_sync_copy_into(src, dst).w()?,
-            (S::F32(dst), C::F32(src)) => self.device.device.htod_sync_copy_into(src, dst).w()?,
-            (S::I32(dst), C::I32(src)) => self.device.device.htod_sync_copy_into(src, dst).w()?,
-            (S::I64(dst), C::I64(src)) => self.device.device.htod_sync_copy_into(src, dst).w()?,
+            (S::BF16(dst), C::BF16(src)) => self.device.stream.memcpy_htod(src, dst).w()?,
+            (S::F16(dst), C::F16(src)) => self.device.stream.memcpy_htod(src, dst).w()?,
+            (S::F32(dst), C::F32(src)) => self.device.stream.memcpy_htod(src, dst).w()?,
+            (S::I32(dst), C::I32(src)) => self.device.stream.memcpy_htod(src, dst).w()?,
+            (S::I64(dst), C::I64(src)) => self.device.stream.memcpy_htod(src, dst).w()?,
             (_, _) => ug::bail!("htod dtype mismatch, dst {:?}, src {:?}", self.dtype(), DT::DTYPE),
         }
         Ok(())
@@ -365,11 +348,11 @@ impl ug::Slice for Slice {
         use ug::CpuStorageRefMut as C;
         use SliceInner as S;
         match (&self.inner, DT::to_cpu_storage_mut(dst)) {
-            (S::BF16(src), C::BF16(dst)) => self.device.device.dtoh_sync_copy_into(src, dst).w()?,
-            (S::F16(src), C::F16(dst)) => self.device.device.dtoh_sync_copy_into(src, dst).w()?,
-            (S::F32(src), C::F32(dst)) => self.device.device.dtoh_sync_copy_into(src, dst).w()?,
-            (S::I32(src), C::I32(dst)) => self.device.device.dtoh_sync_copy_into(src, dst).w()?,
-            (S::I64(src), C::I64(dst)) => self.device.device.dtoh_sync_copy_into(src, dst).w()?,
+            (S::BF16(src), C::BF16(dst)) => self.device.stream.memcpy_dtoh(src, dst).w()?,
+            (S::F16(src), C::F16(dst)) => self.device.stream.memcpy_dtoh(src, dst).w()?,
+            (S::F32(src), C::F32(dst)) => self.device.stream.memcpy_dtoh(src, dst).w()?,
+            (S::I32(src), C::I32(dst)) => self.device.stream.memcpy_dtoh(src, dst).w()?,
+            (S::I64(src), C::I64(dst)) => self.device.stream.memcpy_dtoh(src, dst).w()?,
             (_, _) => ug::bail!("dtoh dtype mismatch, dst {:?}, src {:?}", DT::DTYPE, self.dtype()),
         }
         Ok(())
