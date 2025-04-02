@@ -133,8 +133,7 @@ impl Slice {
 }
 
 impl Slice {
-    #[allow(unused)]
-    fn device_ptr<'a>(
+    pub fn device_ptr<'a>(
         &'a self,
         stream: &'a Arc<CudaStream>,
     ) -> (u64, cudarc::driver::SyncOnDrop<'a>) {
@@ -147,7 +146,7 @@ impl Slice {
         }
     }
 
-    fn device_ptr_mut<'a>(
+    pub fn device_ptr_mut<'a>(
         &'a mut self,
         stream: &'a Arc<CudaStream>,
     ) -> (u64, cudarc::driver::SyncOnDrop<'a>) {
