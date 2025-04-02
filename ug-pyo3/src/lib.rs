@@ -27,6 +27,7 @@ struct Func(cuda::Func);
 impl Func {
     #[pyo3(signature = (s1, s2, s3))]
     fn launch3(&self, s1: &Slice, s2: &Slice, s3: &mut Slice) -> PyResult<()> {
+        use ug_cuda::cudarc::driver::PushKernelArg;
         let len = s3.0.len();
         let len1 = s1.0.len();
         let len2 = s2.0.len();
@@ -36,15 +37,15 @@ impl Func {
         if len2 != len {
             py_bail!("length mismatch {len2} <> {len}")
         }
-        unsafe {
-            self.0
-                .launch3((
-                    s1.0.slice::<f32>().map_err(w)?,
-                    s2.0.slice::<f32>().map_err(w)?,
-                    s3.0.slice::<f32>().map_err(w)?,
-                ))
-                .map_err(w)?
-        };
+        let mut builder = self.0.builder();
+        let s1 = s1.0.slice::<f32>().map_err(w)?;
+        let s2 = s2.0.slice::<f32>().map_err(w)?;
+        let s3 = s3.0.slice::<f32>().map_err(w)?;
+        builder.arg(s1);
+        builder.arg(s2);
+        builder.arg(s3);
+
+        unsafe { builder.launch(*self.0.launch_cfg()).map_err(w)? };
         Ok(())
     }
 }

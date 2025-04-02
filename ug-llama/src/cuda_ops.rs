@@ -91,7 +91,7 @@ impl crate::Device for ug_cuda::runtime::Device {
         };
         // TODO: Use get_or_try_init when available.
         let func = CAT.get_or_init(|| lhs.device().compile_cu(CAT_CU, "cat_f32").unwrap());
-        let stream = lhs.device().cuda_stream();
+        let stream = lhs.device().cudarc_stream();
         let func = Func::new(stream.clone(), func.clone(), cfg);
         let f = move |vs: Vec<&mut Slice>| -> Result<()> {
             let [lhs, rhs, dst]: [&mut Slice; 3] = vs.try_into().unwrap();
@@ -117,7 +117,7 @@ impl crate::Device for ug_cuda::runtime::Device {
         let func = CUSTOM_SOFTMAX
             .get_or_init(|| src.device().compile_cu(SOFTMAX_CU, "softmax_f32").unwrap());
         let stream = src.device().cudarc_stream();
-        let func = Func::new(stream, func.clone(), cfg);
+        let func = Func::new(stream.clone(), func.clone(), cfg);
         let f = move |vs: Vec<&mut Slice>| -> Result<()> {
             let [src, dst]: [&mut Slice; 2] = vs.try_into().unwrap();
             unsafe { func.launch3((src, dst, dim_m1 as i32))? };

@@ -1,4 +1,3 @@
-use cudarc::driver::DeviceRepr;
 pub use cudarc::driver::{
     CudaFunction, CudaStream, DevicePtr, DevicePtrMut, DeviceSlice, LaunchConfig,
 };
@@ -62,30 +61,20 @@ impl Func {
     pub fn builder(&self) -> cudarc::driver::LaunchArgs<'_> {
         self.stream.launch_builder(&self.func)
     }
-}
 
-macro_rules! impl_launch { ($name:ident, $($Vars:tt),*) => {
-    pub unsafe fn $name<$($Vars: DeviceRepr),*>(
-        &self,
-        _args: ($($Vars, )*)
-    ) -> Result<()> {
-        let mut builder = self.builder();
-        unsafe { builder.launch(self.cfg).w()? };
-        Ok(())
+    pub fn launch_cfg(&self) -> &LaunchConfig {
+        &self.cfg
     }
 }
-}
 
-#[allow(clippy::missing_safety_doc)]
-impl Func {
-    impl_launch!(launch1, P1);
-    impl_launch!(launch2, P1, P2);
-    impl_launch!(launch3, P1, P2, P3);
-    impl_launch!(launch4, P1, P2, P3, P4);
-    impl_launch!(launch5, P1, P2, P3, P4, P5);
-    impl_launch!(launch6, P1, P2, P3, P4, P5, P6);
-    impl_launch!(launch7, P1, P2, P3, P4, P5, P6, P7);
-    impl_launch!(launch8, P1, P2, P3, P4, P5, P6, P7, P8);
+#[macro_export]
+macro_rules! bargs {
+    ($b:ident, $($arg:expr),*) => {
+        $(
+            let __arg = $arg;
+            $b.arg(&__arg);
+        )*
+    };
 }
 
 #[derive(Debug, Clone)]
@@ -144,6 +133,7 @@ impl Slice {
 }
 
 impl Slice {
+    #[allow(unused)]
     fn device_ptr<'a>(
         &'a self,
         stream: &'a Arc<CudaStream>,
