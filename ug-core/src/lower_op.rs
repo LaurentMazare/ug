@@ -600,9 +600,9 @@ impl lang::op::Store {
                 A::Reduce { op, arg, dim: _ } => {
                     use lang::op::ReduceOp as R;
                     let c = match op {
-                        R::Sum { .. } => 's',
-                        R::Max { .. } => 'x',
-                        R::Min { .. } => 'n',
+                        R::Sum => 's',
+                        R::Max => 'x',
+                        R::Min => 'n',
                     };
                     chars.push('R');
                     chars.push(c);
