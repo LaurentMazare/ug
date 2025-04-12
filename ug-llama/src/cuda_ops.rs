@@ -20,9 +20,8 @@ impl crate::Device for ug_cuda::runtime::Device {
         let cfg = LaunchConfig::for_num_elems((b * h * t * d) as u32 / 2);
         // TODO: Use get_or_try_init when available.
         let func = ROPEI.get_or_init(|| src.device().compile_cu(ROPEI_CU, "ropei_f32").unwrap());
-        let stream = src.device().cudarc_stream();
-        let func = Func::new(stream.clone(), func.clone(), cfg);
-        let stream = stream.clone();
+        let stream = src.device().cudarc_stream().clone();
+        let func = Func::new(src.device(), func.clone(), cfg);
 
         let f = move |vs: Vec<&mut Slice>| -> Result<()> {
             // TODO: check the dtypes.
@@ -61,9 +60,8 @@ impl crate::Device for ug_cuda::runtime::Device {
         let cfg = LaunchConfig::for_num_elems((b * h * t * d) as u32 / 2);
         // TODO: Use get_or_try_init when available.
         let func = ROPE.get_or_init(|| src.device().compile_cu(ROPE_CU, "rope_f32").unwrap());
-        let stream = src.device().cudarc_stream();
-        let func = Func::new(stream.clone(), func.clone(), cfg);
-        let stream = stream.clone();
+        let stream = src.device().cudarc_stream().clone();
+        let func = Func::new(src.device(), func.clone(), cfg);
 
         let f = move |vs: Vec<&mut Slice>| -> Result<()> {
             // TODO: check the dtypes.
@@ -124,9 +122,8 @@ impl crate::Device for ug_cuda::runtime::Device {
         };
         // TODO: Use get_or_try_init when available.
         let func = CAT.get_or_init(|| lhs.device().compile_cu(CAT_CU, "cat_f32").unwrap());
-        let stream = lhs.device().cudarc_stream();
-        let func = Func::new(stream.clone(), func.clone(), cfg);
-        let stream = stream.clone();
+        let stream = lhs.device().cudarc_stream().clone();
+        let func = Func::new(lhs.device(), func.clone(), cfg);
         let f = move |vs: Vec<&mut Slice>| -> Result<()> {
             let [lhs, rhs, dst]: [&mut Slice; 3] = vs.try_into().unwrap();
             let (lhs, _guard) = lhs.device_ptr_mut(&stream);
@@ -162,9 +159,8 @@ impl crate::Device for ug_cuda::runtime::Device {
         // TODO: Use get_or_try_init when available.
         let func = CUSTOM_SOFTMAX
             .get_or_init(|| src.device().compile_cu(SOFTMAX_CU, "softmax_f32").unwrap());
-        let stream = src.device().cudarc_stream();
-        let func = Func::new(stream.clone(), func.clone(), cfg);
-        let stream = stream.clone();
+        let stream = src.device().cudarc_stream().clone();
+        let func = Func::new(src.device(), func.clone(), cfg);
         let f = move |vs: Vec<&mut Slice>| -> Result<()> {
             let [src, dst]: [&mut Slice; 2] = vs.try_into().unwrap();
             let (src, _guard) = src.device_ptr_mut(&stream);
