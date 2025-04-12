@@ -54,8 +54,8 @@ pub struct Func {
 }
 
 impl Func {
-    pub fn new(stream: Arc<CudaStream>, func: CudaFunction, cfg: LaunchConfig) -> Self {
-        Self { func, stream, cfg }
+    pub fn new(device: &crate::Device, func: CudaFunction, cfg: LaunchConfig) -> Self {
+        Self { func, stream: device.cudarc_stream().clone(), cfg }
     }
 
     pub fn builder(&self) -> cudarc::driver::LaunchArgs<'_> {

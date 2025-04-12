@@ -70,14 +70,15 @@ fn run_one(args: &Args, n_cols: usize) -> Result<()> {
         block_dim: (block_dim as u32, 1, 1),
         shared_mem_bytes: 0,
     };
-    let func = device.compile_cu(&cuda_code, "foo", "mykernel")?;
-    let func = ug_cuda::runtime::Func::new(func, cfg);
+    let func = device.compile_cu(&cuda_code, "mykernel")?;
+    let func = ug_cuda::runtime::Func::new(&device, func, cfg);
     let n_elements = n_rows * n_cols;
-    let res = device.zeros(n_elements)?;
+    let mut res = device.zeros(n_elements)?;
     let arg: Vec<f32> = (0..n_elements).map(|_| rng.gen()).collect();
-    let arg = device.slice_from_values(&arg)?;
-    let run = || {
-        unsafe { func.launch2((arg.slice::<f32>()?, res.slice::<f32>()?))? }
+    let mut arg = device.slice_from_values(&arg)?;
+    let mut run = || {
+        use ug::Device;
+        device.run(&func, &mut [&mut arg, &mut res])?;
         device.synchronize()?;
         Ok::<_, ug::Error>(())
     };
