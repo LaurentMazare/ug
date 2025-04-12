@@ -430,8 +430,7 @@ impl Device {
             shared_mem_bytes,
         };
         let func = self.0.compile_ptx(ptx_code, func_name).map_err(w)?;
-        let stream = self.0.cudarc_stream();
-        let func = ug_cuda::runtime::Func::new(stream.clone(), func, cfg);
+        let func = ug_cuda::runtime::Func::new(&self.0, func, cfg);
         Ok(Func(func))
     }
 
@@ -450,9 +449,8 @@ impl Device {
             block_dim: (block_dim, 1, 1),
             shared_mem_bytes,
         };
-        let stream = self.0.cudarc_stream();
         let func = self.0.compile_cu(cu_code, func_name).map_err(w)?;
-        let func = ug_cuda::runtime::Func::new(stream.clone(), func, cfg);
+        let func = ug_cuda::runtime::Func::new(&self.0, func, cfg);
         Ok(Func(func))
     }
 
