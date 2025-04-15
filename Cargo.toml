@@ -12,7 +12,7 @@ exclude = [
 resolver = "2"
 
 [workspace.package]
-version = "0.3.1"
+version = "0.4.0"
 edition = "2021"
 description = "Micro compiler for tensor operations."
 repository = "https://github.com/LaurentMazare/ug"
@@ -23,7 +23,7 @@ license = "MIT OR Apache-2.0"
 [workspace.dependencies]
 anyhow = { version = "1", features = ["backtrace"] }
 clap = { version = "4.5.20", features = ["derive"] }
-cudarc = { version = "0.15.1", features = ["std", "cublas", "cublaslt", "curand", "driver", "nvrtc", "f16", "cuda-version-from-build-system", "dynamic-linking"], default-features=false }
+cudarc = { version = "0.16", features = ["std", "cublas", "cublaslt", "curand", "driver", "nvrtc", "f16", "cuda-version-from-build-system", "dynamic-linking"], default-features=false }
 gemm = { version = "0.18.0", features = ["wasm-simd128-enable"] }
 half = { version = "2.3.1", features = ["num-traits", "use-intrinsics", "rand_distr"] }
 hf-hub = "0.3.2"
