@@ -49,7 +49,7 @@ class Arg:
         pass
 
 class Ast:
-    def broadcast(self, axis, dim_len):
+    def broadcast(self, shape):
         """ """
         pass
 

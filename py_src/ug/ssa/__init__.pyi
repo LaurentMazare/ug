@@ -49,12 +49,12 @@ class Instr:
         pass
 
     @staticmethod
-    def special_g():
+    def special_bi():
         """ """
         pass
 
     @staticmethod
-    def special_l():
+    def special_ti():
         """ """
         pass
 

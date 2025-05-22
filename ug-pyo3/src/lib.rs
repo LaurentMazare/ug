@@ -627,5 +627,10 @@ fn mod_(py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     m.add_submodule(&ssa)?;
     m.add_submodule(&lang)?;
     m.add_submodule(&op)?;
+    // Manually populate sys.modules, see:
+    // https://github.com/PyO3/pyo3/issues/759
+    py.import_bound("sys")?.getattr("modules")?.set_item("ug.lang", lang)?;
+    py.import_bound("sys")?.getattr("modules")?.set_item("ug.ssa", ssa)?;
+    py.import_bound("sys")?.getattr("modules")?.set_item("ug.op", op)?;
     Ok(())
 }
