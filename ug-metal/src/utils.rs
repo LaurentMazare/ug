@@ -1,7 +1,6 @@
-use metal::{Buffer, ComputeCommandEncoderRef};
-use std::ffi::c_void;
+use crate::metal::{Buffer, ComputeCommandEncoder};
 
-pub fn set_param<P: EncoderParam>(encoder: &ComputeCommandEncoderRef, position: u64, data: P) {
+pub fn set_param<P: EncoderParam>(encoder: &ComputeCommandEncoder, position: usize, data: P) {
     <P as EncoderParam>::set_param(encoder, position, data)
 }
 
@@ -9,17 +8,13 @@ pub fn set_param<P: EncoderParam>(encoder: &ComputeCommandEncoderRef, position: 
 /// on a single line.
 /// Prevents getting wrong some arguments number and mixing length and size in bytes.
 pub trait EncoderParam {
-    fn set_param(encoder: &ComputeCommandEncoderRef, position: u64, data: Self);
+    fn set_param(encoder: &ComputeCommandEncoder, position: usize, data: Self);
 }
 macro_rules! primitive {
     ($type:ty) => {
         impl EncoderParam for $type {
-            fn set_param(encoder: &ComputeCommandEncoderRef, position: u64, data: Self) {
-                encoder.set_bytes(
-                    position,
-                    core::mem::size_of::<$type>() as u64,
-                    &data as *const $type as *const c_void,
-                );
+            fn set_param(encoder: &ComputeCommandEncoder, position: usize, data: Self) {
+                encoder.set_bytes(position, &data);
             }
         }
     };
@@ -33,49 +28,49 @@ primitive!(u64);
 primitive!(f32);
 
 impl<T> EncoderParam for &[T] {
-    fn set_param(encoder: &ComputeCommandEncoderRef, position: u64, data: Self) {
-        encoder.set_bytes(
-            position,
-            core::mem::size_of_val(data) as u64,
-            data.as_ptr() as *const c_void,
-        );
+    fn set_param(encoder: &ComputeCommandEncoder, position: usize, data: Self) {
+        encoder.set_bytes_directly(position, core::mem::size_of_val(data), data.as_ptr().cast());
     }
 }
 
 impl EncoderParam for &Buffer {
-    fn set_param(encoder: &ComputeCommandEncoderRef, position: u64, data: Self) {
+    fn set_param(encoder: &ComputeCommandEncoder, position: usize, data: Self) {
         encoder.set_buffer(position, Some(data), 0);
     }
 }
 
 impl EncoderParam for (&Buffer, usize) {
-    fn set_param(encoder: &ComputeCommandEncoderRef, position: u64, data: Self) {
-        encoder.set_buffer(position, Some(data.0), data.1 as u64);
+    fn set_param(encoder: &ComputeCommandEncoder, position: usize, data: Self) {
+        encoder.set_buffer(position, Some(data.0), data.1);
     }
 }
 
 impl EncoderParam for &mut Buffer {
-    fn set_param(encoder: &ComputeCommandEncoderRef, position: u64, data: Self) {
+    fn set_param(encoder: &ComputeCommandEncoder, position: usize, data: Self) {
         encoder.set_buffer(position, Some(data), 0);
     }
 }
 
 impl EncoderParam for &crate::runtime::Slice {
-    fn set_param(encoder: &ComputeCommandEncoderRef, position: u64, data: Self) {
+    fn set_param(encoder: &ComputeCommandEncoder, position: usize, data: Self) {
         encoder.set_buffer(position, Some(data.buffer()), 0);
     }
 }
 
 impl EncoderParam for &mut crate::runtime::Slice {
-    fn set_param(encoder: &ComputeCommandEncoderRef, position: u64, data: Self) {
+    fn set_param(encoder: &ComputeCommandEncoder, position: usize, data: Self) {
         encoder.set_buffer(position, Some(data.buffer()), 0);
     }
 }
 
 impl EncoderParam for (&mut Buffer, usize) {
-    fn set_param(encoder: &ComputeCommandEncoderRef, position: u64, data: Self) {
-        encoder.set_buffer(position, Some(data.0), data.1 as u64);
+    fn set_param(encoder: &ComputeCommandEncoder, position: usize, data: Self) {
+        encoder.set_buffer(position, Some(data.0), data.1);
     }
+}
+
+impl EncoderParam for () {
+    fn set_param(_: &ComputeCommandEncoder, _: usize, _: Self) {}
 }
 
 #[macro_export]

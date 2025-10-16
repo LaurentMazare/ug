@@ -12,7 +12,7 @@ license.workspace = true
 clap = { workspace = true }
 cudarc = { workspace = true, optional = true }
 hf-hub = { workspace = true }
-metal = { workspace = true, optional = true }
+objc2-metal = { workspace = true, optional = true }
 rand = { workspace = true }
 rand_distr = { workspace = true }
 rayon = { workspace = true }
@@ -29,4 +29,4 @@ ug-metal = { workspace = true, optional = true }
 [features]
 default = []
 cuda = ["cudarc", "ug-cuda"]
-metal = ["dep:metal", "ug-metal"]
+metal = ["dep:objc2-metal", "ug-metal"]

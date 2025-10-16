@@ -29,7 +29,9 @@ half = { version = "2.3.1", features = ["num-traits", "use-intrinsics", "rand_di
 hf-hub = "0.3.2"
 libloading = "0.8.5"
 memmap2 = { version = "0.9.5", features = ["stable_deref_trait"] }
-metal = "0.29.0"
+objc2 = "0.6.3"
+objc2-foundation = "0.3.2"
+objc2-metal = "0.3.2"
 num = "0.4.3"
 num-traits = "0.2.19"
 num_cpus = "1.16.0"

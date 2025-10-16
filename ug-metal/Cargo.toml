@@ -9,8 +9,9 @@ categories.workspace = true
 license.workspace = true
 
 [dependencies]
-metal = { workspace = true }
-objc = { workspace = true }
+objc2 = { workspace = true }
+objc2-foundation = { workspace = true }
+objc2-metal = { workspace = true }
 half = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }

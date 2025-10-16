@@ -1,7 +1,10 @@
 // This benchmark has a setup similar to the triton benchmark:
 // https://triton-lang.org/main/getting-started/tutorials/02-fused-softmax.html
+
+use objc2_metal::{MTLResourceUsage, MTLSize};
 use rand::Rng;
 use ug::Result;
+use ug_metal::create_command_buffer;
 
 #[derive(clap::ValueEnum, Clone, Debug)]
 enum Which {
@@ -78,18 +81,19 @@ fn run_one(args: &Args, n_cols: usize) -> Result<()> {
     let res = device.zeros::<f32>(n_elements)?;
     let arg: Vec<f32> = (0..n_elements).map(|_| rng.gen()).collect();
     let arg = device.slice_from_values(&arg)?;
-    let cq = device.new_command_queue();
+
+    let cq = device.new_command_queue()?;
     let run = || {
-        let cb = cq.new_command_buffer();
+        let cb = create_command_buffer(&cq)?;
         let (arg, res) = (arg.buffer(), res.buffer());
-        let encoder = cb.new_compute_command_encoder();
+        let encoder = &mut cb.compute_command_encoder();
         let pl = func.pipeline()?;
         encoder.set_compute_pipeline_state(&pl);
         ug_metal::set_params!(encoder, (arg, res));
-        encoder.use_resource(arg, metal::MTLResourceUsage::Read);
-        encoder.use_resource(res, metal::MTLResourceUsage::Write);
-        let grid_size = metal::MTLSize::new(n_rows as u64, 1, 1);
-        let threadgroup_size = metal::MTLSize::new(usize::min(block_dim, 1024) as u64, 1, 1);
+        encoder.use_resource(arg, MTLResourceUsage::Read);
+        encoder.use_resource(res, MTLResourceUsage::Write);
+        let grid_size = MTLSize { width: n_rows, height: 1, depth: 1 };
+        let threadgroup_size = MTLSize { width: usize::min(block_dim, 1024), height: 1, depth: 1 };
         encoder.dispatch_thread_groups(grid_size, threadgroup_size);
         // Somehow, using dispatch_threads with non-even group size doesn't work properly here.
         encoder.end_encoding();
@@ -125,7 +129,7 @@ fn main() -> Result<()> {
     if !args.disable_metal_validation {
         std::env::set_var("METAL_DEVICE_WRAPPER_TYPE", "1")
     }
-    objc::rc::autoreleasepool(|| {
+    objc2::rc::autoreleasepool(|_pool| {
         for n_cols in [128, 256, 512, 768, 1024, 1536, 2048, 3072, 4096] {
             run_one(&args, n_cols)?;
         }

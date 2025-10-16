@@ -1,5 +1,10 @@
+use crate::metal::{
+    create_command_buffer, Buffer, CommandBuffer, CommandQueue, ComputeCommandEncoder,
+    ComputePipeline, ConstantValues, Function, Library, Value,
+};
+use crate::set_params;
 use crate::utils::EncoderParam;
-use metal::{FunctionConstantValues, MTLDataType};
+use objc2_metal::{MTLCompileOptions, MTLResourceOptions, MTLResourceUsage, MTLSize};
 use std::sync::OnceLock;
 use ug::{Error, Result};
 
@@ -35,40 +40,37 @@ impl KernelId {
 
 #[derive(Clone)]
 pub struct Func {
-    inner: metal::Function,
+    inner: Function,
     launch_config: ug::lang::LaunchConfig,
     device: Device,
 }
 
 impl Func {
-    pub fn pipeline(&self) -> Result<metal::ComputePipelineState> {
-        let pipeline =
-            self.device.device.new_compute_pipeline_state_with_function(&self.inner).w()?;
+    pub fn pipeline(&self) -> Result<ComputePipeline> {
+        let pipeline = self.device.device.new_compute_pipeline_state_with_function(&self.inner)?;
         Ok(pipeline)
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct Device {
-    device: metal::Device,
-    cq: metal::CommandQueue,
+    device: crate::metal::Device,
+    cq: CommandQueue,
 }
 
 impl Device {
-    pub fn new_command_queue(&self) -> metal::CommandQueue {
+    pub fn new_command_queue(&self) -> Result<CommandQueue> {
         self.device.new_command_queue()
     }
 
-    pub fn new_command_buffer(&self) -> &metal::CommandBufferRef {
-        self.cq.new_command_buffer()
+    pub fn new_command_buffer(&self) -> Result<CommandBuffer> {
+        create_command_buffer(&self.cq)
     }
 
     pub fn new() -> Result<Self> {
-        let device = match metal::Device::system_default() {
-            Some(device) => device,
-            None => ug::bail!("no default device found"),
-        };
-        let cq = device.new_command_queue();
+        let device = crate::metal::Device::system_default()
+            .ok_or(Error::Msg("No default device found".to_string()))?;
+        let cq = device.new_command_queue()?;
         Ok(Self { device, cq })
     }
 
@@ -79,24 +81,24 @@ impl Device {
         launch_config: ug::lang::LaunchConfig,
     ) -> Result<Func> {
         let lib =
-            self.device.new_library_with_source(metal_code, &metal::CompileOptions::new()).w()?;
-        let inner = lib.get_function(func_name, None).w()?;
+            self.device.new_library_with_source(metal_code, Some(&MTLCompileOptions::new()))?;
+        let inner = lib.get_function(func_name, None)?;
         Ok(Func { inner, device: self.clone(), launch_config })
     }
 
     pub fn zeros<T>(&self, len: usize) -> Result<SliceT<T>> {
-        let options = metal::MTLResourceOptions::StorageModeManaged;
-        let bytes_len = (len * std::mem::size_of::<T>()) as u64;
-        let buffer = self.device.new_buffer(bytes_len, options);
+        let options = MTLResourceOptions::StorageModeShared;
+        let bytes_len = len * std::mem::size_of::<T>();
+        let buffer = self.device.new_buffer(bytes_len, options)?;
         Ok(SliceT { buffer, _phantom: std::marker::PhantomData, len })
     }
 
     pub fn slice_from_values<T>(&self, data: &[T]) -> Result<SliceT<T>> {
-        let options = metal::MTLResourceOptions::StorageModeManaged;
+        let options = MTLResourceOptions::StorageModeShared;
         let ptr = data.as_ptr() as *const std::ffi::c_void;
         let len = data.len();
-        let bytes_len = std::mem::size_of_val(data) as u64;
-        let buffer = self.device.new_buffer_with_data(ptr, bytes_len, options);
+        let bytes_len = std::mem::size_of_val(data);
+        let buffer = self.device.new_buffer_with_data(ptr, bytes_len, options)?;
         Ok(SliceT { buffer, _phantom: std::marker::PhantomData, len })
     }
 }
@@ -106,17 +108,18 @@ impl ug::Device for Device {
     type Func = Func;
 
     fn run(&self, f: &Self::Func, args: &mut [&mut Self::Slice]) -> Result<()> {
-        let cb = self.cq.new_command_buffer();
-        let encoder = cb.new_compute_command_encoder();
+        let cb = self.new_command_buffer()?;
+        let encoder = &mut cb.compute_command_encoder();
         let pl = f.pipeline()?;
         encoder.set_compute_pipeline_state(&pl);
         for (index, arg) in args.iter().enumerate() {
-            <&metal::Buffer>::set_param(encoder, index as u64, &arg.buffer);
-            encoder.use_resource(&arg.buffer, metal::MTLResourceUsage::Read);
-            encoder.use_resource(&arg.buffer, metal::MTLResourceUsage::Write);
+            <&Buffer>::set_param(&encoder, index, &arg.buffer);
+            encoder.use_resource(&arg.buffer, MTLResourceUsage::Read);
+            encoder.use_resource(&arg.buffer, MTLResourceUsage::Write);
         }
-        let grid_size = metal::MTLSize::new(f.launch_config.grid_dim as u64, 1, 1);
-        let threadgroup_size = metal::MTLSize::new(f.launch_config.block_dim as u64, 1, 1);
+        let grid_size = MTLSize { width: f.launch_config.grid_dim as usize, height: 1, depth: 1 };
+        let threadgroup_size =
+            MTLSize { width: f.launch_config.block_dim as usize, height: 1, depth: 1 };
         encoder.dispatch_thread_groups(grid_size, threadgroup_size);
         // Somehow, using dispatch_threads with non-even group size doesn't work properly here.
         encoder.end_encoding();
@@ -134,8 +137,8 @@ impl ug::Device for Device {
         lhs_l: &ug::Layout,
         rhs_l: &ug::Layout,
     ) -> Result<()> {
-        let cb = self.cq.new_command_buffer();
-        let encoder = cb.new_compute_command_encoder();
+        let cb = self.new_command_buffer()?;
+        let encoder = &mut cb.compute_command_encoder();
         call_mlx_gemm(
             &dst.device,
             encoder,
@@ -174,9 +177,9 @@ impl ug::Device for Device {
     }
 
     unsafe fn allocate_uninit(&self, dtype: ug::DType, len: usize) -> Result<Self::Slice> {
-        let options = metal::MTLResourceOptions::StorageModeManaged;
-        let bytes_len = (len * dtype.size_in_bytes()) as u64;
-        let buffer = self.device.new_buffer(bytes_len, options);
+        let options = MTLResourceOptions::StorageModeShared;
+        let bytes_len = len * dtype.size_in_bytes();
+        let buffer = self.device.new_buffer(bytes_len, options)?;
         Ok(Slice { buffer, device: self.clone(), len, dtype })
     }
 
@@ -187,7 +190,7 @@ impl ug::Device for Device {
 
 #[derive(Debug, Clone)]
 pub struct SliceT<T> {
-    buffer: metal::Buffer,
+    buffer: Buffer,
     _phantom: std::marker::PhantomData<T>,
     len: usize,
 }
@@ -218,7 +221,7 @@ impl<T: Clone> SliceT<T> {
         slice.to_vec()
     }
 
-    pub fn buffer(&self) -> &metal::Buffer {
+    pub fn buffer(&self) -> &Buffer {
         &self.buffer
     }
 }
@@ -226,7 +229,7 @@ impl<T: Clone> SliceT<T> {
 #[allow(unused)]
 #[derive(Debug, Clone)]
 pub struct Slice {
-    buffer: metal::Buffer,
+    buffer: Buffer,
     device: Device,
     dtype: ug::DType,
     len: usize,
@@ -288,7 +291,7 @@ impl ug::Slice for Slice {
 }
 
 impl Slice {
-    pub fn buffer(&self) -> &metal::Buffer {
+    pub fn buffer(&self) -> &Buffer {
         &self.buffer
     }
 }
@@ -300,103 +303,21 @@ pub enum GemmDType {
     F32,
 }
 
-#[derive(Debug, PartialEq)]
-pub enum Value {
-    USize(usize),
-    Bool(bool),
-    F32(f32),
-    U16(u16),
-}
-
-impl std::hash::Hash for Value {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        match self {
-            Value::F32(v) => v.to_bits().hash(state),
-            Value::USize(v) => v.hash(state),
-            Value::U16(v) => v.hash(state),
-            Value::Bool(v) => v.hash(state),
-        }
-    }
-}
-
-impl Value {
-    fn data_type(&self) -> MTLDataType {
-        match self {
-            Value::USize(_) => MTLDataType::UInt,
-            Value::F32(_) => MTLDataType::Float,
-            Value::U16(_) => MTLDataType::UShort,
-            Value::Bool(_) => MTLDataType::Bool,
-        }
-    }
-}
-
-/// Not true, good enough for our purposes.
-impl Eq for Value {}
-
-#[derive(Debug, Eq, PartialEq, Hash)]
-struct ConstantValues(Vec<(usize, Value)>);
-
-impl ConstantValues {
-    pub fn new(values: Vec<(usize, Value)>) -> Self {
-        Self(values)
-    }
-
-    fn function_constant_values(&self) -> FunctionConstantValues {
-        use std::ffi::c_void;
-        let f = FunctionConstantValues::new();
-        for (index, value) in &self.0 {
-            let ty = value.data_type();
-            match value {
-                Value::USize(v) => {
-                    f.set_constant_value_at_index(
-                        v as *const usize as *const c_void,
-                        ty,
-                        *index as u64,
-                    );
-                }
-                Value::F32(v) => {
-                    f.set_constant_value_at_index(
-                        v as *const f32 as *const c_void,
-                        ty,
-                        *index as u64,
-                    );
-                }
-                Value::U16(v) => {
-                    f.set_constant_value_at_index(
-                        v as *const u16 as *const c_void,
-                        ty,
-                        *index as u64,
-                    );
-                }
-                Value::Bool(v) => {
-                    f.set_constant_value_at_index(
-                        v as *const bool as *const c_void,
-                        ty,
-                        *index as u64,
-                    );
-                }
-            }
-        }
-        f
-    }
-}
-
 #[allow(clippy::too_many_arguments)]
 fn call_mlx_gemm(
     device: &Device,
-    encoder: &metal::ComputeCommandEncoderRef,
+    encoder: &ComputeCommandEncoder,
     dtype: GemmDType,
     (b, m, n, k): (usize, usize, usize, usize),
     lhs_stride: &[usize],
     lhs_offset: usize,
-    lhs_buffer: &metal::Buffer,
+    lhs_buffer: &Buffer,
     rhs_stride: &[usize],
     rhs_offset: usize,
-    rhs_buffer: &metal::Buffer,
-    output: &metal::Buffer,
+    rhs_buffer: &Buffer,
+    output: &Buffer,
 ) -> Result<()> {
-    use std::ffi::c_void;
-    static LIB: OnceLock<core::result::Result<metal::Library, String>> = OnceLock::new();
+    static LIB: OnceLock<Result<Library>> = OnceLock::new();
 
     #[derive(Debug)]
     #[repr(C)]
@@ -501,45 +422,46 @@ fn call_mlx_gemm(
 
     // TODO: Avoid recompiling the code for each matmul.
     let lib = LIB.get_or_init(|| {
-        device.device.new_library_with_source(MLX_GEMM, &metal::CompileOptions::new())
+        device.device.new_library_with_source(MLX_GEMM, Some(&MTLCompileOptions::new()))
     });
     let lib = match lib {
         Ok(lib) => lib,
         Err(err) => ug::bail!("error compiling the gemm kernels {err}"),
     };
-    let func =
-        lib.get_function(name, constants.as_ref().map(|c| c.function_constant_values())).w()?;
+    let func = lib.get_function(name, constants.as_ref())?;
 
-    let pipeline = device.device.new_compute_pipeline_state_with_function(&func).w()?;
+    let pipeline = device.device.new_compute_pipeline_state_with_function(&func)?;
     encoder.set_compute_pipeline_state(&pipeline);
-    encoder.set_buffer(0, Some(lhs_buffer), lhs_offset as metal::NSUInteger);
-    encoder.set_buffer(1, Some(rhs_buffer), rhs_offset as metal::NSUInteger);
-    encoder.set_buffer(3, Some(output), 0);
-    encoder.set_bytes(
-        4,
-        std::mem::size_of::<GemmParams>() as u64,
-        &gemm_params as *const GemmParams as *const c_void,
-    );
-    encoder.set_bytes(
-        6, // batch_shape
-        std::mem::size_of::<i32>() as u64,
-        &(b as i32) as *const i32 as *const c_void,
-    );
-    encoder.set_bytes(
-        7,
-        (std::mem::size_of::<isize>() * batch_strides.len()) as u64,
-        batch_strides.as_ptr() as *const c_void,
+
+    impl EncoderParam for GemmParams {
+        fn set_param(encoder: &ComputeCommandEncoder, position: usize, data: Self) {
+            encoder.set_bytes(position, &data);
+        }
+    }
+
+    set_params!(
+        encoder,
+        (
+            (lhs_buffer, lhs_offset),
+            (rhs_buffer, rhs_offset),
+            (),
+            output,
+            gemm_params,
+            (),
+            b as i32,
+            &batch_strides[..]
+        )
     );
 
-    let grid_size = metal::MTLSize {
-        width: tn as u64,
-        height: tm as u64,
-        depth: /* batch_size_out */ b as u64,
+    let grid_size = MTLSize {
+        width: tn,
+        height: tm,
+        depth: /* batch_size_out */ b,
     };
-    let group_size = metal::MTLSize { width: 32, height: wn, depth: wm };
-    encoder.use_resource(lhs_buffer, metal::MTLResourceUsage::Read);
-    encoder.use_resource(rhs_buffer, metal::MTLResourceUsage::Read);
-    encoder.use_resource(output, metal::MTLResourceUsage::Write);
+    let group_size = MTLSize { width: 32, height: wn, depth: wm };
+    encoder.use_resource(lhs_buffer, MTLResourceUsage::Read);
+    encoder.use_resource(rhs_buffer, MTLResourceUsage::Read);
+    encoder.use_resource(output, MTLResourceUsage::Write);
     encoder.dispatch_thread_groups(grid_size, group_size);
     Ok(())
 }
