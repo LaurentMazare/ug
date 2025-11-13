@@ -5,6 +5,7 @@ members = [
   "ug-llama",
   "ug-metal",
   "ug-pyo3",
+  "ug-rocm",
 ]
 exclude = [
 ]

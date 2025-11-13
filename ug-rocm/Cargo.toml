@@ -1,0 +1,20 @@
+[package]
+name = "ug-rocm"
+version.workspace = true
+edition.workspace = true
+description.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+license.workspace = true
+
+[dependencies]
+rocm-rs = { path = "0.4.2" }
+half = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+ug = { workspace = true }
+
+[dev-dependencies]
+clap = { workspace = true }
+rand = { workspace = true }
