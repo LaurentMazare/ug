@@ -24,7 +24,7 @@ license = "MIT OR Apache-2.0"
 anyhow = { version = "1", features = ["backtrace"] }
 clap = { version = "4.5.20", features = ["derive"] }
 cudarc = { version = "0.17.3", features = ["std", "cublas", "cublaslt", "curand", "driver", "nvrtc", "f16", "cuda-version-from-build-system", "dynamic-linking"], default-features=false }
-gemm = { version = "0.18.0", features = ["wasm-simd128-enable"] }
+gemm = { version = "0.19", features = ["wasm-simd128-enable"] }
 half = { version = "2.3.1", features = ["num-traits", "use-intrinsics", "rand_distr"] }
 hf-hub = "0.3.2"
 libloading = "0.8.5"
@@ -40,15 +40,15 @@ ug-metal = { path = "./ug-metal", version = "0.5.0" }
 rand = "0.8.5"
 rand_distr = "0.4.3"
 rayon = "1.7.0"
-safetensors = "0.4.5"
+safetensors = "0.7"
 serde = { version = "1.0.198", features = ["derive"] }
 serde_json = "1.0.132"
-thiserror = "1"
+thiserror = "2"
 tokenizers = "0.20.3"
 tracing = "0.1.40"
 tracing-chrome = "0.7.2"
 tracing-subscriber = "0.3.18"
-yoke = { version = "0.7.4", features = ["derive"] }
+yoke = { version = "0.8", features = ["derive"] }
 
 [profile.release]
 debug = true
